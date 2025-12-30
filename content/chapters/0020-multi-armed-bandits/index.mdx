@@ -1,0 +1,503 @@
+---
+title: "Multi-Armed Bandits"
+slug: "multi-armed-bandits"
+section: "Foundations"
+description: "Master the exploration-exploitation tradeoff in the simplest RL setting"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "intro-to-rl"
+    title: "Introduction to Reinforcement Learning"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+# Multi-Armed Bandits
+
+<ChapterObjectives>
+- Define the multi-armed bandit problem and its components
+- Explain why bandits are the simplest form of RL
+- Implement and compare action-value estimation methods
+- Apply ε-greedy, UCB, and Thompson Sampling strategies
+- Understand regret and how different algorithms compare
+</ChapterObjectives>
+
+## The Casino Problem
+
+Imagine you're in a casino with 10 slot machines. Each machine has a different (unknown) payout rate. You have 1000 coins to spend. How do you maximize your winnings?
+
+You could stick with the first machine that seems good—but what if there's a better one you never tried? You could try every machine equally—but then you're wasting pulls on bad machines you've already identified.
+
+This is the **multi-armed bandit problem**—named after the old term "one-armed bandit" for slot machines. It's the purest form of the exploration-exploitation dilemma, stripped of any complexity about states or sequences.
+
+<Intuition>
+
+The bandit problem gives us a laboratory for studying exploration:
+
+- There are no **states**—the situation doesn't change based on your actions
+- There's no **sequence**—each pull is independent
+- There's only one decision: **which arm to pull**
+
+By removing these complexities, we can focus entirely on the question: *How do we learn which option is best while also maximizing reward along the way?*
+
+Every technique we develop here—ε-greedy, UCB, Thompson Sampling—will reappear when we tackle full RL problems.
+
+</Intuition>
+
+## The Formal Setup
+
+<Mathematical>
+
+A **k-armed bandit** is defined by:
+
+- **k actions** (arms): $a \in \{1, 2, \ldots, k\}$
+- **Reward distributions**: Each arm $a$ has an unknown distribution with mean $\mu_a$
+- **Goal**: Maximize total reward over $T$ pulls
+
+When you pull arm $a$, you receive a random reward $R$ drawn from that arm's distribution. The expected reward is $\mu_a$, but you don't know it—you have to learn it from experience.
+
+The **optimal arm** is $a^* = \arg\max_a \mu_a$ with expected reward $\mu^*$.
+
+</Mathematical>
+
+## Action-Value Estimation
+
+Before we can choose wisely, we need to estimate how good each arm is. The natural approach: track the average reward we've received from each arm.
+
+<Intuition>
+
+After pulling arm $a$ several times, we have a collection of rewards from it. The sample average is our best estimate of its true value.
+
+But there's a clever trick: we don't need to store all past rewards. We can update our estimate **incrementally** after each pull.
+
+</Intuition>
+
+<Mathematical>
+
+Let $Q_n(a)$ be our estimate of arm $a$'s value after the arm has been selected $n-1$ times. The sample average is:
+
+$$Q_n(a) = \frac{R_1 + R_2 + \ldots + R_{n-1}}{n-1}$$
+
+where $R_1, \ldots, R_{n-1}$ are the rewards received from arm $a$.
+
+The **incremental update** formula gives the same result without storing all rewards:
+
+$$Q_{n+1}(a) = Q_n(a) + \frac{1}{n}[R_n - Q_n(a)]$$
+
+In words: new estimate = old estimate + step size × (reward - old estimate)
+
+The term $[R_n - Q_n(a)]$ is the **prediction error**—how far off our estimate was. We move our estimate toward the observed reward.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class BanditEnvironment:
+    """A k-armed bandit with Gaussian rewards."""
+
+    def __init__(self, k=10):
+        # True reward means (unknown to the agent)
+        self.q_true = np.random.randn(k)
+        self.k = k
+
+    def pull(self, action):
+        """Pull an arm and receive a reward."""
+        # Reward is drawn from N(q_true[action], 1)
+        return np.random.randn() + self.q_true[action]
+
+    def optimal_action(self):
+        """Return the best arm (for evaluation)."""
+        return np.argmax(self.q_true)
+
+
+class ActionValueAgent:
+    """Agent that estimates action values using sample averages."""
+
+    def __init__(self, k):
+        self.k = k
+        self.Q = np.zeros(k)      # Value estimates
+        self.N = np.zeros(k)      # Action counts
+
+    def update(self, action, reward):
+        """Update value estimate for an action."""
+        self.N[action] += 1
+        # Incremental update formula
+        self.Q[action] += (reward - self.Q[action]) / self.N[action]
+```
+
+</Implementation>
+
+## The Greedy Strategy (and Why It Fails)
+
+The simplest strategy: always choose the arm with the highest estimated value.
+
+<Intuition>
+
+**Greedy action selection:**
+$$A_t = \arg\max_a Q_t(a)$$
+
+This sounds reasonable—exploit what you know. But there's a fatal flaw.
+
+Early on, our estimates are based on few samples. The arm that *looks* best might not *be* best—we just got lucky (or unlucky) on a few early pulls. If we commit to that arm, we never learn about the others.
+
+A greedy agent gets **stuck** with whatever arm happened to look good initially. It might never discover the truly optimal arm.
+
+</Intuition>
+
+{/* TODO: Interactive Demo - Greedy Failure */}
+{/* Show a greedy agent getting stuck on a suboptimal arm */}
+
+## ε-Greedy: Simple Exploration
+
+The fix is simple: occasionally take a random action instead of the greedy one.
+
+<Intuition>
+
+**ε-greedy action selection:**
+- With probability $1 - \epsilon$: choose the greedy action (exploit)
+- With probability $\epsilon$: choose a random action (explore)
+
+This ensures every arm gets tried occasionally, so we can learn their true values. Common choices are $\epsilon = 0.1$ (10% exploration) or $\epsilon = 0.01$ (1% exploration).
+
+</Intuition>
+
+<Implementation>
+
+```python
+class EpsilonGreedyAgent(ActionValueAgent):
+    """ε-greedy bandit agent."""
+
+    def __init__(self, k, epsilon=0.1):
+        super().__init__(k)
+        self.epsilon = epsilon
+
+    def select_action(self):
+        """Select action using ε-greedy policy."""
+        if np.random.random() < self.epsilon:
+            return np.random.randint(self.k)  # Explore
+        else:
+            return np.argmax(self.Q)          # Exploit
+```
+
+</Implementation>
+
+{/* TODO: Interactive Demo - Bandit Playground */}
+{/* Compare greedy, ε-greedy with different ε values */}
+
+### The Cost of Exploration
+
+<Intuition>
+
+There's a tradeoff in choosing $\epsilon$:
+
+- **High ε (more exploration)**: Learns quickly about all arms, but wastes many pulls on known-bad arms even late in the game.
+- **Low ε (less exploration)**: Exploits good arms efficiently, but might get stuck if it hasn't explored enough early on.
+
+A fixed $\epsilon$ is never optimal. We explore too much when we've already learned, or too little before we've figured things out.
+
+</Intuition>
+
+<Tip>
+A common improvement is **ε-decay**: start with high exploration (ε = 1.0), gradually reduce it as you learn. This balances early exploration with late exploitation.
+</Tip>
+
+## Measuring Performance: Regret
+
+How do we know if our algorithm is working? We could measure total reward, but that depends on the problem. **Regret** gives us a problem-independent measure.
+
+<Intuition>
+
+**Regret** is the difference between:
+- The reward we would have gotten by always playing the best arm
+- The reward we actually got
+
+It measures the cost of not knowing the optimal action from the start—the price of learning.
+
+</Intuition>
+
+<Mathematical>
+
+After $T$ steps, the **cumulative regret** is:
+
+$$L_T = \sum_{t=1}^{T} [\mu^* - \mu_{A_t}] = T \mu^* - \sum_{t=1}^{T} \mu_{A_t}$$
+
+where $\mu^*$ is the mean of the optimal arm and $A_t$ is the action we chose at time $t$.
+
+**Key insight:** An algorithm with **sublinear regret** (regret grows slower than $T$) is learning effectively. Linear regret (regret grows with $T$) means we're losing a constant fraction to suboptimal choices forever.
+
+Good algorithms achieve $O(\sqrt{T})$ or $O(\log T)$ regret.
+
+</Mathematical>
+
+{/* TODO: Interactive Demo - Regret Comparison */}
+{/* Show cumulative regret for different algorithms over time */}
+
+## Upper Confidence Bound (UCB)
+
+ε-greedy explores randomly. Can we be smarter? UCB explores systematically based on **uncertainty**.
+
+<Intuition>
+
+The idea: for each arm, consider not just your estimate of its value, but also **how uncertain** you are about that estimate.
+
+Arms you've pulled many times have tight estimates—you know what they're worth. Arms you've rarely tried have wide uncertainty—they might be great!
+
+UCB is **optimistic**: it assumes uncertain arms are as good as they plausibly could be. This encourages trying under-sampled arms.
+
+</Intuition>
+
+<Mathematical>
+
+**UCB action selection:**
+
+$$A_t = \arg\max_a \left[ Q_t(a) + c\sqrt{\frac{\ln t}{N_t(a)}} \right]$$
+
+where:
+- $Q_t(a)$ is the estimated value of arm $a$
+- $N_t(a)$ is the number of times arm $a$ has been selected
+- $t$ is the current time step
+- $c$ controls the exploration-exploitation balance (often $c = \sqrt{2}$)
+
+The second term is the **exploration bonus**:
+- Large when $N_t(a)$ is small (rarely tried)
+- Shrinks as $N_t(a)$ grows (well explored)
+- Grows with $\ln t$ (keeps exploring as time passes)
+
+</Mathematical>
+
+<Implementation>
+
+```python
+class UCBAgent(ActionValueAgent):
+    """UCB bandit agent."""
+
+    def __init__(self, k, c=2.0):
+        super().__init__(k)
+        self.c = c
+        self.t = 0
+
+    def select_action(self):
+        """Select action using UCB."""
+        self.t += 1
+
+        # Try each arm at least once
+        for a in range(self.k):
+            if self.N[a] == 0:
+                return a
+
+        # UCB values
+        ucb_values = self.Q + self.c * np.sqrt(np.log(self.t) / self.N)
+        return np.argmax(ucb_values)
+```
+
+</Implementation>
+
+<Note>
+UCB has theoretical guarantees: it achieves $O(\log T)$ regret, which is optimal for bandits. In practice, it often outperforms ε-greedy, especially when exploration is expensive.
+</Note>
+
+## Thompson Sampling: The Bayesian Approach
+
+Thompson Sampling takes a probability-matching approach: select each arm with probability proportional to the probability that it's optimal.
+
+<Intuition>
+
+The idea is beautifully simple:
+1. Maintain a probability distribution over each arm's true value
+2. Sample a value from each arm's distribution
+3. Play the arm with the highest sampled value
+4. Update the distributions based on the observed reward
+
+This automatically balances exploration and exploitation. Arms with uncertain values sometimes get high samples (exploration). Arms with reliably high values get consistently high samples (exploitation).
+
+</Intuition>
+
+<Mathematical>
+
+For Gaussian rewards with known variance, Thompson Sampling maintains a posterior distribution for each arm's mean.
+
+For Bernoulli rewards (success/failure), we use Beta distributions:
+- Prior: $\text{Beta}(1, 1)$ (uniform)
+- After $s$ successes and $f$ failures: $\text{Beta}(1+s, 1+f)$
+
+**Action selection:**
+1. For each arm $a$, sample $\tilde{\mu}_a \sim \text{Beta}(\alpha_a, \beta_a)$
+2. Select $A_t = \arg\max_a \tilde{\mu}_a$
+
+</Mathematical>
+
+<Implementation>
+
+```python
+class ThompsonSamplingAgent:
+    """Thompson Sampling for Bernoulli bandits."""
+
+    def __init__(self, k):
+        self.k = k
+        # Beta distribution parameters: alpha = successes + 1, beta = failures + 1
+        self.alpha = np.ones(k)  # Prior: Beta(1,1)
+        self.beta = np.ones(k)
+
+    def select_action(self):
+        """Sample from posteriors and pick the max."""
+        samples = np.random.beta(self.alpha, self.beta)
+        return np.argmax(samples)
+
+    def update(self, action, reward):
+        """Update posterior for the selected arm."""
+        if reward > 0:  # Success
+            self.alpha[action] += 1
+        else:           # Failure
+            self.beta[action] += 1
+```
+
+</Implementation>
+
+<DeepDive>
+
+### Why Thompson Sampling Works
+
+Thompson Sampling is probability matching: the probability of selecting an arm equals the probability that it's optimal (under the posterior).
+
+This sounds like a lot of exploration—but it works because:
+- Early on, posteriors are wide, so we explore naturally
+- As we learn, posteriors concentrate, and we exploit the true best arm
+- There's no arbitrary exploration parameter to tune
+
+Thompson Sampling often outperforms UCB in practice, especially in complex problems.
+
+</DeepDive>
+
+## Comparing Algorithms
+
+Let's put it all together with a comparison.
+
+<Implementation>
+
+```python
+def run_experiment(env, agent, n_steps=1000):
+    """Run a bandit experiment."""
+    rewards = []
+    optimal_actions = []
+
+    for _ in range(n_steps):
+        action = agent.select_action()
+        reward = env.pull(action)
+        agent.update(action, reward)
+
+        rewards.append(reward)
+        optimal_actions.append(action == env.optimal_action())
+
+    return np.array(rewards), np.array(optimal_actions)
+
+
+def compare_algorithms(k=10, n_steps=1000, n_runs=100):
+    """Compare multiple bandit algorithms."""
+    algorithms = {
+        'Greedy': lambda: EpsilonGreedyAgent(k, epsilon=0),
+        'ε-greedy (0.1)': lambda: EpsilonGreedyAgent(k, epsilon=0.1),
+        'ε-greedy (0.01)': lambda: EpsilonGreedyAgent(k, epsilon=0.01),
+        'UCB': lambda: UCBAgent(k, c=2),
+    }
+
+    results = {name: {'rewards': [], 'optimal': []} for name in algorithms}
+
+    for run in range(n_runs):
+        env = BanditEnvironment(k)
+
+        for name, make_agent in algorithms.items():
+            agent = make_agent()
+            rewards, optimal = run_experiment(env, agent, n_steps)
+            results[name]['rewards'].append(rewards)
+            results[name]['optimal'].append(optimal)
+
+    return results
+
+
+# Run comparison
+# results = compare_algorithms()
+# Plot average reward and % optimal action over time
+```
+
+</Implementation>
+
+<Intuition>
+
+What you'll typically see:
+
+| Algorithm | Early Performance | Late Performance | Regret Growth |
+|-----------|------------------|------------------|---------------|
+| **Greedy** | Lucky or unlucky | Stuck (no improvement) | Linear |
+| **ε-greedy (0.1)** | Moderate | Good but 10% suboptimal | Linear |
+| **ε-greedy (0.01)** | Slow start | Very good | Near-linear |
+| **UCB** | Moderate (tries all) | Excellent | $O(\log T)$ |
+| **Thompson** | Good | Excellent | $O(\log T)$ |
+
+The pure greedy agent is worst. ε-greedy is solid. UCB and Thompson are best for long-term performance.
+
+</Intuition>
+
+## Real-World Applications
+
+Bandits aren't just a toy problem—they power major systems:
+
+<Intuition>
+
+**A/B Testing (Adaptive Experiments)**
+Traditional A/B tests split traffic 50/50 and wait for statistical significance. Bandits allocate more traffic to winning variants as evidence accumulates, reducing "regret" from the losing variant.
+
+**Recommendation Systems**
+Should we show you content we know you'll like, or try something new? Bandits balance personalization with discovery.
+
+**Clinical Trials**
+Adaptive clinical trials use bandit algorithms to assign more patients to treatments that appear effective, reducing exposure to inferior treatments.
+
+**Ad Selection**
+Which ad should we show? Bandits learn user preferences while maximizing click-through rates.
+
+</Intuition>
+
+## Summary
+
+<KeyTakeaways>
+- The **multi-armed bandit** is the simplest RL problem: k actions, unknown rewards, no states.
+- **Action-value estimation** tracks the sample average reward for each arm using incremental updates.
+- **Greedy selection** exploits but gets stuck. **ε-greedy** adds random exploration.
+- **UCB** explores systematically by being optimistic about uncertain arms.
+- **Thompson Sampling** samples from probability distributions, naturally balancing exploration and exploitation.
+- **Regret** measures the cost of learning—good algorithms have sublinear regret.
+- Bandits power real systems: A/B testing, recommendations, ads, clinical trials.
+</KeyTakeaways>
+
+Bandits assume the situation doesn't change—there's no context affecting which arm is best. But what if the best arm depends on who's asking? That's where contextual bandits come in.
+
+<NextChapter slug="contextual-bandits" title="Contextual Bandits" />
+
+## Exercises
+
+### Conceptual Questions
+
+1. **Why does a greedy strategy fail in the bandit problem?** Be specific about the mechanism that leads to poor performance.
+
+2. **What does the exploration bonus in UCB represent intuitively?** Why does it shrink as we pull an arm more often?
+
+3. **How does Thompson Sampling balance exploration and exploitation?** Unlike ε-greedy, there's no ε parameter—how does it know when to explore?
+
+4. **When would you prefer ε-greedy over UCB in practice?** Consider implementation complexity, computational cost, and problem characteristics.
+
+### Coding Challenges
+
+5. **Implement a 10-armed bandit testbed** and compare greedy, ε-greedy (with ε = 0.01, 0.1, 0.5), and UCB. Plot average reward and % optimal action over 1000 steps, averaged over 100 runs.
+
+6. **Implement UCB** and verify it achieves lower regret than ε-greedy on a challenging problem (e.g., where arms have similar means).
+
+7. **Implement ε-decay**: start with ε = 1.0, decay to ε = 0.01 over the experiment. Compare with fixed ε-greedy.
+
+### Exploration
+
+8. **Non-stationary bandits:** Design a bandit where the reward distributions change over time (e.g., every 100 steps, the best arm changes). How would you modify the algorithms to handle this? Implement and test your idea.

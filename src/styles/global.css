@@ -1,0 +1,369 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply font-sans;
+  }
+
+  /* Prose overrides for chapter content */
+  .prose {
+    @apply max-w-none;
+  }
+
+  .prose h1 {
+    @apply text-4xl font-bold mb-6;
+  }
+
+  .prose h2 {
+    @apply text-2xl font-bold mt-12 mb-4;
+  }
+
+  .prose h3 {
+    @apply text-xl font-semibold mt-8 mb-3;
+  }
+
+  .prose p {
+    @apply mb-4 leading-relaxed;
+  }
+
+  .prose ul, .prose ol {
+    @apply mb-4 pl-6;
+  }
+
+  .prose li {
+    @apply mb-2;
+  }
+
+  .prose a {
+    @apply text-primary-600 hover:text-primary-800 underline;
+  }
+
+  .prose code {
+    @apply bg-gray-100 rounded px-1.5 py-0.5 text-sm font-mono;
+  }
+
+  .prose pre {
+    @apply bg-gray-900 text-gray-100 rounded-lg p-4 overflow-x-auto mb-4;
+  }
+
+  .prose pre code {
+    @apply bg-transparent p-0 text-inherit;
+  }
+
+  .prose blockquote {
+    @apply border-l-4 border-primary-300 pl-4 italic text-gray-700;
+  }
+}
+
+/* Component styles */
+@layer components {
+  /* Complexity toggle */
+  .complexity-toggle {
+    @apply flex items-center gap-2 p-2 bg-white rounded-lg shadow-sm border border-gray-200;
+  }
+
+  .complexity-toggle .toggle-label {
+    @apply text-sm text-gray-600 mr-2;
+  }
+
+  .complexity-toggle .toggle-button {
+    @apply flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition;
+    @apply border border-gray-200 text-gray-600 hover:bg-gray-50;
+  }
+
+  .complexity-toggle .toggle-button.active {
+    @apply bg-primary-100 border-primary-300 text-primary-700;
+  }
+
+  .complexity-toggle .toggle-icon {
+    @apply text-base;
+  }
+
+  /* Content layers */
+  .content-layer {
+    @apply my-6;
+  }
+
+  .layer-intuition {
+    @apply bg-white;
+  }
+
+  .layer-mathematical,
+  .layer-implementation,
+  .layer-deepdive {
+    @apply border border-gray-200 rounded-lg overflow-hidden;
+  }
+
+  /* Details/Summary based accordions */
+  details.content-layer {
+    @apply border border-gray-200 rounded-lg overflow-hidden;
+  }
+
+  details.content-layer > summary {
+    @apply flex items-center gap-2 w-full px-4 py-3 text-left font-medium;
+    @apply bg-gray-50 hover:bg-gray-100 transition cursor-pointer;
+    @apply list-none; /* Remove default arrow */
+  }
+
+  /* Hide default marker in all browsers */
+  details.content-layer > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  details.content-layer > summary::marker {
+    display: none;
+    content: '';
+  }
+
+  .layer-mathematical > summary {
+    @apply bg-blue-50 hover:bg-blue-100 text-blue-800;
+  }
+
+  .layer-implementation > summary {
+    @apply bg-green-50 hover:bg-green-100 text-green-800;
+  }
+
+  .layer-deepdive > summary {
+    @apply bg-purple-50 hover:bg-purple-100 text-purple-800;
+  }
+
+  .layer-icon {
+    @apply text-lg;
+  }
+
+  .layer-title {
+    @apply flex-1;
+  }
+
+  /* Toggle icon that rotates when open */
+  .layer-toggle-icon {
+    @apply text-xl transition-transform duration-200;
+  }
+
+  .layer-toggle-icon::after {
+    content: '+';
+  }
+
+  details[open] .layer-toggle-icon::after {
+    content: '−';
+  }
+
+  .layer-content {
+    @apply p-4;
+  }
+
+  /* Legacy button-based layer headers (for non-details elements) */
+  .layer-header {
+    @apply flex items-center gap-2 w-full px-4 py-3 text-left font-medium;
+    @apply bg-gray-50 hover:bg-gray-100 transition cursor-pointer;
+  }
+
+  button.layer-header + .layer-content,
+  .layer-intuition .layer-content {
+    @apply p-4;
+  }
+
+  /* Content status */
+  .content-status {
+    @apply inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium;
+  }
+
+  .status-draft {
+    @apply bg-yellow-100 text-yellow-800;
+  }
+
+  .status-editor-reviewed {
+    @apply bg-green-100 text-green-800;
+  }
+
+  .status-community-reviewed {
+    @apply bg-purple-100 text-purple-800;
+  }
+
+  .status-verified {
+    @apply bg-blue-100 text-blue-800;
+  }
+
+  /* Callouts */
+  .callout {
+    @apply my-6 rounded-lg border-l-4 overflow-hidden;
+  }
+
+  .callout-header {
+    @apply flex items-center gap-2 px-4 py-2 font-medium;
+  }
+
+  .callout-content {
+    @apply px-4 pb-4;
+  }
+
+  .callout-note {
+    @apply bg-blue-50 border-blue-400;
+  }
+
+  .callout-note .callout-header {
+    @apply text-blue-800;
+  }
+
+  .callout-warning {
+    @apply bg-amber-50 border-amber-400;
+  }
+
+  .callout-warning .callout-header {
+    @apply text-amber-800;
+  }
+
+  .callout-tip {
+    @apply bg-green-50 border-green-400;
+  }
+
+  .callout-tip .callout-header {
+    @apply text-green-800;
+  }
+
+  .callout-example {
+    @apply bg-gray-50 border-gray-400;
+  }
+
+  .callout-example .callout-header {
+    @apply text-gray-800;
+  }
+
+  .callout-definition {
+    @apply bg-indigo-50 border-indigo-400;
+  }
+
+  .callout-definition .callout-header {
+    @apply text-indigo-800;
+  }
+
+  .callout-theorem {
+    @apply bg-purple-50 border-purple-400;
+  }
+
+  .callout-theorem .callout-header {
+    @apply text-purple-800;
+  }
+
+  /* Chapter navigation */
+  .chapter-objectives {
+    @apply my-8 p-6 bg-primary-50 rounded-xl border border-primary-200;
+  }
+
+  .objectives-title {
+    @apply text-lg font-bold text-primary-900 mb-4;
+  }
+
+  .objectives-list {
+    @apply space-y-2;
+  }
+
+  .objectives-list li {
+    @apply flex items-start gap-2;
+  }
+
+  .objectives-list li::before {
+    content: '✓';
+    @apply text-primary-600 font-bold;
+  }
+
+  .next-chapter,
+  .next-section {
+    @apply flex items-center justify-between p-4 mt-8;
+    @apply bg-gray-50 rounded-lg border border-gray-200;
+    @apply hover:border-primary-300 hover:shadow-md transition;
+  }
+
+  .next-label {
+    @apply text-sm text-gray-500;
+  }
+
+  .next-title {
+    @apply font-semibold text-gray-900;
+  }
+
+  .next-arrow {
+    @apply text-2xl text-primary-600;
+  }
+
+  .cross-ref {
+    @apply text-primary-600 hover:text-primary-800 underline;
+  }
+
+  .key-takeaways {
+    @apply my-8 p-6 bg-green-50 rounded-xl border border-green-200;
+  }
+
+  .takeaways-title {
+    @apply text-lg font-bold text-green-900 mb-4;
+  }
+
+  .colab-link {
+    @apply inline-flex items-center gap-2 px-4 py-2 mt-4;
+    @apply bg-orange-100 text-orange-800 rounded-lg;
+    @apply hover:bg-orange-200 transition;
+  }
+
+  /* Interactive components */
+  .gridworld-container {
+    @apply my-8 p-6 bg-gray-50 rounded-xl border border-gray-200;
+  }
+
+  .grid-cell {
+    @apply relative flex items-center justify-center;
+    @apply border border-gray-300 transition-colors;
+  }
+
+  .agent {
+    @apply text-2xl;
+  }
+
+  .goal {
+    @apply text-2xl;
+  }
+
+  .policy-arrow {
+    @apply text-gray-600 font-bold;
+  }
+
+  .controls {
+    @apply flex flex-wrap items-center justify-center gap-4 mt-4;
+  }
+
+  .controls button {
+    @apply px-4 py-2 bg-primary-600 text-white rounded-md;
+    @apply hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed;
+    @apply transition;
+  }
+
+  .controls label {
+    @apply flex items-center gap-2 text-sm text-gray-600;
+  }
+
+  .metrics {
+    @apply text-center mt-4 text-sm text-gray-600;
+  }
+}
+
+/* KaTeX overrides */
+.katex {
+  font-size: 1.1em;
+}
+
+.katex-display {
+  @apply my-6 overflow-x-auto;
+}
+
+/* Utility classes */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

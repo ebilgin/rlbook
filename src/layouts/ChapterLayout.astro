@@ -1,0 +1,98 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import { ComplexityProvider } from '../components/ui/ComplexityToggle';
+import { ContentStatus } from '../components/ui/ContentStatus';
+
+interface Props {
+  frontmatter: {
+    title: string;
+    chapter: number;
+    section: string;
+    description: string;
+    status?: 'draft' | 'editor_reviewed' | 'community_reviewed' | 'verified';
+    lastReviewed?: string;
+    prerequisites?: Array<{ chapter: number; title: string }>;
+  };
+}
+
+const { frontmatter } = Astro.props;
+const { title, chapter, section, description, status = 'draft', lastReviewed, prerequisites } = frontmatter;
+---
+
+<BaseLayout title={`Chapter ${chapter}: ${title}`} description={description}>
+  <div class="flex min-h-screen">
+    <!-- Sidebar (placeholder) -->
+    <aside class="hidden lg:block w-64 border-r border-gray-200 p-4">
+      <nav>
+        <a href="/" class="block mb-6 text-xl font-bold text-primary-600">rlbook.ai</a>
+        <p class="text-sm text-gray-500 mb-4">{section}</p>
+        <!-- Chapter navigation will go here -->
+      </nav>
+    </aside>
+
+    <!-- Main content -->
+    <main class="flex-1 px-4 py-8 lg:px-8 max-w-4xl mx-auto">
+      <!-- Chapter header -->
+      <header class="mb-8">
+        <div class="flex items-center gap-3 mb-2">
+          <span class="text-sm text-gray-500">Chapter {chapter}</span>
+          <ContentStatus status={status} lastReviewed={lastReviewed} client:load />
+        </div>
+        <h1 class="text-4xl font-bold mb-4">{title}</h1>
+        <p class="text-xl text-gray-600">{description}</p>
+
+        {prerequisites && prerequisites.length > 0 && (
+          <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+            <p class="text-sm font-medium text-gray-700 mb-2">Prerequisites:</p>
+            <ul class="text-sm text-gray-600">
+              {prerequisites.map((prereq) => (
+                <li>
+                  <a href={`/chapters/${prereq.chapter}`} class="text-primary-600 hover:underline">
+                    Chapter {prereq.chapter}: {prereq.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </header>
+
+      <!-- Complexity toggle -->
+      <div class="sticky top-4 z-10 mb-8">
+        <div class="inline-flex bg-white shadow-md rounded-lg p-2">
+          <!-- ComplexityToggle component will be rendered here -->
+        </div>
+      </div>
+
+      <!-- Chapter content -->
+      <article class="prose prose-lg max-w-none">
+        <ComplexityProvider client:load>
+          <slot />
+        </ComplexityProvider>
+      </article>
+
+      <!-- Chapter footer -->
+      <footer class="mt-16 pt-8 border-t border-gray-200">
+        <!-- Giscus comments will go here -->
+        <div id="giscus-container" class="mt-8">
+          <script
+            src="https://giscus.app/client.js"
+            data-repo="ebilgin/rlbook"
+            data-repo-id=""
+            data-category="Chapter Discussions"
+            data-category-id=""
+            data-mapping="pathname"
+            data-strict="0"
+            data-reactions-enabled="1"
+            data-emit-metadata="0"
+            data-input-position="top"
+            data-theme="light"
+            data-lang="en"
+            crossorigin="anonymous"
+            async
+          ></script>
+        </div>
+      </footer>
+    </main>
+  </div>
+</BaseLayout>

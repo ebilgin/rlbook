@@ -1,0 +1,9 @@
+# Cloudflare Pages configuration
+name = "rlbook"
+compatibility_date = "2024-01-01"
+pages_build_output_dir = "./dist"
+
+# Optional: Enable R2 bucket for large assets
+# [[r2_buckets]]
+# binding = "ASSETS"
+# bucket_name = "rlbook-assets"

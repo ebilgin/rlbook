@@ -1,0 +1,695 @@
+---
+title: "Actor-Critic Methods"
+slug: "actor-critic-methods"
+section: "Policy Gradient Methods"
+description: "Combine the best of policy gradients and value-based learning for stable, efficient training"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "policy-gradient-theorem"
+    title: "The Policy Gradient Theorem and REINFORCE"
+  - slug: "intro-to-td"
+    title: "Introduction to TD Learning"
+  - slug: "q-learning-basics"
+    title: "Q-Learning Basics"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+# Actor-Critic Methods
+
+<ChapterObjectives>
+- Explain the actor-critic architecture and the roles of actor and critic
+- Understand how the critic reduces variance compared to REINFORCE
+- Derive and implement the advantage function $A(s,a) = Q(s,a) - V(s)$
+- Implement A2C (Advantage Actor-Critic) from scratch
+- Understand the bias-variance trade-off in actor-critic methods
+- Compare on-policy and off-policy actor-critic variants
+</ChapterObjectives>
+
+## The Best of Both Worlds
+
+<CrossRef slug="policy-gradient-theorem">REINFORCE</CrossRef> taught us how to compute policy gradients, but it has a fundamental weakness: high variance from Monte Carlo returns. We have to wait for complete episodes, and the returns we observe are noisy.
+
+Meanwhile, <CrossRef slug="intro-to-td">TD learning</CrossRef> showed us a different approach: bootstrap from value estimates instead of waiting for actual returns. This reduces variance dramatically but introduces some bias.
+
+What if we could combine these ideas?
+
+<Intuition>
+
+**Actor-critic methods** use two components:
+
+1. **Actor**: The policy $\pi_\theta(a|s)$ that decides what to do
+2. **Critic**: A value function $V_\phi(s)$ that evaluates how good the current state is
+
+The critic helps the actor learn more efficiently. Instead of waiting for actual returns (high variance), we use the critic's estimates (lower variance). The actor and critic learn together—the critic gets better at evaluation, and the actor gets better at acting.
+
+Think of it like a player (actor) and a coach (critic). The coach evaluates performance and provides feedback, helping the player improve faster than if they just played games and looked at final scores.
+
+</Intuition>
+
+{/* TODO: Interactive Demo - Actor-Critic Architecture Visualizer */}
+{/* Show information flow: state → actor → action, state → critic → value */}
+
+## The Advantage Function
+
+The key insight of actor-critic is using the **advantage function** instead of raw returns.
+
+<Mathematical>
+
+The **advantage function** measures how much better an action is compared to the average:
+
+$$A^{\pi}(s, a) = Q^{\pi}(s, a) - V^{\pi}(s)$$
+
+Where:
+- $Q^{\pi}(s, a)$ = expected return from taking action $a$ in state $s$, then following $\pi$
+- $V^{\pi}(s)$ = expected return from state $s$ following $\pi$ = $\sum_a \pi(a|s) Q^{\pi}(s, a)$
+
+The advantage tells us: "How much better (or worse) is this specific action compared to what we'd typically get from this state?"
+
+Properties of advantage:
+- $A^{\pi}(s, a) > 0$: action $a$ is better than average
+- $A^{\pi}(s, a) < 0$: action $a$ is worse than average
+- $\sum_a \pi(a|s) A^{\pi}(s, a) = 0$: advantages are centered (average advantage is zero)
+
+</Mathematical>
+
+<Intuition>
+
+Why is advantage better than raw returns for policy gradients?
+
+Consider a game where all outcomes give positive rewards (100, 105, 110, etc.). With raw returns:
+- Action leading to 105: positive update
+- Action leading to 100: still positive update!
+
+The policy can't distinguish "good" from "just positive." With advantages:
+- Action leading to 105 (average is 105): zero update
+- Action leading to 110 (above average): positive update
+- Action leading to 100 (below average): negative update
+
+Now we're properly rewarding above-average actions and penalizing below-average ones.
+
+</Intuition>
+
+### The TD Error as Advantage Estimate
+
+Here's the elegant connection to TD learning:
+
+<Mathematical>
+
+The **TD error** is:
+
+$$\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$$
+
+Remarkably, this is an unbiased estimate of the advantage:
+
+$$\mathbb{E}[\delta_t | S_t = s, A_t = a] = Q^{\pi}(s, a) - V^{\pi}(s) = A^{\pi}(s, a)$$
+
+**Proof sketch:**
+$$\mathbb{E}[\delta_t | s, a] = \mathbb{E}[R_{t+1} + \gamma V(S_{t+1}) | s, a] - V(s)$$
+
+The first term is exactly $Q^{\pi}(s, a)$ (immediate reward + discounted value of next state), and subtracting $V(s)$ gives us the advantage.
+
+</Mathematical>
+
+<Intuition>
+
+The TD error $\delta_t = r + \gamma V(s') - V(s)$ captures surprise:
+
+- **Expected outcome**: Starting from $V(s)$, we expected to get this much value
+- **Actual outcome**: We got reward $r$ and ended up in state $s'$, worth $V(s')$
+- **Surprise**: The difference is how much better (or worse) things went
+
+This surprise is exactly what we want to reinforce! If $\delta_t > 0$, things went better than expected—make the action more likely. If $\delta_t < 0$, things went worse—make the action less likely.
+
+</Intuition>
+
+<Tip>
+The TD error gives us advantage estimation for free! We just need a value function estimate, which we get from the critic. No need to estimate $Q(s, a)$ separately.
+</Tip>
+
+## The A2C Algorithm
+
+**A2C** (Advantage Actor-Critic) is a clean implementation of actor-critic ideas. Let's build it step by step.
+
+{/* TODO: Interactive Demo - A2C Learning on CartPole */}
+{/* Compare to REINFORCE, show lower variance in gradient estimates */}
+
+<Mathematical>
+
+**A2C Updates:**
+
+**Actor update** (policy gradient with advantage):
+$$\theta \leftarrow \theta + \alpha \nabla_\theta \log \pi_\theta(A_t|S_t) \cdot \hat{A}_t$$
+
+**Critic update** (TD learning):
+$$\phi \leftarrow \phi + \alpha_v \delta_t \nabla_\phi V_\phi(S_t)$$
+
+Or equivalently, minimize the TD error squared:
+$$L_{\text{critic}} = \mathbb{E}[\delta_t^2] = \mathbb{E}[(R_{t+1} + \gamma V_\phi(S_{t+1}) - V_\phi(S_t))^2]$$
+
+where $\hat{A}_t = \delta_t = R_{t+1} + \gamma V_\phi(S_{t+1}) - V_\phi(S_t)$ (using TD error as advantage estimate).
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.distributions import Categorical
+import numpy as np
+
+
+class ActorCriticNetwork(nn.Module):
+    """
+    Neural network with separate actor (policy) and critic (value) heads.
+    Shares early layers for efficiency.
+    """
+
+    def __init__(self, state_dim, n_actions, hidden_dim=128):
+        super().__init__()
+
+        # Shared feature extractor
+        self.shared = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU()
+        )
+
+        # Actor head: outputs action logits
+        self.actor = nn.Linear(hidden_dim, n_actions)
+
+        # Critic head: outputs state value
+        self.critic = nn.Linear(hidden_dim, 1)
+
+    def forward(self, state):
+        """Return action logits and state value."""
+        features = self.shared(state)
+        action_logits = self.actor(features)
+        value = self.critic(features)
+        return action_logits, value
+
+    def get_action_and_value(self, state):
+        """Sample action and return action, log_prob, value."""
+        action_logits, value = self.forward(state)
+        dist = Categorical(logits=action_logits)
+        action = dist.sample()
+        log_prob = dist.log_prob(action)
+        entropy = dist.entropy()
+        return action.item(), log_prob, value.squeeze(), entropy
+
+
+class A2C:
+    """Advantage Actor-Critic algorithm."""
+
+    def __init__(self, state_dim, n_actions, lr=0.001, gamma=0.99,
+                 value_coef=0.5, entropy_coef=0.01):
+        """
+        Args:
+            state_dim: Dimension of state space
+            n_actions: Number of discrete actions
+            lr: Learning rate
+            gamma: Discount factor
+            value_coef: Coefficient for value loss
+            entropy_coef: Coefficient for entropy bonus (encourages exploration)
+        """
+        self.gamma = gamma
+        self.value_coef = value_coef
+        self.entropy_coef = entropy_coef
+
+        self.network = ActorCriticNetwork(state_dim, n_actions)
+        self.optimizer = optim.Adam(self.network.parameters(), lr=lr)
+
+        # Episode storage
+        self.log_probs = []
+        self.values = []
+        self.rewards = []
+        self.entropies = []
+        self.dones = []
+
+    def select_action(self, state):
+        """Select action using current policy."""
+        state = torch.FloatTensor(state).unsqueeze(0)
+        action, log_prob, value, entropy = self.network.get_action_and_value(state)
+
+        self.log_probs.append(log_prob)
+        self.values.append(value)
+        self.entropies.append(entropy)
+
+        return action
+
+    def store_transition(self, reward, done):
+        """Store reward and done flag."""
+        self.rewards.append(reward)
+        self.dones.append(done)
+
+    def compute_returns_and_advantages(self, next_value):
+        """
+        Compute returns and advantages using TD(0).
+
+        For each step: advantage = reward + gamma * next_value - value
+        """
+        advantages = []
+        returns = []
+
+        # Bootstrap from next value if episode didn't end
+        R = next_value
+
+        for t in reversed(range(len(self.rewards))):
+            if self.dones[t]:
+                R = 0  # Terminal state has zero future value
+            R = self.rewards[t] + self.gamma * R
+            returns.insert(0, R)
+
+            # TD advantage: r + gamma * V(s') - V(s)
+            if self.dones[t]:
+                next_val = 0
+            elif t == len(self.rewards) - 1:
+                next_val = next_value
+            else:
+                next_val = self.values[t + 1].item()
+
+            advantage = self.rewards[t] + self.gamma * next_val - self.values[t].item()
+            advantages.insert(0, advantage)
+
+        returns = torch.FloatTensor(returns)
+        advantages = torch.FloatTensor(advantages)
+
+        # Normalize advantages
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        return returns, advantages
+
+    def update(self, next_state=None):
+        """Perform A2C update."""
+        # Get next value for bootstrapping
+        if next_state is not None:
+            with torch.no_grad():
+                state = torch.FloatTensor(next_state).unsqueeze(0)
+                _, next_value = self.network(state)
+                next_value = next_value.item()
+        else:
+            next_value = 0
+
+        returns, advantages = self.compute_returns_and_advantages(next_value)
+
+        # Stack tensors
+        log_probs = torch.stack(self.log_probs)
+        values = torch.stack(self.values)
+        entropies = torch.stack(self.entropies)
+
+        # Policy loss: -log_prob * advantage
+        policy_loss = -(log_probs * advantages).mean()
+
+        # Value loss: MSE between predicted values and returns
+        value_loss = nn.functional.mse_loss(values, returns)
+
+        # Entropy bonus: encourage exploration
+        entropy_loss = -entropies.mean()
+
+        # Combined loss
+        loss = policy_loss + self.value_coef * value_loss + self.entropy_coef * entropy_loss
+
+        # Update network
+        self.optimizer.zero_grad()
+        loss.backward()
+        # Gradient clipping for stability
+        nn.utils.clip_grad_norm_(self.network.parameters(), max_norm=0.5)
+        self.optimizer.step()
+
+        # Clear storage
+        self.log_probs = []
+        self.values = []
+        self.rewards = []
+        self.entropies = []
+        self.dones = []
+
+        return {
+            'policy_loss': policy_loss.item(),
+            'value_loss': value_loss.item(),
+            'entropy': -entropy_loss.item()
+        }
+```
+
+</Implementation>
+
+### Training A2C
+
+<Implementation>
+
+```python
+import gymnasium as gym
+
+
+def train_a2c(env_name='CartPole-v1', num_episodes=1000, update_freq=5):
+    """
+    Train A2C agent.
+
+    Args:
+        env_name: Gymnasium environment name
+        num_episodes: Number of training episodes
+        update_freq: Update every N steps (or at episode end)
+    """
+    env = gym.make(env_name)
+    state_dim = env.observation_space.shape[0]
+    n_actions = env.action_space.n
+
+    agent = A2C(state_dim, n_actions, lr=0.001, gamma=0.99)
+    episode_rewards = []
+
+    for episode in range(num_episodes):
+        state, _ = env.reset()
+        done = False
+        total_reward = 0
+        step = 0
+
+        while not done:
+            action = agent.select_action(state)
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+
+            agent.store_transition(reward, done)
+            total_reward += reward
+            step += 1
+
+            # Update periodically or at episode end
+            if step % update_freq == 0 or done:
+                agent.update(next_state if not done else None)
+
+            state = next_state
+
+        episode_rewards.append(total_reward)
+
+        if episode % 100 == 0:
+            avg_reward = np.mean(episode_rewards[-100:])
+            print(f"Episode {episode}, Avg Reward: {avg_reward:.1f}")
+
+    return agent, episode_rewards
+
+
+# Train the agent
+agent, rewards = train_a2c(num_episodes=1000)
+```
+
+</Implementation>
+
+## Bias-Variance Trade-off
+
+Actor-critic methods introduce a trade-off that's important to understand.
+
+<Intuition>
+
+**REINFORCE (Monte Carlo):**
+- Uses actual returns $G_t$
+- **Unbiased**: $\mathbb{E}[G_t] = Q^{\pi}(s, a)$ exactly
+- **High variance**: Returns vary a lot across episodes
+
+**Actor-Critic (TD):**
+- Uses bootstrapped estimate $r + \gamma V(s')$
+- **Biased**: If $V_\phi$ is wrong, the estimate is wrong
+- **Lower variance**: $V_\phi$ is a learned, stable function
+
+The bias comes from using a learned value function that might be inaccurate. The variance reduction comes from replacing random future outcomes with a stable estimate.
+
+</Intuition>
+
+{/* TODO: Interactive Demo - Bias-Variance Trade-off */}
+{/* Slider for n-step returns, show how bias and variance change */}
+
+### N-Step Returns
+
+We can interpolate between TD(0) and Monte Carlo using **n-step returns**:
+
+<Mathematical>
+
+**n-step return:**
+$$G_t^{(n)} = R_{t+1} + \gamma R_{t+2} + ... + \gamma^{n-1} R_{t+n} + \gamma^n V(S_{t+n})$$
+
+- $n = 1$: TD(0), $G_t^{(1)} = R_{t+1} + \gamma V(S_{t+1})$
+- $n = \infty$: Monte Carlo, $G_t^{(\infty)} = R_{t+1} + \gamma R_{t+2} + ...$
+
+**n-step advantage:**
+$$\hat{A}_t^{(n)} = G_t^{(n)} - V(S_t)$$
+
+Higher $n$:
+- Less bias (more actual rewards, less bootstrapping)
+- More variance (more randomness from actual trajectory)
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def compute_n_step_returns(rewards, values, gamma, n_steps):
+    """
+    Compute n-step returns.
+
+    Args:
+        rewards: List of rewards [r_0, r_1, ..., r_T]
+        values: List of value estimates [V(s_0), V(s_1), ..., V(s_T)]
+        gamma: Discount factor
+        n_steps: Number of steps for n-step returns
+    """
+    T = len(rewards)
+    returns = []
+
+    for t in range(T):
+        # Sum of discounted rewards for n steps
+        G = 0
+        for k in range(min(n_steps, T - t)):
+            G += (gamma ** k) * rewards[t + k]
+
+        # Bootstrap from value if we haven't reached the end
+        if t + n_steps < T:
+            G += (gamma ** n_steps) * values[t + n_steps]
+
+        returns.append(G)
+
+    return returns
+```
+
+</Implementation>
+
+<Note>
+In practice, n-step returns with $n$ between 5 and 20 often work well. The optimal $n$ depends on the environment—longer horizons for problems where rewards are sparse or delayed.
+</Note>
+
+## Entropy Regularization
+
+You may have noticed the `entropy_coef` in our A2C implementation. What's that about?
+
+<Intuition>
+
+**Entropy** measures how random a probability distribution is:
+- High entropy = spread out, lots of uncertainty
+- Low entropy = peaked, very certain
+
+For a policy, high entropy means exploring many actions; low entropy means consistently picking the same action.
+
+By adding an entropy bonus to our objective, we encourage the policy to maintain some randomness:
+
+$$J'(\theta) = J(\theta) + \beta H(\pi_\theta)$$
+
+where $H(\pi_\theta) = -\sum_a \pi_\theta(a|s) \log \pi_\theta(a|s)$.
+
+This prevents premature convergence to a suboptimal deterministic policy. The policy keeps exploring even as it improves.
+
+</Intuition>
+
+<Mathematical>
+
+The entropy of a discrete policy is:
+
+$$H(\pi_\theta(\cdot|s)) = -\sum_a \pi_\theta(a|s) \log \pi_\theta(a|s)$$
+
+Adding this to the policy gradient objective:
+
+$$L = -\mathbb{E}[\log \pi_\theta(a|s) \cdot \hat{A}] - \beta \mathbb{E}[H(\pi_\theta)]$$
+
+The gradient encourages:
+1. Increasing probability of advantageous actions (from advantage term)
+2. Keeping the policy stochastic (from entropy term)
+
+As training progresses, we might decrease $\beta$ to allow the policy to become more deterministic.
+
+</Mathematical>
+
+<Warning>
+Too much entropy regularization can prevent the policy from ever converging. Too little can cause it to collapse to a deterministic (possibly suboptimal) policy too quickly. Values of $\beta$ between 0.001 and 0.01 are common starting points.
+</Warning>
+
+## Shared vs. Separate Networks
+
+There's an architectural choice in actor-critic: should the actor and critic share parameters?
+
+<Intuition>
+
+**Shared networks** (common layers, separate heads):
+- More parameter-efficient
+- Shared representations can help both actor and critic
+- Risk: critic updates might hurt actor's representations (and vice versa)
+
+**Separate networks** (completely independent):
+- No interference between actor and critic learning
+- More parameters, more memory
+- Can use different architectures/learning rates
+
+In practice, shared networks work well for many problems, especially with careful loss weighting. The value coefficient (e.g., 0.5) balances how much the critic loss affects shared layers.
+
+</Intuition>
+
+## Comparison: REINFORCE vs. A2C
+
+{/* TODO: Interactive Demo - REINFORCE vs A2C Comparison */}
+{/* Side-by-side learning curves, gradient variance comparison */}
+
+Let's compare the two approaches:
+
+<Implementation>
+
+```python
+def compare_reinforce_a2c(env_name='CartPole-v1', num_episodes=500, num_seeds=3):
+    """Compare REINFORCE and A2C on the same environment."""
+    import matplotlib.pyplot as plt
+
+    results = {'REINFORCE': [], 'A2C': []}
+
+    for seed in range(num_seeds):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+
+        # Train REINFORCE
+        env = gym.make(env_name)
+        state_dim = env.observation_space.shape[0]
+        n_actions = env.action_space.n
+
+        # Using REINFORCE with baseline from previous chapter
+        reinforce_agent = REINFORCEWithBaseline(state_dim, n_actions, lr=0.01)
+        reinforce_rewards = []
+
+        for _ in range(num_episodes):
+            state, _ = env.reset()
+            done = False
+            ep_reward = 0
+            while not done:
+                action = reinforce_agent.select_action(state)
+                state, reward, term, trunc, _ = env.step(action)
+                reinforce_agent.store_reward(reward)
+                ep_reward += reward
+                done = term or trunc
+            reinforce_agent.update()
+            reinforce_rewards.append(ep_reward)
+
+        results['REINFORCE'].append(reinforce_rewards)
+
+        # Train A2C
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        env = gym.make(env_name)
+        a2c_agent = A2C(state_dim, n_actions, lr=0.001)
+        a2c_rewards = []
+
+        for _ in range(num_episodes):
+            state, _ = env.reset()
+            done = False
+            ep_reward = 0
+            steps = 0
+            while not done:
+                action = a2c_agent.select_action(state)
+                next_state, reward, term, trunc, _ = env.step(action)
+                done = term or trunc
+                a2c_agent.store_transition(reward, done)
+                ep_reward += reward
+                steps += 1
+                if steps % 5 == 0 or done:
+                    a2c_agent.update(next_state if not done else None)
+                state = next_state
+            a2c_rewards.append(ep_reward)
+
+        results['A2C'].append(a2c_rewards)
+
+    # Plot comparison
+    plt.figure(figsize=(10, 6))
+    colors = {'REINFORCE': 'blue', 'A2C': 'orange'}
+
+    for name, runs in results.items():
+        mean = np.mean(runs, axis=0)
+        std = np.std(runs, axis=0)
+        # Smooth for visualization
+        window = 20
+        smoothed = np.convolve(mean, np.ones(window)/window, mode='valid')
+        x = np.arange(len(smoothed))
+        plt.plot(x, smoothed, label=name, color=colors[name])
+        plt.fill_between(x,
+                        np.convolve(mean - std, np.ones(window)/window, mode='valid'),
+                        np.convolve(mean + std, np.ones(window)/window, mode='valid'),
+                        alpha=0.2, color=colors[name])
+
+    plt.xlabel('Episode')
+    plt.ylabel('Reward')
+    plt.title('REINFORCE vs A2C on CartPole')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.show()
+```
+
+</Implementation>
+
+| Aspect | REINFORCE | A2C |
+|--------|-----------|-----|
+| **Update frequency** | End of episode | Every few steps |
+| **Variance** | High (Monte Carlo) | Lower (bootstrapping) |
+| **Bias** | None | Some (from value function) |
+| **Sample efficiency** | Poor | Better |
+| **Stability** | Less stable | More stable |
+| **Complexity** | Simpler | Slightly more complex |
+
+## Summary
+
+<KeyTakeaways>
+- **Actor-critic** combines policy learning (actor) with value function learning (critic)
+- The **advantage function** $A(s,a) = Q(s,a) - V(s)$ measures how much better an action is than average
+- The **TD error** $\delta_t = r + \gamma V(s') - V(s)$ is an unbiased estimate of advantage
+- **A2C** updates both actor and critic, using TD error for advantages
+- There's a **bias-variance trade-off**: bootstrapping reduces variance but introduces bias if the value function is inaccurate
+- **N-step returns** interpolate between TD (low variance, some bias) and Monte Carlo (no bias, high variance)
+- **Entropy regularization** prevents premature convergence to deterministic policies
+- Actor and critic can **share network layers** for efficiency, or use separate networks for stability
+</KeyTakeaways>
+
+Actor-critic methods are the foundation of most modern RL algorithms. But there's still a stability issue: if the actor changes too much, learning can collapse. One bad update can undo hours of progress.
+
+How do we take the largest useful steps while staying safe? That's the question PPO and trust region methods answer—and they're the focus of our next chapter.
+
+<NextChapter slug="ppo-and-advanced-pg" title="PPO and Trust Region Methods" />
+
+## Exercises
+
+### Conceptual Questions
+
+1. **Explain the actor-critic architecture.** What role does each component play? Why is this combination powerful?
+
+2. **Why is the TD error an estimate of advantage?** Show that $\mathbb{E}[\delta_t | s, a] = A^{\pi}(s, a)$.
+
+3. **What is the bias-variance trade-off in actor-critic?** Why does bootstrapping reduce variance? Why does it introduce bias?
+
+4. **Compare actor-critic to Q-learning.** What are the similarities? The differences?
+
+### Coding Challenges
+
+5. **Implement A2C from scratch** and train on CartPole. Compare learning curves to REINFORCE with baseline.
+
+6. **Experiment with n-step returns.** Compare n=1, n=5, n=20, and Monte Carlo. Which learns fastest? Which is most stable?
+
+7. **Implement entropy regularization.** Compare learning with $\beta = 0$, $\beta = 0.01$, and $\beta = 0.1$. How does entropy affect exploration?
+
+### Exploration
+
+8. **Learning rate balance.** Try different learning rates for actor and critic (use separate optimizers). What happens when the critic learns much faster than the actor? Much slower?
+
+9. **Shared vs. separate networks.** Implement A2C with completely separate actor and critic networks. Compare to shared networks. When might separate networks be preferable?

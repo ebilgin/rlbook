@@ -1,0 +1,44 @@
+# Chapter ↔ Paper Connections
+#
+# This file tracks relationships between chapters and paper explanations.
+# It enables bidirectional navigation and helps readers discover related content.
+#
+# Relationship types:
+#   - foundational: The paper is central to the chapter's content
+#   - extends: The paper builds on chapter concepts
+#   - applies: The paper applies techniques from the chapter
+#   - related: Tangential connection worth noting
+#   - critiques: The paper challenges ideas from the chapter
+
+papers:
+  - slug: grpo
+    title: "Group Relative Policy Optimization"
+    chapters:
+      - slug: ppo
+        relationship: extends
+        context: "GRPO simplifies PPO by removing the critic, using group-relative advantages instead"
+      - slug: policy-gradients
+        relationship: extends
+        context: "GRPO is a policy gradient method that replaces learned baselines with group statistics"
+      - slug: rlhf
+        relationship: applies
+        context: "GRPO is now the dominant algorithm for RLHF in reasoning models"
+
+  # Future entries:
+  #
+  # - slug: dqn-nature-2015
+  #   title: "Human-level control through deep reinforcement learning"
+  #   chapters:
+  #     - slug: deep-q-networks
+  #       relationship: foundational
+  #       context: "The seminal DQN paper that this chapter explains"
+  #
+  # - slug: prioritized-experience-replay
+  #   title: "Prioritized Experience Replay"
+  #   chapters:
+  #     - slug: deep-q-networks
+  #       relationship: extends
+  #       context: "PER improves upon the uniform replay buffer introduced here"
+  #     - slug: exploration-exploitation
+  #       relationship: related
+  #       context: "Priority can be seen as a form of curiosity-driven sampling"

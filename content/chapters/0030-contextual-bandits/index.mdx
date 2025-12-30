@@ -1,0 +1,614 @@
+---
+title: "Contextual Bandits"
+slug: "contextual-bandits"
+section: "Foundations"
+description: "Learn to make personalized decisions based on context features"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "multi-armed-bandits"
+    title: "Multi-Armed Bandits"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+# Contextual Bandits
+
+<ChapterObjectives>
+- Understand how contextual bandits extend the basic bandit problem
+- Learn the role of context features in action selection
+- Implement linear contextual bandits with ε-greedy exploration
+- Recognize real-world applications (recommendations, ads, personalization)
+- See the bridge between bandits and full reinforcement learning
+</ChapterObjectives>
+
+## When the Best Action Depends on Who's Asking
+
+A movie recommendation system faces a unique challenge: the best movie to recommend depends on *who's asking*. A thriller fan and a comedy lover shouldn't get the same suggestion. A news website has the same problem—the article that engages one reader might bore another.
+
+This is a **contextual bandit**: the right action depends on context. And it's everywhere—personalized ads, news feeds, treatment selection, product recommendations. The same exploration-exploitation tradeoff from multi-armed bandits applies, but now we must learn *which action is best for which situation*.
+
+<Intuition>
+
+Think back to our multi-armed bandit with slot machines. Every time you pulled a lever, you got a reward from the same distribution. The best arm was the same for everyone.
+
+Now imagine the casino has *magic slot machines* that pay out differently based on who's playing. A machine that loves red shirts pays more if you're wearing red. Another pays more to tall people. Suddenly, finding "the best arm" isn't enough—you need to find *the best arm for you*.
+
+This is the contextual bandit problem:
+1. You observe **context** (features about the situation)
+2. You choose an **action** from a fixed set
+3. You receive a **reward** that depends on both context and action
+4. Your goal: learn which action is best for each context
+
+The key difference from regular bandits: we're learning a **policy**—a mapping from context to action—not just finding a single best action.
+
+</Intuition>
+
+{/* TODO: Interactive Demo - Personalized Recommendations */}
+{/* Show user profiles with different features, see how optimal action varies */}
+
+## The Contextual Bandit Problem
+
+Let's formalize what we're solving.
+
+<Intuition>
+
+At each round $t$:
+1. The environment presents a **context** $x_t$ (a vector of features)
+2. The agent chooses an **action** $a_t$ from a set of actions
+3. The agent receives a **reward** $r_t$ that depends on both $x_t$ and $a_t$
+4. The agent updates its knowledge to make better decisions
+
+**What is context?** It's any information about the current situation that might affect which action is best:
+- For movie recommendations: user age, viewing history, time of day
+- For ad placement: user demographics, page content, device type
+- For medical treatment: patient symptoms, medical history, genetics
+
+**What are actions?** The choices we can make:
+- For recommendations: which movie/article/product to show
+- For ads: which ad to display
+- For treatment: which medication to prescribe
+
+**What is reward?** A signal of how good our choice was:
+- For recommendations: did the user click? Watch the whole thing? Rate it highly?
+- For ads: did the user click? Convert to a sale?
+- For treatment: did the patient improve?
+
+</Intuition>
+
+<Mathematical>
+
+Formally, a contextual bandit is defined by:
+
+- **Context space** $\mathcal{X}$: The set of possible contexts (often $\mathbb{R}^d$ for $d$ features)
+- **Action space** $\mathcal{A}$: A finite set of $K$ actions
+- **Reward function**: For each context-action pair, there's a reward distribution $P(r | x, a)$
+
+The agent's goal is to learn a **policy** $\pi: \mathcal{X} \rightarrow \mathcal{A}$ that maximizes expected reward:
+
+$$\pi^* = \arg\max_\pi \mathbb{E}_{x \sim P(x)}[\mathbb{E}[r | x, \pi(x)]]$$
+
+Unlike supervised learning, we only observe the reward for the action we took—not what would have happened if we'd chosen differently. This is **bandit feedback**.
+
+</Mathematical>
+
+### Why Not Just Use Supervised Learning?
+
+A tempting thought: "I have context and want to predict the best action. That's classification!" But there's a crucial difference.
+
+<Intuition>
+
+In supervised learning, you have labeled data: input-output pairs where someone tells you the correct answer. You could train a classifier on (user_features, best_movie) pairs.
+
+In contextual bandits, you only learn the reward for the action you took. If you recommended Action Hero 3 and the user didn't click, you don't know if they would have clicked on Romantic Comedy 2 or Documentary About Penguins.
+
+This is called **partial feedback** or **bandit feedback**:
+- Supervised: You see the label for the correct answer
+- Bandits: You see the reward for *your* answer only
+
+This matters because:
+1. You can't just collect a dataset—you need to *interact* to learn
+2. Exploration is essential—you must try actions to learn about them
+3. The exploration-exploitation tradeoff from regular bandits still applies
+
+</Intuition>
+
+<Warning>
+A common mistake is treating contextual bandits as classification. If you train a classifier on historical data (context → action taken), you'll learn to imitate past behavior—including past mistakes. You won't discover actions that were never tried. This is called the **exploitation trap**.
+</Warning>
+
+## Learning from Context: Linear Models
+
+How do we estimate which action is best for a given context? We need a model that predicts rewards based on context.
+
+<Intuition>
+
+The simplest approach: assume rewards are a **linear function** of context features.
+
+For each action $a$, we learn a weight vector $\theta_a$ such that:
+
+$$\text{Expected reward for action } a \text{ given context } x \approx \theta_a^T x$$
+
+If context $x$ has features [age=25, watches_action=0.8, watches_comedy=0.3], and we're predicting reward for showing an action movie, our model computes:
+
+$$\theta_{\text{action}}^T x = \theta_1 \cdot 25 + \theta_2 \cdot 0.8 + \theta_3 \cdot 0.3$$
+
+Different actions have different weight vectors, so the same context can yield different predicted rewards for different actions.
+
+</Intuition>
+
+<Mathematical>
+
+For each action $a \in \mathcal{A}$, we model the expected reward as:
+
+$$Q(x, a) = \theta_a^T x$$
+
+where:
+- $x \in \mathbb{R}^d$ is the context feature vector
+- $\theta_a \in \mathbb{R}^d$ is the learned weight vector for action $a$
+- $Q(x, a)$ is our estimate of expected reward
+
+To choose an action, we use **ε-greedy**. With probability $1 - \epsilon$, select $\arg\max_a Q(x, a)$. With probability $\epsilon$, select a random action.
+
+To update our model, we use **online least squares**. After observing $(x_t, a_t, r_t)$:
+
+$$\theta_{a_t} \leftarrow \theta_{a_t} + \alpha (r_t - \theta_{a_t}^T x_t) x_t$$
+
+This moves $\theta$ in the direction that would have predicted $r_t$ better.
+
+</Mathematical>
+
+### A Concrete Example: News Article Recommendation
+
+<Intuition>
+
+You run a news website. You have 5 articles to recommend. Each user has features:
+- `age`: normalized between 0-1
+- `tech_interest`: how much they read tech articles (0-1)
+- `politics_interest`: how much they read politics (0-1)
+- `sports_interest`: how much they read sports (0-1)
+
+Your articles are:
+1. "New iPhone Released" (tech)
+2. "Election Updates" (politics)
+3. "Championship Game Results" (sports)
+4. "Celebrity Gossip" (entertainment)
+5. "Stock Market Analysis" (finance)
+
+A user arrives with features [age=0.3, tech=0.9, politics=0.2, sports=0.1]. Your linear models predict:
+- Article 1: $\theta_1^T x = 0.8$ (high tech interest matches)
+- Article 2: $\theta_2^T x = 0.3$ (low politics interest)
+- Article 3: $\theta_3^T x = 0.2$ (low sports interest)
+- ...
+
+With ε-greedy, you'd usually show Article 1, but sometimes explore others to refine your model.
+
+</Intuition>
+
+{/* TODO: Interactive Demo - News Recommendation */}
+{/* Show different user profiles, visualize linear model predictions */}
+
+## Implementation: Linear Contextual Bandit
+
+Let's implement a complete linear contextual bandit.
+
+<Implementation>
+
+```python
+import numpy as np
+
+class LinearContextualBandit:
+    """
+    Linear contextual bandit with ε-greedy exploration.
+
+    Each action has its own linear model predicting rewards from context.
+    """
+
+    def __init__(self, n_actions, n_features, epsilon=0.1, alpha=0.1):
+        self.n_actions = n_actions
+        self.n_features = n_features
+        self.epsilon = epsilon
+        self.alpha = alpha
+
+        # One weight vector per action, initialized to zeros
+        self.theta = np.zeros((n_actions, n_features))
+
+    def predict(self, context):
+        """Predict expected reward for each action given context."""
+        # Shape: (n_actions,) - one prediction per action
+        return self.theta @ context
+
+    def select_action(self, context):
+        """Select action using ε-greedy policy."""
+        if np.random.random() < self.epsilon:
+            # Explore: random action
+            return np.random.randint(self.n_actions)
+        else:
+            # Exploit: best predicted action
+            predictions = self.predict(context)
+            return np.argmax(predictions)
+
+    def update(self, context, action, reward):
+        """Update model for the chosen action based on observed reward."""
+        # Prediction error for this action
+        prediction = self.theta[action] @ context
+        error = reward - prediction
+
+        # Gradient descent update
+        self.theta[action] += self.alpha * error * context
+```
+
+</Implementation>
+
+### Simulating a Personalization Problem
+
+<Implementation>
+
+Let's test our bandit on a simulated recommendation problem:
+
+```python
+class PersonalizationEnvironment:
+    """
+    Simulated environment where optimal action depends on user features.
+
+    True reward = theta_true[action] @ context + noise
+    """
+
+    def __init__(self, n_actions, n_features, noise_std=0.1):
+        self.n_actions = n_actions
+        self.n_features = n_features
+        self.noise_std = noise_std
+
+        # Hidden true weights (the bandit tries to learn these)
+        self.theta_true = np.random.randn(n_actions, n_features)
+
+    def get_context(self):
+        """Generate a random context (user features)."""
+        return np.random.randn(self.n_features)
+
+    def get_reward(self, context, action):
+        """Return noisy reward for action in context."""
+        expected_reward = self.theta_true[action] @ context
+        return expected_reward + np.random.randn() * self.noise_std
+
+    def optimal_action(self, context):
+        """Return the truly best action for this context."""
+        expected_rewards = self.theta_true @ context
+        return np.argmax(expected_rewards)
+
+
+def run_experiment(n_rounds=1000, n_actions=5, n_features=4):
+    """Run a contextual bandit experiment."""
+    env = PersonalizationEnvironment(n_actions, n_features)
+    bandit = LinearContextualBandit(n_actions, n_features, epsilon=0.1)
+
+    rewards = []
+    optimal_actions = []
+
+    for t in range(n_rounds):
+        # Get context for this round
+        context = env.get_context()
+
+        # Select action
+        action = bandit.select_action(context)
+
+        # Get reward
+        reward = env.get_reward(context, action)
+
+        # Update model
+        bandit.update(context, action, reward)
+
+        # Track metrics
+        rewards.append(reward)
+        optimal_actions.append(action == env.optimal_action(context))
+
+    return rewards, optimal_actions
+
+
+# Run and analyze
+rewards, optimal = run_experiment()
+print(f"Final 100 rounds - Avg reward: {np.mean(rewards[-100:]):.3f}")
+print(f"Final 100 rounds - Optimal action rate: {np.mean(optimal[-100:]):.1%}")
+```
+
+</Implementation>
+
+<Intuition>
+
+Watch what happens as the experiment progresses:
+- Early on, the bandit explores randomly and makes mistakes
+- As it gathers data, it learns which action works best for which contexts
+- Eventually, it converges to selecting near-optimal actions
+
+The exploration parameter ε controls this tradeoff. High ε means more exploration but lower performance. Low ε means faster exploitation but risk of missing good actions.
+
+</Intuition>
+
+## The Value of Context: Personalization Wins
+
+Why bother with context? Let's compare contextual bandits against regular bandits that ignore context.
+
+<Intuition>
+
+Consider two strategies:
+1. **Context-blind bandit**: Ignores user features, learns one best action for everyone
+2. **Contextual bandit**: Uses user features, learns different best actions for different users
+
+When different users genuinely prefer different things, the contextual bandit dominates. It can recommend action movies to action fans and comedies to comedy fans, while the context-blind bandit must pick one genre for everyone.
+
+The advantage is largest when:
+- User preferences vary widely
+- Context features are predictive of preferences
+- The action space is diverse
+
+</Intuition>
+
+<Implementation>
+
+```python
+def compare_contextual_vs_blind(n_rounds=2000):
+    """Compare contextual bandit against context-blind bandit."""
+    n_actions, n_features = 5, 4
+
+    # Same environment for both
+    env = PersonalizationEnvironment(n_actions, n_features)
+
+    # Contextual bandit
+    contextual = LinearContextualBandit(n_actions, n_features)
+
+    # Context-blind bandit (standard epsilon-greedy)
+    blind_estimates = np.zeros(n_actions)
+    blind_counts = np.zeros(n_actions) + 1e-6  # Avoid division by zero
+
+    contextual_rewards = []
+    blind_rewards = []
+
+    for t in range(n_rounds):
+        context = env.get_context()
+
+        # Contextual bandit decision
+        ctx_action = contextual.select_action(context)
+        ctx_reward = env.get_reward(context, ctx_action)
+        contextual.update(context, ctx_action, ctx_reward)
+        contextual_rewards.append(ctx_reward)
+
+        # Context-blind bandit decision (ε-greedy ignoring context)
+        if np.random.random() < 0.1:
+            blind_action = np.random.randint(n_actions)
+        else:
+            blind_action = np.argmax(blind_estimates)
+
+        blind_reward = env.get_reward(context, blind_action)
+
+        # Update context-blind estimates (average reward per action)
+        blind_counts[blind_action] += 1
+        blind_estimates[blind_action] += (
+            (blind_reward - blind_estimates[blind_action]) / blind_counts[blind_action]
+        )
+        blind_rewards.append(blind_reward)
+
+    return contextual_rewards, blind_rewards
+
+
+# Compare performance
+ctx_rewards, blind_rewards = compare_contextual_vs_blind()
+
+# Rolling average for last 500 rounds
+print(f"Contextual bandit avg reward: {np.mean(ctx_rewards[-500:]):.3f}")
+print(f"Context-blind bandit avg reward: {np.mean(blind_rewards[-500:]):.3f}")
+```
+
+</Implementation>
+
+{/* TODO: Interactive Demo - Contextual vs Standard Comparison */}
+{/* Side-by-side comparison showing cumulative rewards */}
+
+## LinUCB: Smarter Exploration
+
+Our ε-greedy approach explores randomly. But can we be smarter—exploring where we're most uncertain?
+
+<Intuition>
+
+Recall UCB from multi-armed bandits: it added an "uncertainty bonus" to each action, favoring actions we're less sure about.
+
+**LinUCB** extends this idea to contextual bandits. Instead of just picking the action with highest predicted reward, it picks the action with the highest *upper confidence bound*:
+
+$$a = \arg\max_a \left[ \underbrace{\theta_a^T x}_{\text{predicted reward}} + \underbrace{\alpha \sqrt{x^T A_a^{-1} x}}_{\text{uncertainty bonus}} \right]$$
+
+The uncertainty bonus is larger when:
+- We've seen fewer examples of this action
+- The current context is unlike contexts we've seen before for this action
+
+This means LinUCB automatically explores in unfamiliar situations while exploiting in familiar ones.
+
+</Intuition>
+
+<Mathematical>
+
+LinUCB maintains, for each action $a$:
+- $A_a$: A matrix tracking the "information" gathered about action $a$
+- $b_a$: A vector tracking the rewards we've observed
+
+The weight estimate is: $\theta_a = A_a^{-1} b_a$
+
+The uncertainty for context $x$ and action $a$ is: $\sqrt{x^T A_a^{-1} x}$
+
+The update after observing $(x, a, r)$:
+- $A_a \leftarrow A_a + x x^T$
+- $b_a \leftarrow b_a + r \cdot x$
+
+The parameter $\alpha$ controls how much we favor exploration. Higher $\alpha$ means more exploration.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+class LinUCB:
+    """
+    LinUCB algorithm for contextual bandits.
+
+    Uses upper confidence bounds for principled exploration.
+    """
+
+    def __init__(self, n_actions, n_features, alpha=1.0):
+        self.n_actions = n_actions
+        self.n_features = n_features
+        self.alpha = alpha
+
+        # For each action: A matrix and b vector
+        self.A = [np.eye(n_features) for _ in range(n_actions)]
+        self.b = [np.zeros(n_features) for _ in range(n_actions)]
+
+    def select_action(self, context):
+        """Select action with highest UCB."""
+        ucbs = []
+
+        for a in range(self.n_actions):
+            # Compute theta estimate
+            A_inv = np.linalg.inv(self.A[a])
+            theta = A_inv @ self.b[a]
+
+            # Predicted reward
+            pred = theta @ context
+
+            # Uncertainty bonus
+            uncertainty = self.alpha * np.sqrt(context @ A_inv @ context)
+
+            ucbs.append(pred + uncertainty)
+
+        return np.argmax(ucbs)
+
+    def update(self, context, action, reward):
+        """Update model for chosen action."""
+        self.A[action] += np.outer(context, context)
+        self.b[action] += reward * context
+```
+
+</Implementation>
+
+<Tip>
+LinUCB typically outperforms ε-greedy, especially early in learning when uncertainty is high. However, it's more computationally expensive due to matrix inversions. For large feature spaces, consider using Sherman-Morrison updates or diagonal approximations.
+</Tip>
+
+## Real-World Applications
+
+Contextual bandits power many real systems. Here are some prominent examples.
+
+### Personalized Recommendations
+
+<Intuition>
+
+**Netflix, Spotify, YouTube**: These platforms face a contextual bandit problem every time you open the app.
+
+- **Context**: Your viewing history, time of day, device, current mood (inferred)
+- **Actions**: Which content to show in the top slot
+- **Reward**: Did you watch/listen? For how long? Did you rate it highly?
+
+They can't show you everything, so they must balance:
+- **Exploitation**: Show content similar to what you've liked
+- **Exploration**: Try new genres to discover hidden preferences
+
+</Intuition>
+
+### Online Advertising
+
+<Intuition>
+
+**Google, Facebook, Amazon**: Ad placement is the canonical contextual bandit application.
+
+- **Context**: User demographics, browsing history, page content
+- **Actions**: Which ad to display
+- **Reward**: Click-through, conversion, revenue
+
+The stakes are high—better contextual bandits mean billions in additional revenue. Companies invest heavily in this area.
+
+</Intuition>
+
+### Clinical Trials and Treatment Selection
+
+<Intuition>
+
+**Medical applications**: Which treatment works best for which patient?
+
+- **Context**: Patient features (age, symptoms, genetics, history)
+- **Actions**: Available treatments
+- **Reward**: Treatment outcome (improvement, side effects)
+
+This is sometimes called **precision medicine**. Instead of finding the best treatment on average, we find the best treatment for *this patient*.
+
+Exploration is particularly delicate here—we don't want to give suboptimal treatments just to gather data. Techniques like Thompson Sampling can help by quantifying uncertainty.
+
+</Intuition>
+
+<Note>
+In high-stakes applications like medicine, we often use **offline evaluation** techniques to estimate policy performance from historical data before deploying new policies. This is an active research area called off-policy evaluation.
+</Note>
+
+## Contextual Bandits vs. Full RL
+
+We've progressed from multi-armed bandits (no context) to contextual bandits (context matters). What's next?
+
+<Intuition>
+
+The key assumption in contextual bandits: **your action doesn't affect future contexts**.
+
+When you recommend a movie, the next user's features don't depend on your recommendation. Each interaction is independent.
+
+But what if actions *do* affect the future?
+- A chess move changes the board state
+- A robot's step changes its position
+- A treatment affects the patient's future health
+
+This is **full reinforcement learning**: actions affect states, which affects future rewards, which requires planning ahead.
+
+| Problem | Context/State | Actions Affect Future? |
+|---------|---------------|----------------------|
+| Multi-armed bandit | None | N/A |
+| Contextual bandit | Yes, observed | No |
+| Full RL (MDP) | Yes, observed | Yes |
+
+</Intuition>
+
+The techniques we've learned—value estimation, exploration-exploitation tradeoff, balancing uncertainty—all carry forward into full RL. Contextual bandits are a stepping stone.
+
+<NextChapter slug="mdp-fundamentals" title="Markov Decision Processes" />
+
+## Summary
+
+<KeyTakeaways>
+- **Contextual bandits** extend multi-armed bandits by conditioning on observable context features
+- We learn a **policy** (context → action mapping), not just a single best action
+- **Linear models** provide a simple way to predict rewards from context: $Q(x,a) = \theta_a^T x$
+- Exploration strategies like **ε-greedy** and **LinUCB** balance learning and earning
+- Applications are everywhere: recommendations, ads, medical treatment, personalization
+- The key simplification vs. full RL: actions don't affect future contexts
+</KeyTakeaways>
+
+## Exercises
+
+### Conceptual Questions
+
+1. **Why can't we use supervised learning directly for contextual bandits?** Explain the difference between full feedback (supervised) and bandit feedback.
+
+2. **When would a contextual bandit outperform a context-blind bandit?** Describe a scenario where ignoring context leads to poor performance.
+
+3. **What's the key difference between contextual bandits and full RL?** Why does this difference matter for algorithm design?
+
+### Coding Challenges
+
+4. **Implement a movie recommendation simulation**: Create an environment with 3 user types (action fans, comedy fans, drama fans) and 5 movies. Show that a contextual bandit learns to recommend appropriately to each type.
+
+5. **Compare ε-greedy and LinUCB**: Run both algorithms on the same environment. Plot learning curves. When does LinUCB's advantage show most clearly?
+
+6. **Feature engineering experiment**: Start with a contextual bandit using 2 features. Add 3 irrelevant noise features. How does performance change? What does this tell you about feature selection?
+
+### Open-Ended Exploration
+
+7. **Design your own contextual bandit application**: Think of a decision problem you encounter regularly where context matters. Define:
+   - What context features would you use?
+   - What actions are available?
+   - How would you measure reward?
+   - What makes exploration tricky in your setting?

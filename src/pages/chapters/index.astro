@@ -1,0 +1,154 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getChaptersArray, type ChapterStatus } from '../../lib/chapters';
+
+// Get chapters sorted by directory order
+const allChapters = getChaptersArray();
+
+// Group chapters by section
+const chaptersBySection = allChapters.reduce((acc, chapter) => {
+  if (!acc[chapter.section]) {
+    acc[chapter.section] = [];
+  }
+  acc[chapter.section].push(chapter);
+  return acc;
+}, {} as Record<string, typeof allChapters>);
+
+// Define section order and metadata
+const sections = [
+  {
+    name: 'Foundations',
+    description: 'Core concepts: agents, environments, and the exploration-exploitation tradeoff.',
+    color: 'blue',
+  },
+  {
+    name: 'Q-Learning Foundations',
+    description: 'Value-based methods from TD learning through deep Q-networks.',
+    color: 'emerald',
+  },
+  {
+    name: 'Policy Gradient Methods',
+    description: 'Learn policies directly with gradient ascent. From REINFORCE to PPO.',
+    color: 'violet',
+  },
+];
+
+const orderedSections = sections.filter(s => chaptersBySection[s.name]);
+
+const statusIcons: Record<ChapterStatus, string> = {
+  draft: '📝',
+  editor_reviewed: '✅',
+  community_reviewed: '👥',
+  verified: '🔒',
+};
+
+const statusLabels: Record<ChapterStatus, string> = {
+  draft: 'AI Generated',
+  editor_reviewed: 'Editor Reviewed',
+  community_reviewed: 'Community Reviewed',
+  verified: 'Verified',
+};
+---
+
+<BaseLayout title="Chapters">
+  <div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200">
+      <div class="max-w-5xl mx-auto px-4 py-12">
+        <nav class="text-sm text-gray-500 mb-4">
+          <a href="/" class="hover:text-primary-600">Home</a>
+          <span class="mx-2">→</span>
+          <span class="text-gray-900">Chapters</span>
+        </nav>
+        <h1 class="text-4xl font-bold mb-4">Chapters</h1>
+        <p class="text-xl text-gray-600 max-w-2xl">
+          Progressive lessons that build from foundations to advanced topics.
+          Each chapter includes intuition, math, code, and exercises.
+        </p>
+      </div>
+    </header>
+
+    <!-- Chapters by Section -->
+    <main class="max-w-5xl mx-auto px-4 py-12">
+      <div class="space-y-16">
+        {orderedSections.map((section, sectionIndex) => (
+          <section>
+            <div class="mb-6">
+              <div class="flex items-center gap-3 mb-2">
+                <h2 class="text-2xl font-bold">{section.name}</h2>
+                {sectionIndex === 0 && (
+                  <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
+                    Start here
+                  </span>
+                )}
+              </div>
+              <p class="text-gray-600">{section.description}</p>
+            </div>
+
+            <div class="grid gap-4">
+              {chaptersBySection[section.name].map((chapter, index) => (
+                <a
+                  href={`/chapters/${chapter.slug}`}
+                  class="group block bg-white rounded-xl border border-gray-200 p-6 hover:border-primary-300 hover:shadow-lg transition-all"
+                >
+                  <div class="flex items-start justify-between gap-4">
+                    <div class="flex-1">
+                      <div class="flex items-center gap-3 mb-2">
+                        <span class="text-sm font-mono text-gray-400">
+                          {String(index + 1).padStart(2, '0')}
+                        </span>
+                        <h3 class="text-lg font-semibold group-hover:text-primary-600 transition-colors">
+                          {chapter.title}
+                        </h3>
+                      </div>
+                      <p class="text-gray-600 ml-8">{chapter.description}</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="text-lg"
+                        title={statusLabels[chapter.status]}
+                      >
+                        {statusIcons[chapter.status]}
+                      </span>
+                      <svg
+                        class="w-5 h-5 text-gray-400 group-hover:text-primary-600 group-hover:translate-x-1 transition-all"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      <!-- Status Legend -->
+      <div class="mt-16 pt-8 border-t border-gray-200">
+        <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Content Status</h3>
+        <div class="flex flex-wrap gap-6 text-sm">
+          <div class="flex items-center gap-2">
+            <span>📝</span>
+            <span class="text-gray-600">AI Generated — Pending review</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span>✅</span>
+            <span class="text-gray-600">Editor Reviewed — Approved by editor</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span>👥</span>
+            <span class="text-gray-600">Community Reviewed — Incorporates feedback</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span>🔒</span>
+            <span class="text-gray-600">Verified — Code tested, demos working</span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</BaseLayout>

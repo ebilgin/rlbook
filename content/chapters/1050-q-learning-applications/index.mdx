@@ -1,0 +1,780 @@
+---
+title: "Q-Learning in the Real World"
+slug: "q-learning-applications"
+section: "Q-Learning Foundations"
+description: "Bridge the gap from textbook Q-learning to practical applications in games, robotics, and finance"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "q-learning-basics"
+    title: "Q-Learning Basics"
+  - slug: "deep-q-networks"
+    title: "Deep Q-Networks"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+# Q-Learning in the Real World
+
+<ChapterObjectives>
+- Identify domains where Q-learning methods excel
+- Understand practical challenges in applying Q-learning to real problems
+- Master reward engineering: shaping, sparse vs. dense, and common pitfalls
+- Design effective state representations for complex environments
+- Debug and diagnose common Q-learning failures
+</ChapterObjectives>
+
+## From CartPole to Reality
+
+You've implemented DQN for CartPole. You watched Q-values converge, saw the pole balance, felt the satisfaction of a working agent. But real-world problems don't come with `gym.make()`.
+
+<Intuition>
+
+The gap between textbook Q-learning and practical applications is vast:
+
+| CartPole Reality | Real-World Reality |
+|------------------|-------------------|
+| 4 clean state variables | Hundreds of noisy features |
+| 2 discrete actions | Complex action spaces |
+| Instant reward | Delayed feedback (days, weeks) |
+| Stable dynamics | Non-stationary environments |
+| Perfect observations | Partial, delayed, noisy data |
+| Train until solved | Never truly "solved" |
+
+The algorithm is often the easy part. The hard parts are:
+1. **Defining the right reward function** — What do you actually want?
+2. **Choosing state representation** — What information matters?
+3. **Handling messy reality** — Noise, delays, partial observability
+4. **Making it work reliably** — Not just once, but consistently
+
+Let's bridge this gap.
+
+</Intuition>
+
+## Application Domains
+
+Q-learning has found success across diverse domains. Understanding where it works—and why—helps you recognize when it might work for your problem.
+
+### Games: Where Deep RL Proved Itself
+
+<Intuition>
+
+Games are the canonical testbed for Q-learning, and for good reason:
+
+**Why games work well:**
+- Clear reward signal (score)
+- Fast, cheap simulation (millions of episodes)
+- Well-defined rules and boundaries
+- Deterministic or controlled stochasticity
+
+**DQN's Atari breakthrough (2015):**
+- Same algorithm, same hyperparameters across 49 games
+- Learned directly from pixels (raw 84×84 frames)
+- Superhuman on ~30 games
+- Failed spectacularly on others (Montezuma's Revenge)
+
+What made some games easy and others impossible? The answer reveals Q-learning's fundamental strengths and weaknesses.
+
+</Intuition>
+
+<DeepDive>
+
+**Games where DQN excels:**
+- **Breakout, Pong, Space Invaders**: Dense rewards, short credit assignment
+- **Simple pattern recognition**: Reactive policies work well
+
+**Games where DQN struggles:**
+- **Montezuma's Revenge**: Sparse rewards, requires exploration
+- **Pitfall**: Long-horizon planning needed
+- **Games with intricate object manipulation**: Precise timing requirements
+
+The pattern: DQN works when rewards are frequent and the optimal policy is reactive. It struggles when you need to plan ahead or explore vast spaces.
+
+</DeepDive>
+
+### Robotics: The Sim-to-Real Gap
+
+<Intuition>
+
+Robotics seems like a perfect fit for RL: agents taking physical actions to achieve goals. In practice, it's challenging.
+
+**The sim-to-real problem:**
+1. Training in the real world is slow, expensive, and dangerous
+2. So we train in simulation
+3. But simulations aren't perfect
+4. Policies that work in simulation often fail on real robots
+
+**Why the gap exists:**
+- Physics engines approximate reality
+- Friction, material properties, lighting differ
+- Real sensors are noisy; simulated sensors are clean
+- Real actuators have delays and imprecision
+
+**Bridging strategies:**
+- **Domain randomization**: Train with varied simulation parameters
+- **System identification**: Tune simulation to match reality
+- **Residual learning**: Learn corrections on top of simulation policy
+- **Conservative transfer**: Start with cautious policies
+
+</Intuition>
+
+<Warning>
+Never deploy a policy trained purely in simulation on a real robot without extensive safety testing. The agent may have learned behaviors that are safe in simulation but dangerous in reality.
+</Warning>
+
+### Recommendation Systems: Delayed, Noisy, Non-Stationary
+
+<Intuition>
+
+Every time you open Netflix, Spotify, or Amazon, a recommendation system decides what to show you. This is a natural fit for RL:
+
+**The setup:**
+- **State**: User history, context (time, device), user features
+- **Actions**: Items to recommend
+- **Reward**: Clicks, engagement, purchases, retention
+
+**Why it's hard:**
+- **Delayed rewards**: Did that recommendation keep them subscribed for another month?
+- **Partial observability**: We don't know user mood, intent, or full preferences
+- **Non-stationarity**: User preferences change; new items constantly added
+- **Massive action spaces**: Millions of items to choose from
+- **Feedback loops**: Recommendations shape future preferences
+
+Companies like Netflix use contextual bandits and RL, but often with heavy guardrails—A/B testing, business rules, and hybrid systems.
+
+</Intuition>
+
+### Financial Trading: High Stakes, Non-Stationary
+
+<Intuition>
+
+Trading is alluring for RL: clear rewards (profit), sequential decisions, rich data. But it's treacherous.
+
+**The setup:**
+- **State**: Price history, technical indicators, portfolio position
+- **Actions**: Buy, sell, hold (possibly with sizing)
+- **Reward**: Returns, risk-adjusted returns (Sharpe ratio)
+
+**Why it's brutally hard:**
+- **Non-stationarity**: Markets change constantly; past patterns may not repeat
+- **Overfitting**: With enough parameters, you can fit any historical data
+- **Transaction costs**: Frequent trading destroys profits
+- **Regime changes**: Models trained in bull markets fail in crashes
+- **Competition**: Other agents (humans, algorithms) are adversaries
+
+</Intuition>
+
+<Warning>
+Q-learning for trading is a learning exercise, not investment advice. Most academic papers showing profitable RL trading strategies don't survive transaction costs, slippage, or out-of-sample testing. The market is a harsh adversary.
+</Warning>
+
+Let's build a simple trading environment to understand the challenges.
+
+{/* TODO: Interactive Demo - Simple Trading Environment */}
+
+<Implementation>
+
+```python
+import numpy as np
+
+class SimpleTradingEnv:
+    """
+    A minimal trading environment for learning purposes.
+
+    State: [normalized_price, position, price_change_1, price_change_5]
+    Actions: 0=hold, 1=buy, 2=sell
+    Reward: portfolio value change minus transaction costs
+    """
+
+    def __init__(self, prices, initial_cash=10000, transaction_cost=0.001):
+        self.prices = prices
+        self.initial_cash = initial_cash
+        self.transaction_cost = transaction_cost
+        self.reset()
+
+    def reset(self):
+        self.step_idx = 5  # Need history for features
+        self.cash = self.initial_cash
+        self.shares = 0
+        return self._get_state()
+
+    def _get_state(self):
+        price = self.prices[self.step_idx]
+        # Normalize price relative to recent average
+        norm_price = price / np.mean(self.prices[self.step_idx-5:self.step_idx]) - 1
+
+        # Position: -1 (short), 0 (flat), 1 (long)
+        position = np.sign(self.shares)
+
+        # Recent price changes
+        price_change_1 = (price - self.prices[self.step_idx-1]) / self.prices[self.step_idx-1]
+        price_change_5 = (price - self.prices[self.step_idx-5]) / self.prices[self.step_idx-5]
+
+        return np.array([norm_price, position, price_change_1, price_change_5])
+
+    def _portfolio_value(self):
+        price = self.prices[self.step_idx]
+        return self.cash + self.shares * price
+
+    def step(self, action):
+        price = self.prices[self.step_idx]
+        prev_value = self._portfolio_value()
+
+        # Execute action
+        if action == 1 and self.shares <= 0:  # Buy
+            shares_to_buy = self.cash // (price * (1 + self.transaction_cost))
+            cost = shares_to_buy * price * (1 + self.transaction_cost)
+            self.cash -= cost
+            self.shares += shares_to_buy
+
+        elif action == 2 and self.shares > 0:  # Sell
+            revenue = self.shares * price * (1 - self.transaction_cost)
+            self.cash += revenue
+            self.shares = 0
+
+        # Move to next step
+        self.step_idx += 1
+        done = self.step_idx >= len(self.prices) - 1
+
+        # Reward: change in portfolio value
+        new_value = self._portfolio_value()
+        reward = (new_value - prev_value) / self.initial_cash  # Normalized
+
+        return self._get_state(), reward, done, {}
+
+
+# Example: generate synthetic price data with trend + noise
+def generate_prices(n_steps=500, initial=100, drift=0.0001, volatility=0.02):
+    """Generate synthetic price series with random walk + drift."""
+    returns = np.random.randn(n_steps) * volatility + drift
+    prices = initial * np.cumprod(1 + returns)
+    return prices
+
+
+# Usage
+prices = generate_prices()
+env = SimpleTradingEnv(prices)
+state = env.reset()
+print(f"Initial state: {state}")
+```
+
+</Implementation>
+
+<Note>
+This trading environment is deliberately simplified. Real trading involves order books, partial fills, market impact, overnight risk, and countless other factors. Use this to learn, not to trade.
+</Note>
+
+## Reward Engineering: The Art of Incentive Design
+
+If state representation is what the agent sees, reward engineering is what the agent wants. Get it wrong, and even a perfectly optimizing agent will do the wrong thing.
+
+<Intuition>
+
+**The fundamental challenge:** You must translate your goal into a scalar signal.
+
+Want an agent that "plays chess well"? The only clear reward is win/lose at game end. But that's sparse—most moves get zero reward.
+
+Want an agent that "drives safely"? What's the reward for stopping at a yellow light? For staying in lane? For arriving on time?
+
+Every reward function encodes assumptions about what matters.
+
+</Intuition>
+
+### Sparse vs. Dense Rewards
+
+<Intuition>
+
+**Sparse rewards**: Feedback only at significant events (goal reached, game won/lost)
+
+Pros:
+- Clear, unambiguous signal
+- Hard to accidentally incentivize wrong behavior
+
+Cons:
+- Learning is slow (credit assignment over many steps)
+- Exploration is critical and difficult
+
+**Dense rewards**: Frequent feedback (every step or action)
+
+Pros:
+- Faster learning
+- Easier credit assignment
+
+Cons:
+- Easy to incentivize unintended behaviors
+- May not align with true objective
+
+</Intuition>
+
+### Reward Shaping: Guiding Without Distorting
+
+<Intuition>
+
+**Reward shaping** adds extra rewards to speed up learning without changing the optimal policy.
+
+Classic example: In a maze, give small negative reward for each step (dense) while keeping the big reward for reaching the goal (sparse).
+
+**The danger**: Shaped rewards can inadvertently change what's optimal.
+
+Example: You add reward for "being close to the goal." The agent learns to stay near the goal without entering it (because entering ends the episode and stops the reward flow).
+
+</Intuition>
+
+<Mathematical>
+
+**Potential-based reward shaping** guarantees the optimal policy is preserved.
+
+If the original reward is $r(s, a, s')$, the shaped reward is:
+
+$$r'(s, a, s') = r(s, a, s') + \gamma \Phi(s') - \Phi(s)$$
+
+where $\Phi(s)$ is a potential function (any function of state).
+
+**Theorem** (Ng et al., 1999): Under this shaping, the optimal policy for $r'$ is identical to the optimal policy for $r$.
+
+Intuitively: The shaping terms cancel out over any trajectory, so they don't change which trajectories are best—they just change the reward received along the way.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def potential_based_shaping(base_reward, current_state, next_state, gamma, potential_fn):
+    """
+    Apply potential-based reward shaping.
+
+    This speeds up learning without changing the optimal policy.
+    """
+    shaped_reward = base_reward + gamma * potential_fn(next_state) - potential_fn(current_state)
+    return shaped_reward
+
+
+# Example: Maze with distance-based potential
+def distance_to_goal_potential(state, goal_position):
+    """Potential based on negative distance to goal."""
+    distance = np.linalg.norm(np.array(state) - np.array(goal_position))
+    return -distance  # Negative: closer to goal = higher potential
+
+
+# Usage in training loop
+base_reward = env.get_reward(state, action, next_state)
+potential = lambda s: distance_to_goal_potential(s, goal)
+shaped_reward = potential_based_shaping(
+    base_reward, state, next_state, gamma=0.99, potential_fn=potential
+)
+```
+
+</Implementation>
+
+### Reward Hacking: When Optimization Goes Wrong
+
+<Intuition>
+
+**Reward hacking** is when the agent finds an unintended way to maximize reward that doesn't achieve your actual goal.
+
+Famous examples:
+- **CoastRunners**: Agent rewarded for race progress discovers it can score more points by spinning in circles and catching power-ups than by finishing the race
+- **Tetris**: Agent rewarded for survival learns to pause the game indefinitely
+- **Cleaning robot**: Rewarded for not seeing dirt learns to cover its camera
+
+The agent is optimizing exactly what you asked for. The problem is you asked for the wrong thing.
+
+</Intuition>
+
+{/* TODO: Interactive Demo - Reward Shaping Playground */}
+
+### Practical Guidelines for Reward Design
+
+<Tip>
+**Start sparse, add shaping carefully:**
+1. Begin with the true objective as sparse reward
+2. Verify the agent can sometimes reach it through exploration
+3. Add shaping only if learning is too slow
+4. Use potential-based shaping when possible
+5. Monitor agent behavior, not just reward
+
+**Multiple metrics**: Track what you care about separately from the reward. If the agent's reward is going up but the metrics you care about aren't, something's wrong.
+
+**Sanity checks**: Can a random policy sometimes get positive reward? If not, your reward might be too sparse. Can a simple baseline (scripted policy) do reasonably well? If not, the problem might be too hard.
+</Tip>
+
+## State Representation: What Does the Agent See?
+
+The state representation determines what information the agent has to make decisions. Too little, and optimal behavior is impossible. Too much, and learning is slow or unstable.
+
+<Intuition>
+
+**Good state representations:**
+- Contain information needed to predict future rewards
+- Are compact (dimensionality matters for learning speed)
+- Are normalized (similar scales across features)
+- Are stable (similar states map to similar representations)
+
+**Feature engineering for RL** is similar to supervised ML, but with extra challenges:
+- You don't know what features will matter until the policy is learned
+- Features that help prediction might not help control
+- The distribution of states changes as the policy changes
+
+</Intuition>
+
+### What to Include
+
+<Intuition>
+
+**Always include:**
+- Information about current position/status
+- Information needed to satisfy the Markov property (history if needed)
+- Normalized versions of raw observations
+
+**Consider including:**
+- Derived features (velocities, accelerations, rates of change)
+- Aggregated history (rolling averages, recent trends)
+- Task-relevant features (distance to goal, time remaining)
+
+**Avoid:**
+- Redundant information (multiple representations of same thing)
+- High-dimensional raw observations when compact features exist
+- Features unrelated to reward or dynamics
+
+</Intuition>
+
+<Implementation>
+
+```python
+def create_trading_features(prices, window=20):
+    """
+    Create trading features from price history.
+
+    Returns normalized, relevant features for a trading agent.
+    """
+    features = {}
+
+    # Price momentum (various windows)
+    features['return_1'] = (prices[-1] / prices[-2]) - 1
+    features['return_5'] = (prices[-1] / prices[-6]) - 1
+    features['return_20'] = (prices[-1] / prices[-21]) - 1
+
+    # Volatility (standard deviation of returns)
+    returns = np.diff(prices[-window:]) / prices[-window:-1]
+    features['volatility'] = np.std(returns)
+
+    # Moving average crossover
+    ma_short = np.mean(prices[-5:])
+    ma_long = np.mean(prices[-20:])
+    features['ma_ratio'] = ma_short / ma_long - 1
+
+    # Relative position in recent range
+    recent_high = np.max(prices[-20:])
+    recent_low = np.min(prices[-20:])
+    features['range_position'] = (prices[-1] - recent_low) / (recent_high - recent_low + 1e-8)
+
+    return np.array(list(features.values()))
+```
+
+</Implementation>
+
+## When Things Go Wrong: Debugging Q-Learning
+
+Even with good rewards and states, Q-learning can fail in many ways. Knowing what failure looks like is as important as knowing success.
+
+{/* TODO: Interactive Demo - Failure Mode Gallery */}
+
+### Failure Mode 1: Q-Values Exploding or Collapsing
+
+<Intuition>
+
+**Symptoms:**
+- Q-values grow to infinity or collapse to zero
+- Loss becomes NaN or extremely large
+- Agent takes seemingly random actions
+
+**Causes:**
+- Learning rate too high
+- Target network not updating (or updating too often)
+- Rewards not normalized
+- Network architecture issues (no activation clipping)
+
+**Fixes:**
+- Lower learning rate (try 10x smaller)
+- Check target network update logic
+- Normalize rewards to reasonable range (-1 to 1)
+- Add gradient clipping
+
+</Intuition>
+
+### Failure Mode 2: No Learning
+
+<Intuition>
+
+**Symptoms:**
+- Q-values stay near initialization
+- Episode rewards don't improve
+- Actions appear random throughout training
+
+**Causes:**
+- Reward too sparse (agent never finds positive signal)
+- Exploration insufficient (epsilon decays too fast)
+- Bug in Q-update (check carefully!)
+- State representation loses critical information
+
+**Fixes:**
+- Add reward shaping
+- Increase exploration (higher epsilon, slower decay)
+- Unit test the Q-update in isolation
+- Verify state contains enough information
+
+</Intuition>
+
+### Failure Mode 3: Learning Then Forgetting (Catastrophic Forgetting)
+
+<Intuition>
+
+**Symptoms:**
+- Performance improves, then suddenly crashes
+- Agent "forgets" how to handle earlier situations
+- Periodic oscillations in performance
+
+**Causes:**
+- Replay buffer too small (old experiences lost)
+- Non-stationary environment
+- Distribution shift as policy changes
+- Target network diverging from online network
+
+**Fixes:**
+- Increase replay buffer size
+- Slower target network updates
+- Periodically re-add diverse experiences to buffer
+- Monitor Q-value distributions over time
+
+</Intuition>
+
+### Failure Mode 4: Good Training, Bad Evaluation
+
+<Intuition>
+
+**Symptoms:**
+- High training rewards
+- Poor performance when tested without exploration
+- Policy looks good in training, fails in practice
+
+**Causes:**
+- Overfitting to training data distribution
+- Evaluation environment differs from training
+- Exploitation of training environment quirks
+- Random seeds masking poor generalization
+
+**Fixes:**
+- Evaluate on held-out scenarios
+- Use multiple random seeds
+- Test on perturbed environments
+- Monitor performance on diverse initial conditions
+
+</Intuition>
+
+### Diagnostic Checklist
+
+<Implementation>
+
+```python
+class DQNDiagnostics:
+    """Utilities for diagnosing DQN training issues."""
+
+    def __init__(self):
+        self.q_value_history = []
+        self.loss_history = []
+        self.reward_history = []
+        self.action_counts = {}
+
+    def log_q_values(self, q_values):
+        """Track Q-value statistics."""
+        self.q_value_history.append({
+            'mean': float(q_values.mean()),
+            'max': float(q_values.max()),
+            'min': float(q_values.min()),
+            'std': float(q_values.std())
+        })
+
+    def log_actions(self, action):
+        """Track action distribution."""
+        self.action_counts[action] = self.action_counts.get(action, 0) + 1
+
+    def diagnose(self):
+        """Print diagnostic report."""
+        print("=== DQN Diagnostics ===")
+
+        # Q-value health
+        if self.q_value_history:
+            recent_q = self.q_value_history[-100:]
+            mean_q = np.mean([q['mean'] for q in recent_q])
+            max_q = np.max([q['max'] for q in recent_q])
+
+            print(f"\nQ-Values (recent):")
+            print(f"  Mean: {mean_q:.2f}")
+            print(f"  Max: {max_q:.2f}")
+
+            if max_q > 100:
+                print("  ⚠️  Q-values may be exploding")
+            if abs(mean_q) < 0.01:
+                print("  ⚠️  Q-values suspiciously small")
+
+        # Action distribution
+        if self.action_counts:
+            total = sum(self.action_counts.values())
+            print(f"\nAction Distribution:")
+            for action, count in sorted(self.action_counts.items()):
+                pct = count / total * 100
+                print(f"  Action {action}: {pct:.1f}%")
+
+            # Check for action collapse
+            max_pct = max(count / total for count in self.action_counts.values())
+            if max_pct > 0.9:
+                print("  ⚠️  Agent may be stuck on one action")
+
+        # Reward trend
+        if len(self.reward_history) > 100:
+            early_rewards = np.mean(self.reward_history[:50])
+            recent_rewards = np.mean(self.reward_history[-50:])
+            improvement = recent_rewards - early_rewards
+
+            print(f"\nReward Trend:")
+            print(f"  Early avg: {early_rewards:.2f}")
+            print(f"  Recent avg: {recent_rewards:.2f}")
+            print(f"  Improvement: {improvement:+.2f}")
+
+            if improvement < 0:
+                print("  ⚠️  Performance may be degrading")
+```
+
+</Implementation>
+
+<Tip>
+**When debugging, change one thing at a time.** If you adjust learning rate, buffer size, and network architecture simultaneously, you won't know what helped (or hurt).
+
+**Print more than you think you need.** Q-value statistics, action distributions, and gradient norms reveal problems before they become catastrophes.
+</Tip>
+
+## Putting It Together: A Real Application
+
+Let's walk through applying Q-learning to a more complex environment: LunarLander.
+
+<Implementation>
+
+```python
+import gymnasium as gym
+
+def train_lunar_lander():
+    """
+    Train DQN on LunarLander-v2 with practical considerations.
+
+    LunarLander is harder than CartPole:
+    - 8 state dimensions (position, velocity, angle, leg contact)
+    - 4 actions (nothing, left engine, main engine, right engine)
+    - Sparse reward structure (landing bonus, crash penalty)
+    """
+    env = gym.make("LunarLander-v2")
+
+    # Hyperparameters tuned for LunarLander
+    agent = DQNAgent(
+        state_dim=8,
+        action_dim=4,
+        hidden_dim=128,           # Larger network for harder problem
+        lr=5e-4,                   # Lower learning rate for stability
+        gamma=0.99,
+        epsilon_start=1.0,
+        epsilon_end=0.05,          # Keep some exploration
+        epsilon_decay=0.997,       # Slower decay
+        buffer_size=100000,        # Larger buffer
+        batch_size=64,
+        target_update_freq=200     # Less frequent updates
+    )
+
+    diagnostics = DQNDiagnostics()
+    episode_rewards = []
+
+    for episode in range(1000):
+        state, _ = env.reset()
+        total_reward = 0
+        done = False
+
+        while not done:
+            action = agent.select_action(state)
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+
+            # Reward shaping: small penalty for each step to encourage efficiency
+            # (This is potential-based if we consider time as part of state)
+            shaped_reward = reward - 0.01
+
+            agent.store_transition(state, action, shaped_reward, next_state, done)
+            loss = agent.train_step()
+
+            # Diagnostics
+            if loss is not None:
+                diagnostics.loss_history.append(loss)
+            diagnostics.log_actions(action)
+
+            state = next_state
+            total_reward += reward
+
+        episode_rewards.append(total_reward)
+        diagnostics.reward_history.append(total_reward)
+
+        # Logging
+        if (episode + 1) % 50 == 0:
+            avg_reward = np.mean(episode_rewards[-50:])
+            print(f"Episode {episode + 1}, Avg Reward: {avg_reward:.1f}, "
+                  f"Epsilon: {agent.epsilon:.3f}")
+
+            # Run diagnostics periodically
+            if (episode + 1) % 200 == 0:
+                diagnostics.diagnose()
+
+    return agent, episode_rewards
+```
+
+</Implementation>
+
+## Summary
+
+<KeyTakeaways>
+- **Q-learning works well** in games and simulated environments; real-world applications require careful engineering
+- **Reward engineering** is crucial: sparse rewards are clean but slow; dense rewards are fast but can mislead
+- **Potential-based reward shaping** preserves optimal policies while speeding up learning
+- **State representation** should be compact, normalized, and contain information needed for the task
+- **Reward hacking** is real: always monitor what the agent actually does, not just its reward
+- **Common failures** include Q-value explosion, no learning, catastrophic forgetting, and overfitting
+- **Debug systematically**: log Q-values, actions, and losses; change one thing at a time
+</KeyTakeaways>
+
+<NextChapter slug="q-learning-frontiers" title="Q-Learning Frontiers" />
+
+## Exercises
+
+### Conceptual Questions
+
+1. **What makes a reward function "hackable"?** Give an example of a reward function for a cleaning robot that could be exploited.
+
+2. **Why might an agent trained in simulation fail when deployed on a real robot?** List three specific differences between simulation and reality.
+
+3. **Your agent's training reward is increasing, but its actual performance (measured by a separate metric) is flat. What might be happening?**
+
+### Coding Challenges
+
+4. **Create a custom environment** using the Gymnasium interface. It should have:
+   - At least 4 state dimensions
+   - At least 3 actions
+   - A non-trivial reward structure
+   Train DQN on it and report learning curves.
+
+5. **Implement reward shaping** for GridWorld that uses potential-based shaping with distance-to-goal potential. Compare learning speed with and without shaping. Verify the final policy is the same.
+
+### Open-Ended Exploration
+
+6. **Design a Q-learning solution for a problem you care about.** Write a 1-page proposal covering:
+   - What is the state? (What information does the agent need?)
+   - What are the actions? (What can the agent do?)
+   - What is the reward? (What are you optimizing for?)
+   - What could go wrong? (How might the agent hack the reward?)
+   - How would you evaluate success? (What metrics beyond reward?)

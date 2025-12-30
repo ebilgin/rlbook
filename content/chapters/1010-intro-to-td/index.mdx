@@ -1,0 +1,455 @@
+---
+title: "Introduction to Temporal Difference Learning"
+slug: "intro-to-td"
+section: "Q-Learning Foundations"
+description: "Learn how TD methods combine the best of Monte Carlo and Dynamic Programming to learn from every step"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "markov-decision-processes"
+    title: "Markov Decision Processes"
+  - slug: "monte-carlo-methods"
+    title: "Monte Carlo Methods"
+  - slug: "dynamic-programming"
+    title: "Dynamic Programming"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+# Introduction to Temporal Difference Learning
+
+<ChapterObjectives>
+- Explain what bootstrapping means and why it's powerful
+- Understand the TD error as a "surprise" signal
+- Implement TD(0) for policy evaluation
+- Compare TD, Monte Carlo, and Dynamic Programming approaches
+- Recognize when TD methods are preferable to alternatives
+</ChapterObjectives>
+
+## What If You Could Learn from Every Step?
+
+Imagine you're learning to play chess. With **Monte Carlo methods**, you'd play an entire game, see whether you won or lost, and only then reflect on your moves. That could be 50+ moves before you learn anything!
+
+What if, instead, you could learn something after *every single move*? What if each step could teach you whether you're heading toward victory or defeat?
+
+This is the core insight of **Temporal Difference (TD) learning**. TD methods learn from experience like Monte Carlo, but they update their estimates after every step rather than waiting until the end. This makes them dramatically more efficient—especially in environments with long episodes or continuous tasks that never truly end.
+
+<Intuition>
+
+Here's the key intuition: after taking an action, you receive a reward and find yourself in a new state. Even before the episode ends, you already know something valuable—you got that reward, and you have an estimate of how good your new state is. Why not use that information immediately?
+
+TD learning does exactly this. It combines:
+- **The reward you just received** (actual experience)
+- **Your estimate of the new state's value** (what you expect to get from here)
+
+And uses this combination to update your estimate of the *previous* state. You're learning as you go, step by step.
+
+</Intuition>
+
+{/* TODO: Interactive Demo - TD vs MC Learning Comparison */}
+{/* Shows two agents side by side: one updating every step (TD), one waiting until episode end (MC) */}
+
+## The Magic of Bootstrapping
+
+The technique that makes this possible is called **bootstrapping**—updating an estimate based on other estimates. It might sound circular, but it's surprisingly powerful.
+
+<Intuition>
+
+Think of it like this: you're trying to estimate how long it takes to drive from your house to the airport. You've made this trip many times, but traffic varies.
+
+**Monte Carlo approach:** Time the entire trip, start to finish, every time. After many trips, average your times.
+
+**TD approach:** Also time the entire trip, but break it into segments. Each time you reach the halfway point, compare:
+- How long did the first half take?
+- What's your best estimate for the second half?
+- Total = actual first half + estimated second half
+
+If this total is different from what you expected for the full trip, adjust your expectations. You're learning from partial experience, updating your beliefs before you even arrive.
+
+The key insight: even though your estimate of the second half isn't perfect, using it lets you learn faster than waiting until you reach the airport every time.
+
+</Intuition>
+
+<Mathematical>
+
+Let's formalize this. Recall from Dynamic Programming that the value of a state under policy $\pi$ satisfies the **Bellman equation**:
+
+$$V^\pi(s) = \mathbb{E}_\pi[R_{t+1} + \gamma V^\pi(S_{t+1}) | S_t = s]$$
+
+This tells us: the value of a state equals the expected immediate reward plus the discounted value of the next state.
+
+In Dynamic Programming, we used this equation with a complete model of the environment. But what if we don't have a model? We can still use the *structure* of this equation—we just estimate the expectation from actual experience:
+
+- Instead of $\mathbb{E}_\pi[R_{t+1}]$, we use the actual reward $r$ we received
+- Instead of $\mathbb{E}_\pi[V^\pi(S_{t+1})]$, we use our current estimate $V(s')$
+
+This gives us the **TD target**:
+
+$$\text{TD target} = r + \gamma V(s')$$
+
+</Mathematical>
+
+## The TD(0) Update Rule
+
+Now we can write the complete TD(0) update rule—the simplest form of TD learning.
+
+<Intuition>
+
+After each step, we ask: "What did I expect to get from this state? What does it look like I'll actually get?" The difference between these—the **TD error**—tells us how to adjust our estimates.
+
+If the TD error is positive, things turned out better than expected. Increase our estimate.
+If the TD error is negative, things turned out worse. Decrease our estimate.
+
+</Intuition>
+
+<Mathematical>
+
+The **TD(0) update rule** for policy evaluation is:
+
+$$V(S_t) \leftarrow V(S_t) + \alpha \left[ \underbrace{R_{t+1} + \gamma V(S_{t+1})}_{\text{TD target}} - \underbrace{V(S_t)}_{\text{current estimate}} \right]$$
+
+Where:
+- $V(S_t)$ is our current estimate of the state's value
+- $R_{t+1}$ is the reward received after transitioning
+- $\gamma$ is the discount factor
+- $V(S_{t+1})$ is our estimate of the next state's value
+- $\alpha$ is the learning rate
+
+The **TD error** is the difference between the TD target and our current estimate:
+
+$$\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$$
+
+So the update becomes simply:
+
+$$V(S_t) \leftarrow V(S_t) + \alpha \delta_t$$
+
+Compare this to Monte Carlo's update:
+
+$$V(S_t) \leftarrow V(S_t) + \alpha \left[ G_t - V(S_t) \right]$$
+
+The only difference: TD uses $R_{t+1} + \gamma V(S_{t+1})$ as its target, while MC uses the actual return $G_t$. TD's target is available immediately; MC's requires waiting until the episode ends.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+from collections import defaultdict
+
+def td_zero_evaluation(env, policy, num_episodes, alpha=0.1, gamma=0.99):
+    """
+    Evaluate a policy using TD(0).
+
+    Args:
+        env: Environment with reset() and step() methods
+        policy: Function mapping state -> action
+        num_episodes: Number of episodes to run
+        alpha: Learning rate
+        gamma: Discount factor
+
+    Returns:
+        V: Dictionary mapping states to estimated values
+    """
+    # Initialize value function arbitrarily (all zeros)
+    V = defaultdict(float)
+
+    for episode in range(num_episodes):
+        state = env.reset()
+        done = False
+
+        while not done:
+            # Take action according to policy
+            action = policy(state)
+            next_state, reward, done, _ = env.step(action)
+
+            # TD(0) update: learn from this single step
+            td_target = reward + gamma * V[next_state] * (1 - done)
+            td_error = td_target - V[state]
+            V[state] += alpha * td_error
+
+            state = next_state
+
+    return V
+```
+
+Note the `(1 - done)` factor: when we reach a terminal state, there's no future value to bootstrap from. This is a common bug source in RL implementations!
+
+</Implementation>
+
+## Understanding TD Error: The "Surprise" Signal
+
+The TD error $\delta_t$ is one of the most important concepts in reinforcement learning. It measures how "surprised" the agent is by what happened.
+
+<Intuition>
+
+Before taking an action in state $s$, your expectation of value is $V(s)$.
+
+After taking the action, you observe reward $r$ and end up in state $s'$. Now your revised expectation is $r + \gamma V(s')$.
+
+The TD error is the difference: how much better (or worse) did things turn out compared to your expectations?
+
+- **Large positive TD error:** "This is way better than I expected!" (Update values upward)
+- **Large negative TD error:** "This is much worse than expected!" (Update values downward)
+- **TD error near zero:** "This is about what I expected." (Little update needed)
+
+</Intuition>
+
+{/* TODO: Interactive Demo - TD Error Visualizer */}
+{/* Step through a trajectory manually, see TD error computed at each step */}
+
+<DeepDive>
+
+### Connection to Neuroscience
+
+Here's something remarkable: the TD error has a direct analog in the brain. Dopamine neurons in the midbrain fire in a pattern that closely matches the TD error signal.
+
+When a monkey receives an unexpected reward, dopamine neurons fire strongly (positive TD error). When an expected reward is withheld, they go silent (negative TD error). And when rewards match predictions, there's no change.
+
+This discovery, made by Wolfram Schultz and colleagues in the 1990s, provided some of the strongest evidence that the brain implements something like TD learning. It's not just a convenient algorithm—it may be how biological brains actually learn from rewards.
+
+</DeepDive>
+
+<Mathematical>
+
+As learning progresses, the TD error has important properties:
+
+1. **Expected TD error is zero at convergence:** When $V = V^\pi$, we have:
+   $$\mathbb{E}[\delta_t | S_t = s] = \mathbb{E}[R_{t+1} + \gamma V^\pi(S_{t+1}) | S_t = s] - V^\pi(s) = V^\pi(s) - V^\pi(s) = 0$$
+
+2. **Individual TD errors still fluctuate:** Even with perfect value estimates, each particular transition might give a positive or negative TD error due to stochasticity. It's only the *expected* TD error that goes to zero.
+
+3. **TD error variance depends on the environment:** Highly stochastic environments will have larger TD error variance even after convergence.
+
+</Mathematical>
+
+## TD vs Monte Carlo vs Dynamic Programming
+
+Let's crystallize the differences between these three approaches.
+
+<Intuition>
+
+| Method | Needs Model? | Learns Online? | Uses Bootstrapping? |
+|--------|--------------|----------------|---------------------|
+| **Dynamic Programming** | Yes (complete model) | No | Yes |
+| **Monte Carlo** | No | After episodes | No (uses actual returns) |
+| **TD Learning** | No | After each step | Yes |
+
+TD learning is special because it combines the best of both worlds:
+- Like DP, it bootstraps (updates estimates from estimates), allowing fast learning
+- Like MC, it learns from experience without needing a model
+
+</Intuition>
+
+### When to Choose TD over MC
+
+**Prefer TD when:**
+- Episodes are long (TD updates after every step)
+- Tasks are continuing/non-episodic (MC can't handle infinite episodes)
+- You want faster convergence in practice
+- The environment is deterministic or low-variance
+
+**Prefer MC when:**
+- You need unbiased estimates (MC targets are unbiased)
+- The environment is highly stochastic (TD's bootstrap introduces bias)
+- Episodes are short anyway
+- You want simpler theory
+
+<Warning>
+TD's bootstrapping introduces **bias** into the value estimates. If your current value estimates are wrong, the TD target will also be wrong because it uses $V(s')$. Monte Carlo doesn't have this issue—it uses actual returns, which are unbiased (but high variance).
+
+This is the famous **bias-variance tradeoff** in TD vs MC. TD trades some bias for lower variance, which usually leads to faster learning in practice.
+</Warning>
+
+<Mathematical>
+
+### The Bias-Variance Tradeoff
+
+**Monte Carlo target:** $G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + ...$
+- Uses actual rewards (no bias from value function errors)
+- High variance: sums many random variables
+- Unbiased estimate of $V^\pi(s)$
+
+**TD(0) target:** $R_{t+1} + \gamma V(S_{t+1})$
+- Uses estimated values (biased if $V \neq V^\pi$)
+- Low variance: only uses one reward + one estimate
+- Biased estimate that becomes unbiased as $V \rightarrow V^\pi$
+
+In practice, TD's lower variance typically dominates, leading to faster convergence. But the optimal choice depends on the problem.
+
+</Mathematical>
+
+## The Random Walk Experiment
+
+The classic demonstration of TD's advantage comes from a simple experiment introduced by Rich Sutton in 1988.
+
+<Intuition>
+
+Consider a 5-state random walk:
+
+```
+[T] - [A] - [B] - [C] - [D] - [E] - [T]
+ 0                                    1
+```
+
+- Start in the center state (C)
+- Each step, randomly go left or right with equal probability
+- Reaching the left terminal gives reward 0
+- Reaching the right terminal gives reward 1
+- Goal: learn the value of each state (probability of reaching right terminal)
+
+The true values are: A=1/6, B=2/6, C=3/6, D=4/6, E=5/6.
+
+</Intuition>
+
+{/* TODO: Interactive Demo - Random Walk Experiment */}
+{/* Adjust learning rate, compare TD(0) vs MC, see RMS error over episodes */}
+
+<Implementation>
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+class RandomWalkEnv:
+    """5-state random walk environment."""
+
+    def __init__(self):
+        self.n_states = 5  # A, B, C, D, E
+        self.reset()
+
+    def reset(self):
+        self.state = 2  # Start at C (middle)
+        return self.state
+
+    def step(self, action=None):  # Action is ignored (random walk)
+        if np.random.random() < 0.5:
+            self.state -= 1  # Go left
+        else:
+            self.state += 1  # Go right
+
+        # Check terminals
+        if self.state < 0:  # Left terminal
+            return self.state, 0, True, {}
+        elif self.state >= self.n_states:  # Right terminal
+            return self.state, 1, True, {}
+        else:
+            return self.state, 0, False, {}
+
+
+def td_random_walk(env, num_episodes, alpha=0.1, gamma=1.0):
+    """TD(0) on random walk, returns value estimates over time."""
+    V = np.ones(env.n_states) * 0.5  # Initialize to 0.5
+    V_history = [V.copy()]
+
+    for _ in range(num_episodes):
+        state = env.reset()
+        done = False
+
+        while not done:
+            next_state, reward, done, _ = env.step()
+
+            if not done:
+                td_target = reward + gamma * V[next_state]
+            else:
+                td_target = reward  # Terminal state
+
+            V[state] += alpha * (td_target - V[state])
+            state = next_state if not done else state
+
+        V_history.append(V.copy())
+
+    return V, V_history
+
+
+def mc_random_walk(env, num_episodes, alpha=0.1):
+    """First-visit MC on random walk, returns value estimates over time."""
+    V = np.ones(env.n_states) * 0.5  # Initialize to 0.5
+    V_history = [V.copy()]
+
+    for _ in range(num_episodes):
+        # Generate episode
+        state = env.reset()
+        episode = [state]
+        rewards = []
+        done = False
+
+        while not done:
+            next_state, reward, done, _ = env.step()
+            rewards.append(reward)
+            if not done:
+                episode.append(next_state)
+
+        # MC update: use the actual return (which is just the terminal reward here)
+        G = sum(rewards)  # No discounting (gamma=1)
+        for s in episode:
+            V[s] += alpha * (G - V[s])
+
+        V_history.append(V.copy())
+
+    return V, V_history
+
+
+# True values for comparison
+TRUE_VALUES = np.array([1/6, 2/6, 3/6, 4/6, 5/6])
+
+# Run experiment
+env = RandomWalkEnv()
+_, td_history = td_random_walk(env, num_episodes=100, alpha=0.1)
+_, mc_history = mc_random_walk(env, num_episodes=100, alpha=0.1)
+
+# Compute RMS error over time
+def rms_error(V_history):
+    return [np.sqrt(np.mean((V - TRUE_VALUES)**2)) for V in V_history]
+
+td_errors = rms_error(td_history)
+mc_errors = rms_error(mc_history)
+```
+
+</Implementation>
+
+<Note>
+This experiment shows that TD(0) typically achieves lower error than MC across a wide range of learning rates. Try it yourself with different $\alpha$ values!
+</Note>
+
+## Summary
+
+<KeyTakeaways>
+- **TD learning updates after every step**, not just at episode end. This makes it sample-efficient and applicable to continuing tasks.
+- **Bootstrapping** means updating estimates using other estimates. TD bootstraps from experience (model-free), unlike DP which requires a model.
+- The **TD error** $\delta_t = r + \gamma V(s') - V(s)$ measures "surprise"—how much better or worse things turned out compared to expectations.
+- TD has **lower variance** than Monte Carlo but introduces **bias** from bootstrapping. This tradeoff usually favors TD in practice.
+- TD methods form the foundation for **Q-learning** and modern deep RL algorithms.
+</KeyTakeaways>
+
+Now that we can evaluate a policy step-by-step, the natural question is: can we find the *best* policy this way? Instead of just evaluating how good states are, can we learn how good *actions* are—and use that to act optimally?
+
+That's exactly what Q-learning does, and it's the focus of our next chapter.
+
+<NextChapter slug="q-learning-basics" title="Q-Learning Basics" />
+
+## Exercises
+
+### Conceptual Questions
+
+1. **In your own words**, explain why TD can learn before an episode ends, while Monte Carlo cannot. What information is TD using that MC ignores?
+
+2. **What would happen to TD learning if $\gamma = 0$?** How would this change what the agent learns? What about $\gamma = 1$?
+
+3. **Why might TD have lower variance than Monte Carlo?** Think about how many random variables are involved in each update.
+
+4. **When would you prefer Monte Carlo over TD?** Give a specific example of an environment or task where MC might be the better choice.
+
+### Coding Challenges
+
+5. **Implement TD(0)** for the random walk environment above. Track the value estimates over episodes and plot them converging to the true values.
+
+6. **Modify your TD agent** to track and plot the TD error over time. How does the distribution of TD errors change as learning progresses?
+
+### Exploration
+
+7. **Learning rate sensitivity:** Experiment with different learning rates on the random walk. What's the range where learning is stable? What happens with $\alpha > 1$? What about very small $\alpha$ like 0.001?
+
+8. **Different initializations:** What happens if you initialize all values to 0 instead of 0.5? What about initializing to 1? How does this affect convergence speed?

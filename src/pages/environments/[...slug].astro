@@ -1,0 +1,95 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export function getStaticPaths() {
+  const mdxModules = import.meta.glob('/content/environments/*/index.mdx', { eager: true });
+  const paths = [];
+
+  for (const [path, module] of Object.entries(mdxModules)) {
+    const mod = module as { frontmatter?: Record<string, unknown>; default: any };
+    if (!mod.frontmatter) continue;
+
+    const match = path.match(/\/content\/environments\/([^/]+)\/index\.mdx$/);
+    if (!match) continue;
+
+    const dirName = match[1];
+    const slug = (mod.frontmatter.slug as string) || dirName;
+
+    paths.push({
+      params: { slug },
+      props: {
+        Content: mod.default,
+        frontmatter: mod.frontmatter,
+        dirName,
+      },
+    });
+  }
+
+  return paths;
+}
+
+interface Props {
+  Content: any;
+  frontmatter: Record<string, unknown>;
+  dirName: string;
+}
+
+const { Content, frontmatter, dirName } = Astro.props;
+const title = (frontmatter.title as string) || 'Environment';
+const description = (frontmatter.description as string) || '';
+const status = (frontmatter.status as string) || 'draft';
+
+const statusLabels: Record<string, string> = {
+  draft: '📝 AI Generated',
+  editor_reviewed: '✅ Editor Reviewed',
+  community_reviewed: '👥 Community Reviewed',
+  verified: '🔒 Verified',
+};
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200">
+      <div class="max-w-4xl mx-auto px-4 py-8">
+        <nav class="text-sm text-gray-500 mb-4">
+          <a href="/" class="hover:text-primary-600">Home</a>
+          <span class="mx-2">→</span>
+          <a href="/environments" class="hover:text-primary-600">Environments</a>
+          <span class="mx-2">→</span>
+          <span class="text-gray-900">{title}</span>
+        </nav>
+        <div class="flex items-center gap-3 mb-2">
+          <span class="text-sm px-2 py-1 bg-emerald-100 text-emerald-800 rounded-full">
+            {statusLabels[status] || status}
+          </span>
+        </div>
+        <h1 class="text-3xl font-bold mb-2">{title}</h1>
+        {description && <p class="text-lg text-gray-600">{description}</p>}
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="max-w-4xl mx-auto px-4 py-12">
+      <article class="prose prose-lg max-w-none bg-white rounded-xl border border-gray-200 p-8">
+        <Content />
+      </article>
+
+      <!-- Footer -->
+      <footer class="mt-8 pt-8 border-t border-gray-200">
+        <div class="flex justify-between items-center">
+          <a href="/environments" class="text-primary-600 hover:underline">
+            ← Back to Environments
+          </a>
+          <a
+            href={`https://github.com/ebilgin/rlbook/blob/main/content/environments/${dirName}/index.mdx`}
+            class="text-gray-600 hover:text-primary-600"
+            target="_blank"
+          >
+            Edit on GitHub →
+          </a>
+        </div>
+      </footer>
+    </main>
+  </div>
+</BaseLayout>

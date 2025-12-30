@@ -1,0 +1,417 @@
+---
+title: "Introduction to Policy-Based Methods"
+slug: "intro-to-policy-gradients"
+section: "Policy Gradient Methods"
+description: "Discover a fundamentally different approach to RL: learning policies directly instead of value functions"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "q-learning-basics"
+    title: "Q-Learning Basics"
+  - slug: "q-learning-frontiers"
+    title: "Q-Learning Frontiers"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+# Introduction to Policy-Based Methods
+
+<ChapterObjectives>
+- Explain the fundamental difference between value-based and policy-based methods
+- Understand why parameterized policies are essential for continuous action spaces
+- Describe the intuition behind policy gradient optimization
+- Recognize the advantages and trade-offs of policy-based approaches
+- Implement a simple softmax policy with linear features
+</ChapterObjectives>
+
+## A Different Way to Think About Learning
+
+In the <CrossRef slug="q-learning-basics">Q-learning section</CrossRef>, we learned to evaluate actions—computing $Q(s, a)$ to determine how good each action is. To act, we simply picked the action with the highest Q-value: $\arg\max_a Q(s, a)$.
+
+This works brilliantly for many problems. But what if instead of asking "how good is this action?" we asked directly "what action should I take?"
+
+That's the essence of **policy-based methods**—learning to act, not just to evaluate.
+
+<Intuition>
+
+Think about how humans learn skills. When learning to ride a bike, you don't consciously compute the expected value of every possible handlebar angle. You develop an intuition—a *policy*—that directly maps what you feel to what you do.
+
+Policy-based methods work the same way. Instead of learning a value function and deriving actions from it, we learn the policy itself.
+
+**Value-based approach:**
+1. Learn how good each action is: $Q(s, a)$
+2. Pick the best one: $\arg\max_a Q(s, a)$
+
+**Policy-based approach:**
+1. Learn what to do directly: $\pi(a|s)$
+2. Sample or pick from this policy
+
+</Intuition>
+
+## Why Do We Need Policy-Based Methods?
+
+If Q-learning works, why learn a whole new approach? Let's revisit a limitation we touched on in the <CrossRef slug="q-learning-frontiers">frontiers chapter</CrossRef>.
+
+### The Continuous Action Problem
+
+{/* TODO: Interactive Demo - Continuous Action Space Challenge */}
+{/* Slider showing discrete (4 actions) → continuous (infinite actions) */}
+
+<Intuition>
+
+Q-learning's action selection requires finding $\arg\max_a Q(s, a)$—the action with the highest value. This is easy when you have 4 actions: just check all 4 and pick the winner.
+
+But what if your actions are continuous? Imagine controlling a robot arm where each joint angle can be any real number. Now $\arg\max$ requires finding the maximum of a function over an infinite set—a costly optimization problem at every single step.
+
+Policy-based methods sidestep this entirely. Instead of learning $Q(s, a)$ and optimizing over $a$, we learn a policy $\pi_\theta(a|s)$ that directly outputs actions. For continuous control, this might be a Gaussian distribution: $\pi_\theta(a|s) = \mathcal{N}(\mu_\theta(s), \sigma_\theta(s)^2)$. We just sample from it—no optimization required!
+
+</Intuition>
+
+<Mathematical>
+
+The fundamental challenge with Q-learning for continuous actions:
+
+$$a^* = \arg\max_{a \in \mathcal{A}} Q(s, a)$$
+
+When $\mathcal{A} \subset \mathbb{R}^n$ is continuous, this optimization must be solved at every time step. Common approaches include:
+- Discretization (loses precision, exponential in dimensions)
+- Sampling-based optimization (expensive, approximate)
+- Learning a separate "actor" network (this leads to actor-critic!)
+
+Policy-based methods avoid this by parameterizing the policy directly:
+
+$$\pi_\theta(a|s) = \text{probability of action } a \text{ in state } s$$
+
+For continuous actions, we typically use a Gaussian:
+$$\pi_\theta(a|s) = \frac{1}{\sigma_\theta(s)\sqrt{2\pi}} \exp\left(-\frac{(a - \mu_\theta(s))^2}{2\sigma_\theta(s)^2}\right)$$
+
+Sampling is trivial: $a \sim \mathcal{N}(\mu_\theta(s), \sigma_\theta(s)^2)$.
+
+</Mathematical>
+
+### Beyond Continuous Actions
+
+Even for discrete actions, policy-based methods offer advantages:
+
+<Intuition>
+
+**1. Stochastic policies can be optimal.**
+In some problems—especially games with adversaries—the best strategy is inherently random. Think of rock-paper-scissors: a deterministic strategy can be exploited, but randomly choosing each option with probability 1/3 is unexploitable.
+
+**2. Smoother optimization.**
+Q-learning's $\arg\max$ creates sharp discontinuities. A tiny change in Q-values can flip which action is selected, causing large changes in behavior. Policy gradients change action probabilities smoothly.
+
+**3. Simpler architecture.**
+To act with Q-learning, you need to evaluate $Q(s, a)$ for all actions and find the maximum. With a policy network, you just forward-pass the state and get action probabilities directly.
+
+</Intuition>
+
+<Warning>
+Policy-based methods aren't strictly better than value-based methods. They tend to have higher variance (we'll see why soon) and can be less sample-efficient. The best modern algorithms often combine both approaches—we'll see this with actor-critic methods.
+</Warning>
+
+## Parameterized Policies
+
+The key to policy-based learning is representing the policy with learnable parameters $\theta$. We write this as $\pi_\theta(a|s)$.
+
+<Intuition>
+
+A parameterized policy is simply a function that:
+1. Takes a state $s$ as input
+2. Outputs a probability distribution over actions
+3. Has adjustable parameters $\theta$ that we can tune
+
+The simplest example is a **softmax policy** for discrete actions. Given preference scores $h(s, a, \theta)$ for each action, we convert them to probabilities:
+
+$$\pi_\theta(a|s) = \frac{\exp(h(s, a, \theta))}{\sum_{a'} \exp(h(s, a', \theta))}$$
+
+Higher preference → higher probability, but every action keeps some probability.
+
+</Intuition>
+
+### Softmax Policy Example
+
+{/* TODO: Interactive Demo - Softmax Policy Playground */}
+{/* Adjust preferences, see probabilities change, adjust temperature */}
+
+<Implementation>
+
+```python
+import numpy as np
+
+class SoftmaxPolicy:
+    """
+    Softmax policy for discrete actions.
+
+    Uses linear preferences: h(s,a) = theta[a] @ features(s)
+    """
+
+    def __init__(self, n_features, n_actions, temperature=1.0):
+        """
+        Args:
+            n_features: Dimension of state feature vector
+            n_actions: Number of discrete actions
+            temperature: Higher = more exploration, lower = more greedy
+        """
+        self.n_actions = n_actions
+        self.temperature = temperature
+        # Parameters: one weight vector per action
+        self.theta = np.zeros((n_actions, n_features))
+
+    def preferences(self, state_features):
+        """Compute preference scores for each action."""
+        return self.theta @ state_features  # Shape: (n_actions,)
+
+    def probabilities(self, state_features):
+        """Convert preferences to action probabilities via softmax."""
+        h = self.preferences(state_features) / self.temperature
+        # Subtract max for numerical stability
+        h = h - np.max(h)
+        exp_h = np.exp(h)
+        return exp_h / np.sum(exp_h)
+
+    def sample_action(self, state_features):
+        """Sample an action from the policy."""
+        probs = self.probabilities(state_features)
+        return np.random.choice(self.n_actions, p=probs)
+
+    def log_probability(self, state_features, action):
+        """Compute log π(a|s) - needed for policy gradients."""
+        probs = self.probabilities(state_features)
+        return np.log(probs[action] + 1e-10)  # Small constant for stability
+```
+
+Let's see this in action:
+
+```python
+# Example: 3-dimensional state features, 4 actions
+policy = SoftmaxPolicy(n_features=3, n_actions=4)
+
+# Some example state features
+state = np.array([1.0, 0.5, -0.3])
+
+# Initially, all actions have equal probability (theta is zero)
+print("Initial probabilities:", policy.probabilities(state))
+# Output: [0.25, 0.25, 0.25, 0.25]
+
+# Let's manually set preferences to favor action 2
+policy.theta[2] = np.array([1.0, 0.0, 0.0])  # High weight on first feature
+
+print("After adjustment:", policy.probabilities(state))
+# Output: [0.155, 0.155, 0.535, 0.155]  # Action 2 now most likely
+```
+
+</Implementation>
+
+<Mathematical>
+
+For a softmax policy with linear preferences $h(s, a, \theta) = \theta_a^\top \mathbf{x}(s)$, the gradient of the log-probability has a particularly nice form:
+
+$$\nabla_\theta \log \pi_\theta(a|s) = \mathbf{x}(s, a) - \sum_{a'} \pi_\theta(a'|s) \mathbf{x}(s, a')$$
+
+This is the feature vector for the chosen action minus the expected feature vector under the policy. Intuitively: we're moving toward actions we take and away from what we'd "typically" do.
+
+When we use neural networks, $h(s, a, \theta)$ is computed by the network, and we rely on automatic differentiation to compute gradients.
+
+</Mathematical>
+
+### Gaussian Policies for Continuous Actions
+
+<Intuition>
+
+For continuous actions, we parameterize a Gaussian (normal) distribution. The policy outputs:
+- **Mean** $\mu_\theta(s)$: the "intended" action
+- **Standard deviation** $\sigma_\theta(s)$: how much to explore around it
+
+To act, we sample: $a = \mu_\theta(s) + \sigma_\theta(s) \cdot \epsilon$ where $\epsilon \sim \mathcal{N}(0, 1)$.
+
+This is the natural extension of softmax to continuous spaces—instead of probabilities over discrete choices, we have a probability density over a continuous range.
+
+</Intuition>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class GaussianPolicy:
+    """
+    Gaussian policy for continuous 1D actions.
+
+    Mean is a linear function of state features.
+    Log std is a learnable parameter (shared across states).
+    """
+
+    def __init__(self, n_features):
+        # Parameters for mean: theta @ features(s)
+        self.theta_mean = np.zeros(n_features)
+        # Log standard deviation (learnable, but shared across states)
+        self.log_std = 0.0  # Initial std = 1.0
+
+    def mean(self, state_features):
+        """Compute mean of action distribution."""
+        return np.dot(self.theta_mean, state_features)
+
+    def std(self):
+        """Get standard deviation."""
+        return np.exp(self.log_std)
+
+    def sample_action(self, state_features):
+        """Sample action from Gaussian policy."""
+        mu = self.mean(state_features)
+        sigma = self.std()
+        return np.random.normal(mu, sigma)
+
+    def log_probability(self, state_features, action):
+        """Compute log probability of action."""
+        mu = self.mean(state_features)
+        sigma = self.std()
+        # Log of Gaussian PDF
+        return -0.5 * ((action - mu) / sigma) ** 2 - np.log(sigma) - 0.5 * np.log(2 * np.pi)
+```
+
+</Implementation>
+
+<Note>
+In practice, we often use neural networks to compute $\mu_\theta(s)$ and $\log \sigma_\theta(s)$. The network architecture is similar to a Q-network, but the outputs are distribution parameters rather than action values.
+</Note>
+
+## The Policy Gradient Idea
+
+Now we come to the central question: how do we improve a parameterized policy?
+
+<Intuition>
+
+The high-level idea is simple:
+1. **Define what "good" means**: The expected total reward when following the policy
+2. **Compute the gradient**: How does expected reward change as we adjust $\theta$?
+3. **Gradient ascent**: Update $\theta$ to increase expected reward
+
+This is just optimization—find the parameters that maximize performance. The challenge is step 2: computing the gradient of an *expectation*.
+
+</Intuition>
+
+### The Objective Function
+
+<Mathematical>
+
+We want to maximize the expected return when following policy $\pi_\theta$:
+
+$$J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)]$$
+
+where:
+- $\tau = (s_0, a_0, r_1, s_1, a_1, r_2, ...)$ is a trajectory
+- $R(\tau) = \sum_{t=0}^{T} \gamma^t r_{t+1}$ is the discounted return
+- The expectation is over trajectories sampled by following $\pi_\theta$
+
+Our goal is to find:
+$$\theta^* = \arg\max_\theta J(\theta)$$
+
+We'll use gradient ascent:
+$$\theta \leftarrow \theta + \alpha \nabla_\theta J(\theta)$$
+
+</Mathematical>
+
+### Why Is This Hard?
+
+<Intuition>
+
+The tricky part is computing $\nabla_\theta J(\theta)$. The expectation is over trajectories, and trajectories depend on $\theta$ (because the policy determines which actions are taken).
+
+It's like trying to take the derivative of an average, where the things you're averaging over change when you change the parameters.
+
+Naively, you might think we need to differentiate through the environment dynamics—which we don't know! Remarkably, the **policy gradient theorem** shows we can estimate this gradient using only samples, without knowing the dynamics.
+
+</Intuition>
+
+<DeepDive title="Why can't we just differentiate through trajectories?">
+
+The expected return can be written as:
+
+$$J(\theta) = \sum_\tau P(\tau | \theta) R(\tau)$$
+
+where $P(\tau | \theta)$ is the probability of trajectory $\tau$ under policy $\pi_\theta$.
+
+If we naively differentiate:
+
+$$\nabla_\theta J(\theta) = \sum_\tau \nabla_\theta P(\tau | \theta) \cdot R(\tau)$$
+
+The problem is that $P(\tau | \theta)$ involves the environment dynamics:
+
+$$P(\tau | \theta) = p(s_0) \prod_{t=0}^{T-1} \pi_\theta(a_t|s_t) \cdot p(s_{t+1}|s_t, a_t)$$
+
+We can differentiate through $\pi_\theta$, but not through $p(s_{t+1}|s_t, a_t)$—we don't even know this function!
+
+The policy gradient theorem cleverly rewrites this gradient in a form that doesn't require knowing the dynamics. We'll derive this in the next chapter.
+
+</DeepDive>
+
+{/* TODO: Interactive Demo - Value-Based vs Policy-Based Comparison */}
+{/* Show Q-learning agent and policy gradient agent learning the same GridWorld task */}
+
+## Comparing Value-Based and Policy-Based
+
+Let's summarize the key differences:
+
+<Intuition>
+
+| Aspect | Value-Based (Q-Learning) | Policy-Based |
+|--------|--------------------------|--------------|
+| **What we learn** | $Q(s, a)$ values | $\pi_\theta(a\|s)$ directly |
+| **How we act** | $\arg\max_a Q(s, a)$ | Sample from $\pi_\theta$ |
+| **Continuous actions** | Requires optimization | Natural (sample from distribution) |
+| **Stochastic policies** | Forced (ε-greedy for exploration) | Natural |
+| **Sample efficiency** | Often better (off-policy possible) | Often worse (on-policy) |
+| **Variance** | Lower (bootstrapping) | Higher (Monte Carlo) |
+| **Stability** | Can be unstable (maximization bias) | Smoother optimization |
+
+Neither approach is strictly better—they have different trade-offs. The best modern algorithms (like PPO, SAC) combine both ideas.
+
+</Intuition>
+
+## Summary
+
+<KeyTakeaways>
+- **Policy-based methods** learn a parameterized policy $\pi_\theta(a|s)$ directly, rather than learning value functions
+- **Continuous actions** are natural: output a Gaussian distribution and sample from it
+- **Stochastic policies** are first-class citizens, not just exploration tricks
+- **Parameterized policies** can use linear functions, neural networks, or any differentiable architecture
+- **The objective** is expected return $J(\theta)$; we improve by gradient ascent on $\theta$
+- **The challenge** is computing $\nabla_\theta J(\theta)$ when the expectation depends on $\theta$
+</KeyTakeaways>
+
+We've seen *why* policy-based methods are valuable and *what* we're trying to learn. The big question remains: *how* do we compute the gradient of expected return?
+
+That's exactly what the policy gradient theorem tells us—and it's the focus of our next chapter.
+
+<NextChapter slug="policy-gradient-theorem" title="The Policy Gradient Theorem and REINFORCE" />
+
+## Exercises
+
+### Conceptual Questions
+
+1. **Explain the continuous action problem.** Why does $\arg\max_a Q(s, a)$ become difficult when actions are continuous? Describe a concrete example.
+
+2. **What does it mean for a policy to be "parameterized"?** Give an example of a parameterized policy with 4 actions and explain what the parameters control.
+
+3. **When might a stochastic policy be genuinely optimal?** Give an example problem where the best strategy is inherently random.
+
+4. **Compare exploration in Q-learning vs. policy gradients.** How does each approach handle the exploration-exploitation trade-off?
+
+### Coding Challenges
+
+5. **Implement a softmax policy** that takes a 4-dimensional state feature vector and outputs probabilities over 3 actions. Test it by:
+   - Verifying probabilities sum to 1
+   - Showing that changing parameters changes which action is most likely
+   - Demonstrating how temperature affects the probability distribution
+
+6. **Visualize a Gaussian policy.** Create a plot showing:
+   - The mean action as a function of a 1D state
+   - The standard deviation as a shaded region around the mean
+   - How changing $\theta$ changes the policy
+
+### Exploration
+
+7. **Temperature in softmax policies.** Experiment with different temperature values (0.1, 1.0, 10.0) in a softmax policy. What happens as temperature approaches 0? As it approaches infinity? When might you want each extreme?

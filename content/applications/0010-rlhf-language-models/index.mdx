@@ -1,0 +1,143 @@
+---
+title: "RLHF for Language Models"
+slug: "rlhf-language-models"
+description: "How to formulate language model alignment as an RL problem. State, action, reward design for training helpful and harmless AI assistants."
+section: "Language & Agents"
+status: draft
+lastReviewed: null
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+
+# RLHF for Language Models
+
+<Intuition>
+
+## The Alignment Problem
+
+Large language models are trained to predict the next token, but prediction and usefulness are different goals. A model can be a perfect predictor while still generating harmful, unhelpful, or dishonest content.
+
+**Reinforcement Learning from Human Feedback (RLHF)** bridges this gap by training models to optimize for what humans actually want, not just what comes next statistically.
+
+</Intuition>
+
+## The MDP Formulation
+
+<Intuition>
+
+### State Space
+
+The **state** is the conversation context:
+- System prompt (instructions)
+- Conversation history (previous turns)
+- Current user message
+
+Each state is a sequence of tokens, potentially millions of dimensions when tokenized.
+
+### Action Space
+
+The **action space** is the entire vocabulary at each generation step. For a 50,000 token vocabulary generating 500 tokens, that's $50,000^{500}$ possible responses.
+
+In practice, we treat the complete response as a single "action" and assign rewards at the trajectory level.
+
+### Reward Signal
+
+The reward comes from a **reward model** trained on human preferences:
+
+1. Humans compare pairs of model outputs
+2. A reward model learns to predict which response humans prefer
+3. This model provides dense reward signals during RL training
+
+</Intuition>
+
+<Mathematical>
+
+The RLHF objective optimizes:
+
+$$J(\theta) = \mathbb{E}_{x \sim \mathcal{D}, y \sim \pi_\theta(\cdot|x)}\left[r_\phi(x, y)\right] - \beta \cdot D_{\text{KL}}\left[\pi_\theta \| \pi_{\text{ref}}\right]$$
+
+where:
+- $r_\phi(x, y)$ is the learned reward model
+- $\pi_{\text{ref}}$ is the supervised fine-tuned model (prevents reward hacking)
+- $\beta$ controls how much the policy can deviate from the reference
+
+</Mathematical>
+
+## Challenges
+
+<Intuition>
+
+### Reward Hacking
+
+Models find unexpected ways to maximize reward without being genuinely helpful:
+- Excessive verbosity (longer responses score higher)
+- Sycophancy (always agreeing with the user)
+- Format gaming (using bullet points excessively)
+
+The KL constraint is critical for preventing this, but tuning $\beta$ is an art.
+
+### Evaluation Difficulty
+
+How do we know if the model is actually more aligned? Human evaluation is expensive, and automated metrics often miss subtle issues.
+
+### Credit Assignment
+
+A 500-token response gets one reward signal. Which tokens were good? Which were bad? This sparse feedback makes learning slow.
+
+</Intuition>
+
+## Algorithm Selection
+
+<Intuition>
+
+| Algorithm | Pros | Cons | Best For |
+|-----------|------|------|----------|
+| **PPO** | Stable, well-understood | Requires critic model, high memory | General RLHF |
+| **GRPO** | No critic needed, memory efficient | Needs more samples | Large models, outcome rewards |
+| **DPO** | No RL at all, just supervised loss | Less flexible than RL | Quick experiments |
+| **REINFORCE** | Simple to implement | High variance | Research, baselines |
+
+See the [GRPO paper analysis](/papers/grpo) for how GRPO eliminates the critic.
+
+</Intuition>
+
+## Implementation Considerations
+
+<Implementation>
+
+```python
+# Simplified RLHF training loop
+def rlhf_step(prompts, policy, ref_policy, reward_model, optimizer):
+    # 1. Generate responses
+    with torch.no_grad():
+        responses = policy.generate(prompts, max_tokens=512)
+
+    # 2. Score with reward model
+    rewards = reward_model(prompts, responses)
+
+    # 3. Compute KL penalty
+    policy_logps = policy.get_log_probs(prompts, responses)
+    ref_logps = ref_policy.get_log_probs(prompts, responses)
+    kl_penalty = policy_logps - ref_logps
+
+    # 4. Compute loss (PPO or GRPO)
+    loss = -rewards.mean() + beta * kl_penalty.mean()
+
+    # 5. Update
+    loss.backward()
+    optimizer.step()
+```
+
+**Key hyperparameters:**
+- `beta` (KL coefficient): 0.01-0.1 typical
+- Generation temperature: 0.7-1.0 during training
+- Batch size: 128-512 prompts
+- Group size (for GRPO): 16-64 samples per prompt
+
+</Implementation>
+
+## Further Reading
+
+- [GRPO Paper Analysis](/papers/grpo) — Critic-free RL for LLMs
+- [InstructGPT Paper](https://arxiv.org/abs/2203.02155) — Original RLHF for ChatGPT
+- [Constitutional AI](https://arxiv.org/abs/2212.08073) — Self-improvement without human labels

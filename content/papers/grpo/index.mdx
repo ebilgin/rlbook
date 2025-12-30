@@ -1,0 +1,262 @@
+---
+title: "Group Relative Policy Optimization (GRPO)"
+slug: "grpo"
+paper:
+  authors: ["Zhihong Shao", "Peiyi Wang", "Qihao Zhu", "Runxin Xu", "Junxiao Song", "Xiao Bi", "Haowei Zhang", "Mingchuan Zhang", "Y.K. Li", "Y. Wu", "Daya Guo"]
+  venue: "arXiv 2024"
+  arxiv: "2402.03300"
+  url: "https://arxiv.org/abs/2402.03300"
+tldr: "Eliminate the critic from PPO by computing advantages relative to a group of sampled completions—cutting RL training costs in half"
+status: draft
+lastReviewed: null
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+
+**Prerequisites:** [Introduction to Policy-Based Methods](/chapters/intro-to-policy-gradients), [PPO and Trust Region Methods](/chapters/ppo-and-advanced-pg)
+
+# Group Relative Policy Optimization (GRPO)
+
+<Intuition>
+
+## The Problem with Training LLMs Using RL
+
+Reinforcement learning has become essential for aligning large language models—it's how ChatGPT learned to be helpful and how reasoning models like DeepSeek-R1 learned to think step-by-step. The standard algorithm is PPO (Proximal Policy Optimization), but it has a costly requirement: **a critic network**.
+
+The critic's job is to estimate how good a state is, so the policy knows whether an action was better or worse than expected. But for LLMs, this means training *two* massive neural networks:
+
+- The **policy** (the LLM being trained)
+- The **critic** (another LLM estimating value)
+
+For a 7B parameter model, the critic alone requires ~16GB of memory and significant compute. At 70B parameters, this becomes prohibitive.
+
+**GRPO's insight:** We don't need to *learn* what "good" looks like. We can just *compare* completions to each other.
+
+</Intuition>
+
+## The Core Idea: Advantages Without a Critic
+
+<Intuition>
+
+Traditional RL computes an **advantage**—how much better was this action than expected?
+
+$$A(s, a) = Q(s, a) - V(s)$$
+
+The critic learns $V(s)$, the expected value of being in state $s$. But GRPO asks: what if we estimate this baseline differently?
+
+**GRPO's approach:** For each prompt, generate multiple completions. The average reward of these completions *is* your baseline.
+
+If you generate 16 completions for "What is 2+2?" and they score [0.9, 0.8, 0.7, 0.6, ...], then a completion scoring 0.9 has positive advantage (it beat the group average) while one scoring 0.6 has negative advantage (it underperformed).
+
+</Intuition>
+
+<Mathematical>
+
+Formally, given a prompt $q$ and $G$ sampled completions $\{a_1, ..., a_G\}$ with rewards $\{r_1, ..., r_G\}$, the advantage for completion $i$ is:
+
+$$\hat{A}_i = \frac{r_i - \mu}{\sigma + \epsilon}$$
+
+where $\mu = \frac{1}{G}\sum_{j=1}^G r_j$ and $\sigma = \sqrt{\frac{1}{G}\sum_{j=1}^G (r_j - \mu)^2}$
+
+This is a **group-relative** advantage: a completion is good or bad relative to its siblings, not in absolute terms.
+
+**Why normalize by standard deviation?** It stabilizes training when reward scales vary across prompts. A math problem might have rewards in [0, 1] while a coding problem has rewards in [0, 100]. Normalization makes advantages comparable.
+
+</Mathematical>
+
+{/* <GroupAdvantageVisualizer /> */}
+
+## The Full GRPO Objective
+
+<Intuition>
+
+GRPO keeps PPO's clipped objective—the part that prevents the policy from changing too drastically in one update. It just swaps out how advantages are computed.
+
+The training loop:
+1. **Sample:** Generate $G$ completions per prompt
+2. **Score:** Compute rewards for all completions
+3. **Normalize:** Calculate group-relative advantages
+4. **Update:** Apply PPO's clipped objective with these advantages
+5. **Regularize:** Add a KL penalty to stay close to the reference policy
+
+</Intuition>
+
+<Mathematical>
+
+The complete GRPO objective:
+
+$$J_{\text{GRPO}}(\theta) = \mathbb{E}_{q, \{a_i\}}\left[\frac{1}{G}\sum_{i=1}^G \frac{1}{|a_i|}\sum_{t=1}^{|a_i|} \left( L_{\text{clip}}^{i,t} - \beta D_{\text{KL}}^{i,t} \right)\right]$$
+
+where the clipped loss is:
+
+$$L_{\text{clip}}^{i,t} = \min\left(\rho_{i,t} \hat{A}_i, \text{clip}(\rho_{i,t}, 1-\epsilon, 1+\epsilon) \hat{A}_i\right)$$
+
+and $\rho_{i,t} = \frac{\pi_\theta(a_{i,t} | q, a_{i,<t})}{\pi_{\theta_{\text{old}}}(a_{i,t} | q, a_{i,<t})}$ is the probability ratio.
+
+**The KL penalty** prevents the policy from drifting too far from a reference policy (usually the supervised fine-tuned model). DeepSeek uses an unbiased estimator:
+
+$$D_{\text{KL}} = e^{\log \pi_{\text{ref}} - \log \pi_\theta} - (\log \pi_{\text{ref}} - \log \pi_\theta) - 1$$
+
+This estimator is always non-negative and has lower variance than the standard $\log \frac{\pi_\theta}{\pi_{\text{ref}}}$ approximation.
+
+</Mathematical>
+
+## GRPO vs. PPO: What Changes?
+
+<Intuition>
+
+| Aspect | PPO | GRPO |
+|--------|-----|------|
+| **Models to train** | 2 (policy + critic) | 1 (policy only) |
+| **Memory overhead** | ~2x model size | ~1x model size |
+| **Samples per prompt** | 1 (typical) | 16-64 |
+| **Advantage estimation** | Learned critic (GAE) | Group statistics |
+| **Best for** | Dense rewards | Outcome rewards |
+
+**The tradeoff:** GRPO needs more samples per prompt to get stable statistics. You're trading memory for samples. But generating samples is often cheaper than training a second model, especially for outcome rewards where you only need to score final outputs.
+
+</Intuition>
+
+{/* <MemoryComparisonChart /> */}
+
+## Implementation
+
+<Implementation>
+
+```python
+import torch
+import torch.nn.functional as F
+
+def grpo_loss(
+    policy_logps: torch.Tensor,      # (B, G, T) log probs from current policy
+    old_logps: torch.Tensor,         # (B, G, T) log probs from old policy
+    ref_logps: torch.Tensor,         # (B, G, T) log probs from reference
+    rewards: torch.Tensor,           # (B, G) reward per completion
+    mask: torch.Tensor,              # (B, G, T) valid token mask
+    clip_eps: float = 0.2,
+    kl_coef: float = 0.1,
+):
+    B, G, T = policy_logps.shape
+
+    # 1. Compute group-relative advantages
+    reward_mean = rewards.mean(dim=1, keepdim=True)  # (B, 1)
+    reward_std = rewards.std(dim=1, keepdim=True) + 1e-8
+    advantages = (rewards - reward_mean) / reward_std  # (B, G)
+    advantages = advantages.unsqueeze(-1)  # (B, G, 1) - same for all tokens
+
+    # 2. Compute probability ratios
+    log_ratio = policy_logps - old_logps
+    ratio = torch.exp(log_ratio)  # (B, G, T)
+
+    # 3. Clipped surrogate loss
+    surr1 = ratio * advantages
+    surr2 = torch.clamp(ratio, 1 - clip_eps, 1 + clip_eps) * advantages
+    policy_loss = -torch.min(surr1, surr2)
+
+    # 4. KL penalty (DeepSeek's unbiased estimator)
+    log_ratio_ref = ref_logps - policy_logps
+    kl = torch.exp(log_ratio_ref) - log_ratio_ref - 1
+    kl_loss = kl_coef * kl
+
+    # 5. Combine and mask
+    total_loss = policy_loss + kl_loss
+    masked_loss = (total_loss * mask).sum() / mask.sum()
+
+    return masked_loss
+
+
+def grpo_step(prompts, policy, ref_policy, reward_fn, G=16):
+    """One GRPO training step."""
+
+    # 1. Sample G completions per prompt
+    with torch.no_grad():
+        completions = []
+        old_logps = []
+        for prompt in prompts:
+            comps, logps = policy.generate(prompt, n=G, return_logps=True)
+            completions.append(comps)
+            old_logps.append(logps)
+
+    # 2. Compute rewards
+    rewards = reward_fn(prompts, completions)  # (B, G)
+
+    # 3. Get current policy log probs
+    policy_logps = policy.get_logps(prompts, completions)
+    ref_logps = ref_policy.get_logps(prompts, completions)
+
+    # 4. Compute loss and update
+    loss = grpo_loss(policy_logps, old_logps, ref_logps, rewards, ...)
+    loss.backward()
+    optimizer.step()
+```
+
+**Key hyperparameters:**
+- `G` (group size): 16-64 typical. Larger = more stable but more compute.
+- `clip_eps`: 0.2 (standard PPO value)
+- `kl_coef`: 0.01-0.1 depending on how much drift is acceptable
+
+</Implementation>
+
+## Why GRPO Matters
+
+<Intuition>
+
+GRPO enabled a shift in how we train LLMs:
+
+1. **DeepSeekMath (2024):** First demonstrated GRPO improves mathematical reasoning (46.8% → 51.7% on MATH benchmark)
+
+2. **DeepSeek-R1 (2025):** Used GRPO to train a reasoning model that matches GPT-4-level performance, proving the approach scales
+
+3. **Industry adoption:** GRPO is now the default RL algorithm for training Large Reasoning Models (LRMs)
+
+The key enabler: **verifiable rewards**. For math and code, we can automatically check if answers are correct. GRPO + verifiable rewards = scalable RL for reasoning.
+
+</Intuition>
+
+## Limitations and Extensions
+
+<Intuition>
+
+**When GRPO struggles:**
+- **Process rewards:** If you need per-step feedback (not just final answer), the group-relative approach is less natural
+- **Small batch sizes:** With G=2, your advantage estimates are noisy
+- **High-variance tasks:** When reward variance is huge, normalization helps but may not be enough
+
+**Recent extensions:**
+- **Training-Free GRPO:** Uses group semantics without parameter updates for inference-time improvement
+- **Theoretical analyses:** Proving convergence properties and connections to REINFORCE
+
+</Intuition>
+
+## Key Takeaways
+
+<Intuition>
+
+1. **The critic is optional.** For outcome rewards, group-relative advantages work just as well.
+
+2. **Memory vs. samples tradeoff.** GRPO needs more samples per prompt but half the model memory.
+
+3. **GRPO enabled the reasoning model revolution.** DeepSeek-R1's success showed that open-source reasoning is possible.
+
+4. **Verifiable rewards are key.** GRPO shines when you can automatically score outputs (math, code, structured tasks).
+
+</Intuition>
+
+## Further Reading
+
+- [DeepSeekMath Paper](https://arxiv.org/abs/2402.03300) — Original GRPO introduction
+- [DeepSeek-R1 Technical Report](https://arxiv.org/abs/2501.12948) — Large-scale application of GRPO
+- [PPO and Trust Region Methods](/chapters/ppo-and-advanced-pg) — Understanding the clipped objective GRPO inherits
+- [Introduction to Policy-Based Methods](/chapters/intro-to-policy-gradients) — REINFORCE and baseline methods
+
+---
+
+## Discussion Questions
+
+1. Why might group-relative advantages work particularly well for LLMs, where the "state" (prompt) can be arbitrarily complex?
+
+2. How does the choice of group size $G$ affect the bias-variance tradeoff? What happens with $G=2$ vs. $G=64$?
+
+3. Could you combine GRPO with a lightweight critic for process rewards? What would be the tradeoffs?
+
+4. GRPO normalizes within groups (per-prompt). What if you normalized across the entire batch instead?

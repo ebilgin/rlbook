@@ -1,0 +1,689 @@
+---
+title: "The Policy Gradient Theorem and REINFORCE"
+slug: "policy-gradient-theorem"
+section: "Policy Gradient Methods"
+description: "Master the fundamental theorem that enables learning policies through gradient ascent"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "intro-to-policy-gradients"
+    title: "Introduction to Policy-Based Methods"
+  - slug: "intro-to-td"
+    title: "Introduction to TD Learning"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+# The Policy Gradient Theorem and REINFORCE
+
+<ChapterObjectives>
+- State and explain the policy gradient theorem
+- Understand why the log-probability trick makes gradient estimation possible
+- Implement the REINFORCE algorithm from scratch
+- Explain the high variance problem and why baselines help
+- Train a policy gradient agent on CartPole
+</ChapterObjectives>
+
+## The Gradient Challenge
+
+In the <CrossRef slug="intro-to-policy-gradients">previous chapter</CrossRef>, we established our goal: find parameters $\theta$ that maximize expected return:
+
+$$J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)]$$
+
+We want to do gradient ascent: $\theta \leftarrow \theta + \alpha \nabla_\theta J(\theta)$.
+
+But how do we compute $\nabla_\theta J(\theta)$? The expectation is over trajectories, and which trajectories we see depends on $\theta$ (through the policy). This seems to require differentiating through the environment—which we can't do.
+
+The **policy gradient theorem** solves this elegantly.
+
+## The Log-Probability Trick
+
+Before stating the full theorem, let's understand the key mathematical insight that makes everything work.
+
+<Intuition>
+
+Here's the core trick. We want to compute:
+
+$$\nabla_\theta \mathbb{E}_{x \sim p_\theta}[f(x)]$$
+
+The problem is that what we're averaging over (the distribution $p_\theta$) depends on $\theta$.
+
+The log-probability trick rewrites this as:
+
+$$\nabla_\theta \mathbb{E}_{x \sim p_\theta}[f(x)] = \mathbb{E}_{x \sim p_\theta}[f(x) \cdot \nabla_\theta \log p_\theta(x)]$$
+
+The gradient moved *inside* the expectation! Now we can estimate this with samples: collect $x_1, x_2, ...$ from $p_\theta$, and average $f(x_i) \cdot \nabla_\theta \log p_\theta(x_i)$.
+
+</Intuition>
+
+<Mathematical>
+
+**Derivation of the log-probability trick:**
+
+Starting with:
+$$\nabla_\theta \mathbb{E}_{x \sim p_\theta}[f(x)] = \nabla_\theta \int p_\theta(x) f(x) dx$$
+
+We can move the gradient inside (under suitable regularity conditions):
+$$= \int \nabla_\theta p_\theta(x) \cdot f(x) dx$$
+
+Now the key identity: $\nabla_\theta p_\theta(x) = p_\theta(x) \cdot \nabla_\theta \log p_\theta(x)$
+
+This follows from the chain rule: $\nabla_\theta \log p_\theta(x) = \frac{\nabla_\theta p_\theta(x)}{p_\theta(x)}$
+
+Substituting:
+$$= \int p_\theta(x) \cdot \nabla_\theta \log p_\theta(x) \cdot f(x) dx$$
+
+$$= \mathbb{E}_{x \sim p_\theta}[f(x) \cdot \nabla_\theta \log p_\theta(x)]$$
+
+This is remarkable: we've converted the gradient of an expectation into an expectation of a gradient—something we can estimate with samples!
+
+</Mathematical>
+
+{/* TODO: Interactive Demo - Log-Probability Gradient Visualizer */}
+{/* Show how ∇log π(a|s) points in direction that increases probability of action a */}
+
+### Why Log-Probability?
+
+<Intuition>
+
+The term $\nabla_\theta \log \pi_\theta(a|s)$ has a beautiful interpretation. It points in the direction that most increases the log-probability of action $a$.
+
+- If we update $\theta$ in this direction, action $a$ becomes more likely
+- If we update in the opposite direction, action $a$ becomes less likely
+
+The policy gradient multiplies this by the return $R(\tau)$:
+- **High return?** Move toward actions that led to it
+- **Low return?** Move away from those actions
+
+It's a formalization of "reinforce good behavior, discourage bad behavior."
+
+</Intuition>
+
+<Tip>
+Think of $\nabla_\theta \log \pi_\theta(a|s)$ as an "arrow" pointing toward making action $a$ more likely. The return $R$ determines whether we follow that arrow (positive return) or go the opposite way (negative return).
+</Tip>
+
+## The Policy Gradient Theorem
+
+Now we can state the main result.
+
+<Mathematical>
+
+**Policy Gradient Theorem:**
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{\pi_\theta}\left[\sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(A_t|S_t) \cdot G_t\right]$$
+
+where $G_t = \sum_{k=t}^{T} \gamma^{k-t} R_{k+1}$ is the return from time $t$.
+
+Equivalently, using Q-values:
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{\pi_\theta}\left[\nabla_\theta \log \pi_\theta(A_t|S_t) \cdot Q^{\pi_\theta}(S_t, A_t)\right]$$
+
+This says: the gradient of expected return equals the expected "score function gradient" weighted by returns (or Q-values).
+
+</Mathematical>
+
+<Intuition>
+
+Let's unpack what this means:
+
+1. **Sample trajectories** by running the policy $\pi_\theta$
+2. **For each step**, compute $\nabla_\theta \log \pi_\theta(a_t|s_t)$—the direction to make that action more likely
+3. **Weight by return** $G_t$—good outcomes get positive weight, bad outcomes get negative weight
+4. **Average over samples** to estimate the gradient
+
+The policy learns to repeat high-return actions and avoid low-return actions. Actions are credited with the returns that followed them.
+
+</Intuition>
+
+<DeepDive title="Sketch of the policy gradient theorem derivation">
+
+The full derivation involves expanding the trajectory probability and carefully handling the terms. Here's a sketch:
+
+The probability of a trajectory $\tau = (s_0, a_0, r_1, s_1, a_1, ...)$ is:
+
+$$P(\tau|\theta) = p(s_0) \prod_{t=0}^{T-1} \pi_\theta(a_t|s_t) \cdot p(s_{t+1}|s_t, a_t)$$
+
+Taking the log:
+
+$$\log P(\tau|\theta) = \log p(s_0) + \sum_{t=0}^{T-1} \log \pi_\theta(a_t|s_t) + \sum_{t=0}^{T-1} \log p(s_{t+1}|s_t, a_t)$$
+
+When we take $\nabla_\theta$, only the policy terms survive (the dynamics $p(s'|s,a)$ don't depend on $\theta$):
+
+$$\nabla_\theta \log P(\tau|\theta) = \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(a_t|s_t)$$
+
+Applying the log-probability trick to $J(\theta) = \mathbb{E}_\tau[R(\tau)]$:
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_\tau\left[R(\tau) \cdot \nabla_\theta \log P(\tau|\theta)\right] = \mathbb{E}_\tau\left[R(\tau) \cdot \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(a_t|s_t)\right]$$
+
+The "reward-to-go" form $G_t$ instead of full trajectory return $R(\tau)$ comes from causality—actions can only affect future rewards, not past ones.
+
+</DeepDive>
+
+## The REINFORCE Algorithm
+
+REINFORCE is the simplest algorithm that implements the policy gradient theorem. It's a **Monte Carlo** method: it uses complete episode returns.
+
+<Intuition>
+
+The REINFORCE algorithm is surprisingly simple:
+
+1. Run an episode using current policy, collecting $(s_t, a_t, r_{t+1})$
+2. Compute returns $G_t$ for each time step
+3. Update parameters: $\theta \leftarrow \theta + \alpha \sum_t G_t \nabla_\theta \log \pi_\theta(a_t|s_t)$
+4. Repeat
+
+That's it! We're doing gradient ascent on expected return, using Monte Carlo estimates of the gradient.
+
+</Intuition>
+
+<Mathematical>
+
+**REINFORCE Update:**
+
+For each episode, for each time step $t$:
+
+$$\theta \leftarrow \theta + \alpha \gamma^t G_t \nabla_\theta \log \pi_\theta(A_t|S_t)$$
+
+where:
+- $G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + ...$
+- The $\gamma^t$ factor accounts for discounting (sometimes omitted)
+- $\alpha$ is the learning rate
+
+For a softmax policy with linear preferences, $\nabla_\theta \log \pi_\theta(a|s)$ has a closed form. For neural network policies, we use automatic differentiation.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.distributions import Categorical
+import numpy as np
+
+class PolicyNetwork(nn.Module):
+    """Simple neural network policy for discrete actions."""
+
+    def __init__(self, state_dim, n_actions, hidden_dim=128):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, n_actions)
+        )
+
+    def forward(self, state):
+        """Return action logits."""
+        return self.network(state)
+
+    def get_action(self, state):
+        """Sample action from policy and return action + log probability."""
+        logits = self.forward(state)
+        dist = Categorical(logits=logits)
+        action = dist.sample()
+        log_prob = dist.log_prob(action)
+        return action.item(), log_prob
+
+
+class REINFORCE:
+    """REINFORCE algorithm for policy gradient learning."""
+
+    def __init__(self, state_dim, n_actions, lr=0.001, gamma=0.99):
+        self.gamma = gamma
+        self.policy = PolicyNetwork(state_dim, n_actions)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=lr)
+
+        # Storage for episode data
+        self.log_probs = []
+        self.rewards = []
+
+    def select_action(self, state):
+        """Select action using current policy."""
+        state = torch.FloatTensor(state).unsqueeze(0)
+        action, log_prob = self.policy.get_action(state)
+        self.log_probs.append(log_prob)
+        return action
+
+    def store_reward(self, reward):
+        """Store reward for current step."""
+        self.rewards.append(reward)
+
+    def compute_returns(self):
+        """Compute discounted returns G_t for each step."""
+        returns = []
+        G = 0
+        # Work backwards through rewards
+        for reward in reversed(self.rewards):
+            G = reward + self.gamma * G
+            returns.insert(0, G)
+        returns = torch.FloatTensor(returns)
+
+        # Normalize returns (helps with training stability)
+        returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+        return returns
+
+    def update(self):
+        """Perform REINFORCE update after episode ends."""
+        returns = self.compute_returns()
+
+        # Compute policy gradient loss
+        # Loss = -sum(log_prob * return) (negative for gradient ascent)
+        policy_loss = []
+        for log_prob, G in zip(self.log_probs, returns):
+            policy_loss.append(-log_prob * G)
+        policy_loss = torch.stack(policy_loss).sum()
+
+        # Update policy
+        self.optimizer.zero_grad()
+        policy_loss.backward()
+        self.optimizer.step()
+
+        # Clear episode storage
+        self.log_probs = []
+        self.rewards = []
+
+        return policy_loss.item()
+```
+
+</Implementation>
+
+### Training on CartPole
+
+{/* TODO: Interactive Demo - REINFORCE Learning on CartPole */}
+{/* Watch policy improve, see noisy learning curve */}
+
+<Implementation>
+
+```python
+import gymnasium as gym
+
+def train_reinforce(env_name='CartPole-v1', num_episodes=1000):
+    """Train REINFORCE on CartPole."""
+    env = gym.make(env_name)
+    state_dim = env.observation_space.shape[0]
+    n_actions = env.action_space.n
+
+    agent = REINFORCE(state_dim, n_actions, lr=0.01, gamma=0.99)
+    episode_rewards = []
+
+    for episode in range(num_episodes):
+        state, _ = env.reset()
+        done = False
+        total_reward = 0
+
+        while not done:
+            action = agent.select_action(state)
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+
+            agent.store_reward(reward)
+            total_reward += reward
+            state = next_state
+
+        # Update policy after episode
+        agent.update()
+        episode_rewards.append(total_reward)
+
+        if episode % 100 == 0:
+            avg_reward = np.mean(episode_rewards[-100:])
+            print(f"Episode {episode}, Avg Reward (last 100): {avg_reward:.1f}")
+
+    return agent, episode_rewards
+
+
+# Train the agent
+agent, rewards = train_reinforce(num_episodes=1000)
+```
+
+</Implementation>
+
+<Note>
+You'll notice the learning curve is noisy—episode rewards jump around even as the average improves. This is the high variance of Monte Carlo methods. Each episode gives a different return, leading to noisy gradient estimates.
+</Note>
+
+## The High Variance Problem
+
+REINFORCE works, but it has a fundamental limitation: **high variance**.
+
+<Intuition>
+
+Consider what happens in a single episode. The return $G_t$ might be 100. In the next episode from the same state, it might be 50 due to random outcomes. This variance in returns directly translates to variance in our gradient estimates.
+
+High variance means:
+- Learning is noisy and unstable
+- We need many episodes for reliable updates
+- Convergence is slow
+
+The problem gets worse with:
+- Longer episodes (more randomness compounds)
+- Stochastic environments
+- High-dimensional action spaces
+
+</Intuition>
+
+<Mathematical>
+
+The gradient estimate is:
+
+$$\hat{g} = \sum_t G_t \nabla_\theta \log \pi_\theta(a_t|s_t)$$
+
+The variance of this estimate depends on the variance of $G_t$. Even for the same state-action pair, $G_t$ varies across episodes because:
+
+1. The policy is stochastic (different actions in the future)
+2. The environment may be stochastic (different transitions)
+3. Different episode lengths
+
+This variance doesn't decrease with more time steps in an episode—it can actually increase!
+
+</Mathematical>
+
+{/* TODO: Interactive Demo - Variance Comparison */}
+{/* Show gradient estimates with and without baseline, watch variance differ */}
+
+## Baselines Reduce Variance
+
+Here's a remarkable fact: we can subtract a **baseline** from the returns without changing the expected gradient—but it can dramatically reduce variance.
+
+<Mathematical>
+
+The policy gradient with a baseline $b(s)$ is:
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{\pi_\theta}\left[\nabla_\theta \log \pi_\theta(a|s) \cdot (G_t - b(s))\right]$$
+
+**Key insight:** This has the same expectation as without the baseline, but potentially much lower variance.
+
+Why doesn't the baseline add bias? Because:
+
+$$\mathbb{E}_{a \sim \pi_\theta}\left[\nabla_\theta \log \pi_\theta(a|s) \cdot b(s)\right] = b(s) \cdot \mathbb{E}_{a \sim \pi_\theta}\left[\nabla_\theta \log \pi_\theta(a|s)\right] = 0$$
+
+The second equality holds because $\sum_a \nabla_\theta \pi_\theta(a|s) = \nabla_\theta \sum_a \pi_\theta(a|s) = \nabla_\theta 1 = 0$.
+
+</Mathematical>
+
+<Intuition>
+
+Think of the baseline as a "reference point" for returns. Without a baseline:
+- Return of 100 → strong positive update
+- Return of 95 → still strong positive update
+
+With a baseline of 97:
+- Return of 100 → modest positive update (100 - 97 = 3)
+- Return of 95 → modest negative update (95 - 97 = -2)
+
+The baseline helps distinguish "good" from "average" rather than just "positive" from "negative." This is especially important when all returns are positive (or all negative)!
+
+</Intuition>
+
+### REINFORCE with Baseline
+
+<Implementation>
+
+```python
+class REINFORCEWithBaseline:
+    """REINFORCE with a learned value function baseline."""
+
+    def __init__(self, state_dim, n_actions, lr=0.001, gamma=0.99):
+        self.gamma = gamma
+
+        # Policy network (actor)
+        self.policy = PolicyNetwork(state_dim, n_actions)
+
+        # Value network (baseline/critic)
+        self.value_net = nn.Sequential(
+            nn.Linear(state_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1)
+        )
+
+        self.policy_optimizer = optim.Adam(self.policy.parameters(), lr=lr)
+        self.value_optimizer = optim.Adam(self.value_net.parameters(), lr=lr)
+
+        self.log_probs = []
+        self.values = []
+        self.rewards = []
+
+    def select_action(self, state):
+        """Select action and store log prob and value estimate."""
+        state_tensor = torch.FloatTensor(state).unsqueeze(0)
+
+        # Get action
+        action, log_prob = self.policy.get_action(state_tensor)
+        self.log_probs.append(log_prob)
+
+        # Get baseline value
+        value = self.value_net(state_tensor)
+        self.values.append(value)
+
+        return action
+
+    def store_reward(self, reward):
+        self.rewards.append(reward)
+
+    def update(self):
+        """Update policy and value network."""
+        # Compute returns
+        returns = []
+        G = 0
+        for reward in reversed(self.rewards):
+            G = reward + self.gamma * G
+            returns.insert(0, G)
+        returns = torch.FloatTensor(returns)
+
+        # Stack values
+        values = torch.cat(self.values).squeeze()
+
+        # Advantages = returns - baseline
+        advantages = returns - values.detach()
+        # Normalize advantages
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        # Policy loss (REINFORCE with baseline)
+        policy_loss = []
+        for log_prob, advantage in zip(self.log_probs, advantages):
+            policy_loss.append(-log_prob * advantage)
+        policy_loss = torch.stack(policy_loss).sum()
+
+        # Value loss (MSE between predicted values and returns)
+        value_loss = nn.functional.mse_loss(values, returns)
+
+        # Update policy
+        self.policy_optimizer.zero_grad()
+        policy_loss.backward()
+        self.policy_optimizer.step()
+
+        # Update value network
+        self.value_optimizer.zero_grad()
+        value_loss.backward()
+        self.value_optimizer.step()
+
+        # Clear storage
+        self.log_probs = []
+        self.values = []
+        self.rewards = []
+
+        return policy_loss.item(), value_loss.item()
+```
+
+</Implementation>
+
+<Tip>
+The optimal baseline is close to the value function $V(s)$. That's why we learn a value network as our baseline. This is our first step toward actor-critic methods—the topic of the next chapter.
+</Tip>
+
+## Reward-to-Go: Causality Matters
+
+There's another variance reduction technique: using **reward-to-go** instead of the full episode return.
+
+<Intuition>
+
+In basic REINFORCE, we weight each $\nabla_\theta \log \pi_\theta(a_t|s_t)$ by the full return $G_0$. But action $a_t$ can only affect rewards from time $t$ onward—not past rewards!
+
+Including past rewards adds noise without adding information. Instead, we should use:
+
+$$G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + ...$$
+
+This is the return from time $t$, not the full episode return. It's what the action at time $t$ actually influenced.
+
+</Intuition>
+
+<Mathematical>
+
+The reward-to-go version of the policy gradient:
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{\pi_\theta}\left[\sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(A_t|S_t) \cdot \left(\sum_{k=t}^{T} \gamma^{k-t} R_{k+1}\right)\right]$$
+
+Compare to using full return:
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{\pi_\theta}\left[\sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(A_t|S_t) \cdot \left(\sum_{k=0}^{T} \gamma^{k} R_{k+1}\right)\right]$$
+
+Both have the same expectation (the early rewards contribute zero in expectation), but reward-to-go has lower variance.
+
+</Mathematical>
+
+<Note>
+Our implementation already uses reward-to-go—we compute $G_t$ for each time step, not a single return for the whole episode. This is standard practice.
+</Note>
+
+## REINFORCE in Action
+
+Let's compare vanilla REINFORCE with the baseline version:
+
+<Implementation>
+
+```python
+def compare_reinforce_variants(num_episodes=1000, num_seeds=5):
+    """Compare vanilla REINFORCE vs. with baseline."""
+    import matplotlib.pyplot as plt
+
+    results = {'vanilla': [], 'baseline': []}
+
+    for seed in range(num_seeds):
+        # Set random seed
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+
+        # Train vanilla REINFORCE
+        env = gym.make('CartPole-v1')
+        agent = REINFORCE(4, 2, lr=0.01, gamma=0.99)
+        rewards = []
+        for _ in range(num_episodes):
+            state, _ = env.reset()
+            done = False
+            ep_reward = 0
+            while not done:
+                action = agent.select_action(state)
+                state, reward, term, trunc, _ = env.step(action)
+                agent.store_reward(reward)
+                ep_reward += reward
+                done = term or trunc
+            agent.update()
+            rewards.append(ep_reward)
+        results['vanilla'].append(rewards)
+
+        # Train REINFORCE with baseline
+        env = gym.make('CartPole-v1')
+        agent = REINFORCEWithBaseline(4, 2, lr=0.01, gamma=0.99)
+        rewards = []
+        for _ in range(num_episodes):
+            state, _ = env.reset()
+            done = False
+            ep_reward = 0
+            while not done:
+                action = agent.select_action(state)
+                state, reward, term, trunc, _ = env.step(action)
+                agent.store_reward(reward)
+                ep_reward += reward
+                done = term or trunc
+            agent.update()
+            rewards.append(ep_reward)
+        results['baseline'].append(rewards)
+
+    # Plot results
+    def smooth(data, window=50):
+        return np.convolve(data, np.ones(window)/window, mode='valid')
+
+    plt.figure(figsize=(10, 6))
+    for name, runs in results.items():
+        mean = np.mean(runs, axis=0)
+        std = np.std(runs, axis=0)
+        smoothed = smooth(mean)
+        x = np.arange(len(smoothed))
+        plt.plot(x, smoothed, label=name)
+        plt.fill_between(x, smooth(mean - std), smooth(mean + std), alpha=0.2)
+
+    plt.xlabel('Episode')
+    plt.ylabel('Reward')
+    plt.title('REINFORCE: Vanilla vs. With Baseline')
+    plt.legend()
+    plt.savefig('reinforce_comparison.png')
+    plt.show()
+
+
+# Run comparison
+compare_reinforce_variants()
+```
+
+</Implementation>
+
+<Warning>
+REINFORCE, even with a baseline, can still be unstable. The learning rate is particularly important—too high and the policy can collapse. Start with small learning rates (0.001 to 0.01) and increase carefully.
+</Warning>
+
+## Summary
+
+<KeyTakeaways>
+- The **policy gradient theorem** shows that $\nabla_\theta J(\theta) = \mathbb{E}[\nabla_\theta \log \pi_\theta(a|s) \cdot G_t]$
+- The **log-probability trick** converts the gradient of an expectation into an expectation of a gradient
+- **REINFORCE** is a Monte Carlo policy gradient algorithm: run episodes, compute returns, update policy
+- **High variance** is REINFORCE's main weakness—gradient estimates are noisy
+- **Baselines** reduce variance without adding bias: use $G_t - b(s)$ instead of $G_t$
+- **Reward-to-go** further reduces variance by only using future rewards
+- A learned **value function** makes an effective baseline
+</KeyTakeaways>
+
+REINFORCE is elegant and it works, but it's slow and noisy. We wait for entire episodes, use Monte Carlo returns with high variance, and throw away experience after one update.
+
+What if we could:
+- Learn from single steps (like TD learning)?
+- Use a learned value function to estimate returns (lower variance)?
+- Update more frequently?
+
+That's exactly what actor-critic methods do—combining the best of policy gradients and value-based learning.
+
+<NextChapter slug="actor-critic-methods" title="Actor-Critic Methods" />
+
+## Exercises
+
+### Conceptual Questions
+
+1. **Explain the log-probability trick in your own words.** Why is it necessary for policy gradients? What would go wrong without it?
+
+2. **Why does REINFORCE have high variance?** Identify at least two sources of randomness that contribute to variance in gradient estimates.
+
+3. **Prove that subtracting a baseline doesn't add bias.** Specifically, show that $\mathbb{E}_{a \sim \pi_\theta}[\nabla_\theta \log \pi_\theta(a|s)] = 0$.
+
+4. **What is causality in the context of policy gradients?** Why does reward-to-go reduce variance?
+
+5. **Compare REINFORCE to Q-learning.** Which is on-policy? Which requires complete episodes? Which typically has higher variance?
+
+### Coding Challenges
+
+6. **Implement REINFORCE from scratch** and train on CartPole. Plot the learning curve over 1000 episodes. What's the average episode length after training?
+
+7. **Add a simple baseline** (running average of recent returns) and compare the learning curve to vanilla REINFORCE. Does it help?
+
+8. **Implement reward-to-go** (if not already using it) and compare to using full episode return for each step. Measure the variance of gradient estimates.
+
+### Exploration
+
+9. **Learning rate sensitivity.** Run REINFORCE with different learning rates (0.001, 0.01, 0.1). What do you observe? Why is policy gradient particularly sensitive to learning rate?
+
+10. **Entropy exploration.** Add an entropy bonus to the policy loss: $L = -\sum_t G_t \log \pi_\theta(a_t|s_t) - \beta H(\pi_\theta)$. How does this affect exploration and learning?

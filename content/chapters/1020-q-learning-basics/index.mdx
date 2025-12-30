@@ -1,0 +1,574 @@
+---
+title: "Q-Learning Basics"
+slug: "q-learning-basics"
+section: "Q-Learning Foundations"
+description: "Master the foundational algorithm for learning optimal behavior through the Q-function"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "intro-to-td"
+    title: "Introduction to TD Learning"
+  - slug: "markov-decision-processes"
+    title: "Markov Decision Processes"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+# Q-Learning Basics
+
+<ChapterObjectives>
+- Explain the difference between state-value (V) and action-value (Q) functions
+- Derive and implement the Q-learning update rule
+- Understand why Q-learning is "off-policy" and what that means
+- Implement a complete tabular Q-learning agent
+- Train an agent to solve GridWorld and CliffWalking environments
+</ChapterObjectives>
+
+## From Evaluation to Control
+
+In the <CrossRef slug="intro-to-td">previous chapter</CrossRef>, we learned how to *evaluate* a policy—figuring out how good each state is under a given policy. But what we really want is to *find* the best policy. How do we go from "this is how good things are" to "this is what I should do"?
+
+This is the leap from **prediction** to **control**, and Q-learning makes it beautifully.
+
+Here's the challenge: with value functions $V(s)$, we know how good each state is, but to choose the best action, we'd need to know what state each action leads to—we'd need a model of the environment. What if we could learn something that directly tells us how good each *action* is?
+
+That's exactly what the **Q-function** does.
+
+## The Q-Function: Actions Have Values Too
+
+<Intuition>
+
+The Q-function $Q(s, a)$ answers the question: "How good is it to take action $a$ in state $s$?"
+
+Think of it like this: you're at a crossroads (state $s$) and have to choose a path (action $a$). The Q-value tells you the expected total reward you'll get if you take that path and then continue with the best possible behavior.
+
+While $V(s)$ is like rating a city as a place to live, $Q(s, a)$ is like rating each specific house in that city. With Q-values, you can simply pick the house (action) with the highest rating—no model needed!
+
+</Intuition>
+
+<Mathematical>
+
+Formally, the **action-value function** under policy $\pi$ is:
+
+$$Q^\pi(s, a) = \mathbb{E}_\pi[G_t | S_t = s, A_t = a]$$
+
+This is the expected return starting from state $s$, taking action $a$, and then following policy $\pi$.
+
+Compare with the state-value function:
+
+$$V^\pi(s) = \mathbb{E}_\pi[G_t | S_t = s]$$
+
+The connection between them is:
+
+$$V^\pi(s) = \sum_a \pi(a|s) Q^\pi(s, a)$$
+
+The state value is the weighted average of Q-values across actions, weighted by the policy's probability of taking each action.
+
+For the **optimal** action-value function $Q^*$, we have the Bellman optimality equation:
+
+$$Q^*(s, a) = \mathbb{E}\left[R_{t+1} + \gamma \max_{a'} Q^*(S_{t+1}, a') \middle| S_t = s, A_t = a\right]$$
+
+This says: the optimal Q-value is the expected immediate reward plus the discounted optimal Q-value of the next state (taking the best action there).
+
+</Mathematical>
+
+### Why Q-Values Enable Control
+
+<Intuition>
+
+Here's why Q-values are so powerful for finding optimal behavior:
+
+**With V-values (state values):**
+- You know $V(s)$ = how good each state is
+- To choose an action, you need to figure out which action leads to the best state
+- That requires knowing the transition dynamics—a model of the environment!
+
+**With Q-values (action values):**
+- You know $Q(s, a)$ = how good each action is in each state
+- To choose an action: just pick $\arg\max_a Q(s, a)$
+- No model needed—the Q-values already encode the action quality!
+
+This is why Q-learning is **model-free control**. We learn directly which actions are good, without ever learning how the environment works.
+
+</Intuition>
+
+## The Q-Learning Update Rule
+
+Now we can apply TD learning to action values. The result is the famous Q-learning algorithm.
+
+<Intuition>
+
+The core idea is the same as TD(0):
+1. We have an estimate of $Q(s, a)$
+2. We take action $a$, observe reward $r$ and next state $s'$
+3. We form a better estimate: $r + \gamma \max_{a'} Q(s', a')$
+4. We update our estimate toward this new target
+
+The key difference from TD: we use the **maximum** Q-value in the next state, regardless of what action we'll actually take. This lets us learn the optimal Q-values even while exploring suboptimally.
+
+</Intuition>
+
+<Mathematical>
+
+The **Q-learning update rule** is:
+
+$$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha \left[ \underbrace{R_{t+1} + \gamma \max_a Q(S_{t+1}, a)}_{\text{TD target}} - \underbrace{Q(S_t, A_t)}_{\text{current estimate}} \right]$$
+
+Let's break this down:
+
+- $Q(S_t, A_t)$: our current estimate of the value of taking action $A_t$ in state $S_t$
+- $R_{t+1}$: the reward we received
+- $\gamma \max_a Q(S_{t+1}, a)$: discounted value of the best action in the next state
+- $\alpha$: learning rate
+
+The TD error for Q-learning is:
+
+$$\delta_t = R_{t+1} + \gamma \max_a Q(S_{t+1}, a) - Q(S_t, A_t)$$
+
+This is stochastic approximation of the Bellman optimality equation. With enough exploration and appropriate learning rates, Q-learning converges to $Q^*$.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+from collections import defaultdict
+
+def q_learning_update(Q, state, action, reward, next_state, done, alpha=0.1, gamma=0.99):
+    """
+    Perform one Q-learning update.
+
+    Args:
+        Q: Q-table as dict[state][action] -> value
+        state: Current state
+        action: Action taken
+        reward: Reward received
+        next_state: Resulting state
+        done: Whether episode ended
+        alpha: Learning rate
+        gamma: Discount factor
+
+    Returns:
+        TD error (useful for monitoring)
+    """
+    # Best Q-value in next state (0 if terminal)
+    if done:
+        best_next_q = 0
+    else:
+        best_next_q = max(Q[next_state].values()) if Q[next_state] else 0
+
+    # TD target: what we think the Q-value should be
+    td_target = reward + gamma * best_next_q
+
+    # TD error: difference between target and current estimate
+    td_error = td_target - Q[state][action]
+
+    # Update Q-value
+    Q[state][action] += alpha * td_error
+
+    return td_error
+```
+
+The `max(Q[next_state].values())` is the critical piece—we always update toward the *best* action, not the action we took.
+
+</Implementation>
+
+## Visualizing Q-Learning
+
+{/* TODO: Interactive Demo - Q-Value Heatmap Explorer */}
+{/* Watch Q-values update in real-time on a GridWorld, hover to see Q(s,a) for all actions */}
+
+One of the most satisfying things about tabular Q-learning is watching the Q-values evolve. On a GridWorld, you can see:
+
+1. **Initial chaos**: Random Q-values everywhere
+2. **Goal region lights up**: Q-values near the goal start to look correct
+3. **Value propagation**: Good Q-values spread backward from the goal
+4. **Policy emergence**: The best action in each cell becomes clear
+
+<Tip>
+In the interactive demo, notice how Q-values "flow" backward from the goal like water filling a terrain. This is the bootstrapping in action—each cell learns from its neighbors' estimates.
+</Tip>
+
+## Off-Policy Learning: The Magic of Q-Learning
+
+Here's something remarkable about Q-learning that sets it apart from many other algorithms: it's **off-policy**.
+
+<Intuition>
+
+**Off-policy** means the agent can learn the optimal policy *while following a completely different policy*.
+
+Imagine a student learning to play chess:
+- **On-policy learning**: "I learn from the games I play. If I play badly, I learn to play badly."
+- **Off-policy learning**: "I learn from the games I play, but I always update as if I'd make the best possible move. Even if I blunder, I learn what I *should* have done."
+
+Q-learning is off-policy because the update rule uses $\max_a Q(s', a)$—the value of the best action—regardless of what action the agent actually took or will take.
+
+This is incredibly powerful:
+- The agent can explore randomly while learning optimal behavior
+- Old experience (collected under a different policy) is still useful
+- The agent can learn from demonstrations, simulations, or replayed data
+
+</Intuition>
+
+{/* TODO: Interactive Demo - Off-Policy Learning Demonstration */}
+{/* Agent follows random policy (epsilon = 1.0) but Q-values still converge to optimal */}
+
+### The Behavior Policy vs. Target Policy
+
+<Mathematical>
+
+In off-policy learning, we distinguish:
+
+- **Behavior policy** $\mu$: The policy the agent actually follows to collect experience
+- **Target policy** $\pi$: The policy we're trying to learn about (in Q-learning, this is $\pi^*$)
+
+For Q-learning:
+- Behavior policy: typically $\epsilon$-greedy (mostly greedy, with random exploration)
+- Target policy: pure greedy, $\pi(s) = \arg\max_a Q(s, a)$
+
+The Q-learning update always uses the max—the target policy—even though the agent might have taken a random action:
+
+$$Q(s, a) \leftarrow Q(s, a) + \alpha[r + \gamma \underbrace{\max_{a'} Q(s', a')}_{\text{target policy}} - Q(s, a)]$$
+
+</Mathematical>
+
+<Warning>
+Off-policy learning is powerful, but it has trade-offs. In particular, when combined with function approximation (neural networks), off-policy learning can become unstable—the infamous "deadly triad" we'll encounter when we discuss DQN.
+</Warning>
+
+## Complete Q-Learning Agent
+
+Let's put everything together into a complete, reusable Q-learning agent.
+
+<Implementation>
+
+```python
+import numpy as np
+from collections import defaultdict
+
+class QLearningAgent:
+    """Tabular Q-learning agent with epsilon-greedy exploration."""
+
+    def __init__(self, n_actions, alpha=0.1, gamma=0.99, epsilon=0.1):
+        """
+        Initialize Q-learning agent.
+
+        Args:
+            n_actions: Number of possible actions
+            alpha: Learning rate (step size)
+            gamma: Discount factor for future rewards
+            epsilon: Exploration probability for epsilon-greedy
+        """
+        self.n_actions = n_actions
+        self.alpha = alpha
+        self.gamma = gamma
+        self.epsilon = epsilon
+
+        # Initialize Q-table: maps state -> array of Q-values for each action
+        # Using defaultdict for automatic initialization of new states
+        self.Q = defaultdict(lambda: np.zeros(n_actions))
+
+    def select_action(self, state):
+        """
+        Select action using epsilon-greedy policy.
+
+        With probability epsilon: random action (explore)
+        With probability 1-epsilon: best action (exploit)
+        """
+        if np.random.random() < self.epsilon:
+            return np.random.randint(self.n_actions)  # Explore
+        else:
+            return np.argmax(self.Q[state])  # Exploit
+
+    def update(self, state, action, reward, next_state, done):
+        """
+        Perform Q-learning update.
+
+        Args:
+            state: State before action
+            action: Action taken
+            reward: Reward received
+            next_state: Resulting state
+            done: Whether episode ended
+
+        Returns:
+            TD error for monitoring
+        """
+        # Compute TD target
+        if done:
+            td_target = reward  # No future value from terminal state
+        else:
+            best_next_q = np.max(self.Q[next_state])
+            td_target = reward + self.gamma * best_next_q
+
+        # Compute TD error and update
+        td_error = td_target - self.Q[state][action]
+        self.Q[state][action] += self.alpha * td_error
+
+        return td_error
+
+    def get_greedy_action(self, state):
+        """Get best action according to current Q-values (no exploration)."""
+        return np.argmax(self.Q[state])
+
+    def get_policy(self):
+        """Extract greedy policy from Q-values."""
+        return {state: np.argmax(q_values) for state, q_values in self.Q.items()}
+
+
+def train_q_learning(agent, env, num_episodes):
+    """
+    Train Q-learning agent on environment.
+
+    Args:
+        agent: QLearningAgent instance
+        env: Environment with reset() and step() methods
+        num_episodes: Number of training episodes
+
+    Returns:
+        rewards_per_episode: List of total rewards for each episode
+    """
+    rewards_per_episode = []
+
+    for episode in range(num_episodes):
+        state = env.reset()
+        done = False
+        total_reward = 0
+
+        while not done:
+            # Select and take action
+            action = agent.select_action(state)
+            next_state, reward, done, _ = env.step(action)
+
+            # Learn from this experience
+            agent.update(state, action, reward, next_state, done)
+
+            # Track progress
+            total_reward += reward
+            state = next_state
+
+        rewards_per_episode.append(total_reward)
+
+    return rewards_per_episode
+```
+
+</Implementation>
+
+### Using the Agent
+
+<Implementation>
+
+```python
+# Example: Training on a simple GridWorld
+import numpy as np
+
+class SimpleGridWorld:
+    """Simple 5x5 grid with goal in bottom-right corner."""
+
+    def __init__(self):
+        self.size = 5
+        self.goal = (4, 4)
+        self.reset()
+
+    def reset(self):
+        self.pos = (0, 0)  # Start at top-left
+        return self.pos
+
+    def step(self, action):
+        """Actions: 0=up, 1=right, 2=down, 3=left"""
+        x, y = self.pos
+        moves = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+        dx, dy = moves[action]
+
+        # Apply move (with boundary checking)
+        new_x = max(0, min(self.size - 1, x + dx))
+        new_y = max(0, min(self.size - 1, y + dy))
+        self.pos = (new_x, new_y)
+
+        # Check for goal
+        if self.pos == self.goal:
+            return self.pos, 1.0, True, {}  # Reward at goal
+        else:
+            return self.pos, -0.01, False, {}  # Small step penalty
+
+
+# Train the agent
+env = SimpleGridWorld()
+agent = QLearningAgent(n_actions=4, alpha=0.1, gamma=0.99, epsilon=0.1)
+rewards = train_q_learning(agent, env, num_episodes=500)
+
+# Print learned policy
+policy = agent.get_policy()
+action_symbols = ['↑', '→', '↓', '←']
+print("Learned policy:")
+for x in range(5):
+    row = ""
+    for y in range(5):
+        if (x, y) == (4, 4):
+            row += "G "  # Goal
+        elif (x, y) in policy:
+            row += action_symbols[policy[(x, y)]] + " "
+        else:
+            row += "? "
+    print(row)
+```
+
+</Implementation>
+
+## CliffWalking: Q-Learning in Action
+
+The **CliffWalking** environment is a classic benchmark that beautifully illustrates Q-learning's behavior.
+
+<Intuition>
+
+Imagine a 4x12 grid where:
+- You start at the bottom-left
+- The goal is at the bottom-right
+- The entire bottom row (except start and goal) is a cliff
+- Falling off the cliff gives -100 reward and sends you back to start
+- Every other step gives -1 reward
+
+There are two strategies:
+1. **Safe path**: Go up, walk along the top, come back down to the goal. Longer but safe.
+2. **Optimal path**: Walk along the bottom, right next to the cliff. Shorter but risky if you slip.
+
+Q-learning, with its max operator, learns the *optimal* path along the cliff edge—it assumes you'll always make the best move. This path has higher expected return when execution is perfect.
+
+</Intuition>
+
+{/* TODO: Interactive Demo - CliffWalking Q-Learning */}
+{/* Watch agent learn to avoid cliff, tune parameters, visualize Q-values */}
+
+<Implementation>
+
+```python
+class CliffWalkingEnv:
+    """
+    Classic CliffWalking environment.
+
+    4x12 grid:
+    - Start: bottom-left (3, 0)
+    - Goal: bottom-right (3, 11)
+    - Cliff: bottom row from (3, 1) to (3, 10)
+    """
+
+    def __init__(self):
+        self.height = 4
+        self.width = 12
+        self.start = (3, 0)
+        self.goal = (3, 11)
+        self.cliff = [(3, i) for i in range(1, 11)]
+        self.reset()
+
+    def reset(self):
+        self.pos = self.start
+        return self.pos
+
+    def step(self, action):
+        """Actions: 0=up, 1=right, 2=down, 3=left"""
+        x, y = self.pos
+        moves = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+        dx, dy = moves[action]
+
+        new_x = max(0, min(self.height - 1, x + dx))
+        new_y = max(0, min(self.width - 1, y + dy))
+        self.pos = (new_x, new_y)
+
+        # Check for cliff
+        if self.pos in self.cliff:
+            self.pos = self.start
+            return self.pos, -100, False, {}
+
+        # Check for goal
+        if self.pos == self.goal:
+            return self.pos, -1, True, {}
+
+        return self.pos, -1, False, {}
+
+
+# Train Q-learning on CliffWalking
+env = CliffWalkingEnv()
+agent = QLearningAgent(n_actions=4, alpha=0.5, gamma=1.0, epsilon=0.1)
+rewards = train_q_learning(agent, env, num_episodes=500)
+
+print(f"Average reward (last 100 episodes): {np.mean(rewards[-100:]):.1f}")
+```
+
+</Implementation>
+
+<Note>
+The optimal path in CliffWalking gives -13 reward (13 steps along the bottom). When you run Q-learning, you should see the average reward approaching this value. If you're getting around -17 to -15, the agent might be taking a slightly safer path—try increasing `epsilon` early in training to ensure enough exploration of the cliff-edge route.
+</Note>
+
+## SARSA: The On-Policy Alternative
+
+For comparison, let's briefly mention **SARSA**—Q-learning's on-policy sibling.
+
+<Intuition>
+
+SARSA stands for **S**tate-**A**ction-**R**eward-**S**tate-**A**ction. Instead of updating toward the *best* next action, SARSA updates toward the action you *actually take*:
+
+**Q-learning (off-policy):**
+$$Q(s, a) \leftarrow Q(s, a) + \alpha[r + \gamma \max_{a'} Q(s', a') - Q(s, a)]$$
+
+**SARSA (on-policy):**
+$$Q(s, a) \leftarrow Q(s, a) + \alpha[r + \gamma Q(s', a') - Q(s, a)]$$
+
+where $a'$ is the action actually selected in state $s'$.
+
+On CliffWalking, this leads to different learned behavior:
+- **Q-learning**: Learns the optimal path along the cliff (assumes perfect execution)
+- **SARSA**: Learns a safer path further from the cliff (accounts for its own exploration)
+
+SARSA learns the value of the policy it's actually following, including exploration missteps. Q-learning learns the value of the optimal policy, assuming you'll execute it perfectly.
+
+</Intuition>
+
+<Warning>
+We won't implement SARSA in detail here—the focus is on Q-learning. But understanding the on-policy vs off-policy distinction helps you appreciate why Q-learning's max operator is both powerful and sometimes problematic (as we'll see with function approximation).
+</Warning>
+
+## Summary
+
+<KeyTakeaways>
+- The **Q-function** $Q(s, a)$ tells us the value of taking action $a$ in state $s$. Unlike $V(s)$, it lets us choose optimal actions *without a model*.
+- The **Q-learning update** uses $\max_a Q(s', a)$—the best next action—regardless of what action was taken. This makes it **off-policy**.
+- **Off-policy learning** means learning the optimal policy while following a different policy (e.g., $\epsilon$-greedy for exploration).
+- A complete Q-learning agent needs: Q-table initialization, $\epsilon$-greedy action selection, and the TD update with max.
+- On CliffWalking, Q-learning finds the optimal (risky) path along the cliff edge.
+</KeyTakeaways>
+
+We've been using $\epsilon$-greedy for exploration—randomly choosing actions with probability $\epsilon$. But is this the best way to explore? What if we could be smarter about when and how to explore?
+
+That's exactly what we'll tackle next.
+
+<NextChapter slug="exploration-exploitation" title="Exploration vs Exploitation" />
+
+## Exercises
+
+### Conceptual Questions
+
+1. **Why do we need $Q(s, a)$ instead of $V(s)$ for control?** What information does Q give us that V doesn't? Can you give a concrete example where you know $V$ for all states but still can't determine the optimal action?
+
+2. **Explain "off-policy" in your own words.** Why is it useful for reinforcement learning? Give an example of when off-policy learning would be especially helpful.
+
+3. **If you had the optimal $Q^*$ table, how would you extract the optimal policy?** Write the formula. Is this policy deterministic or stochastic?
+
+4. **What happens if you set $\alpha = 1$ in Q-learning?** Think about the update equation. What about $\alpha = 0$?
+
+### Coding Challenges
+
+5. **Implement Q-learning for GridWorld** and visualize the learned Q-values. Create a heatmap or arrow diagram showing the policy that emerges.
+
+6. **Plot the learning curve** (cumulative reward per episode over time). What does convergence look like? How does $\alpha$ affect the curve?
+
+7. **Compare Q-learning with random action selection.** Train two agents: one using Q-learning, one always selecting random actions. Plot their rewards over episodes. How quickly does Q-learning surpass random?
+
+### Exploration
+
+8. **Experiment with $\gamma$ on CliffWalking.** Try $\gamma = 0.5$, $\gamma = 0.9$, and $\gamma = 0.99$. How does the discount factor change the learned policy? Can you explain why the paths differ?
+
+9. **Implement SARSA** and compare its behavior with Q-learning on CliffWalking. Which finds a safer policy? Why?

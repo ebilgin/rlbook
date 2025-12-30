@@ -1,0 +1,194 @@
+---
+title: "Experiment Tracking for RL"
+slug: "experiment-tracking"
+description: "Set up experiment tracking for reinforcement learning projects. Compare runs, track metrics, and reproduce results with Weights & Biases and MLflow."
+section: "Experiment Management"
+status: draft
+lastReviewed: null
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+
+# Experiment Tracking for RL
+
+<Intuition>
+
+## Why Tracking Matters More in RL
+
+Reinforcement learning experiments are notoriously hard to reproduce. Small changes in random seeds, hyperparameters, or even library versions can produce dramatically different results.
+
+Good experiment tracking isn't optional—it's the difference between "I got 500 reward once" and "here's exactly how to reproduce 500 reward."
+
+</Intuition>
+
+## What to Track
+
+<Intuition>
+
+### Metrics
+
+**Training metrics:**
+- Episode reward (mean, min, max, std)
+- Episode length
+- Policy loss, value loss
+- Entropy (exploration indicator)
+- Learning rate schedule
+
+**Evaluation metrics:**
+- Evaluation reward (deterministic policy)
+- Success rate (if applicable)
+- Custom domain metrics
+
+### Artifacts
+
+- Model checkpoints
+- Training videos/renders
+- Configuration files
+- Environment specifications
+
+### Metadata
+
+- Git commit hash
+- Library versions (gym, torch, etc.)
+- Hardware specs
+- Random seeds
+
+</Intuition>
+
+## Tool Comparison
+
+<Intuition>
+
+| Feature | Weights & Biases | MLflow | TensorBoard |
+|---------|------------------|--------|-------------|
+| **Hosting** | Cloud (free tier) | Self-hosted or cloud | Local |
+| **Collaboration** | Built-in | Manual setup | Limited |
+| **Hyperparameter sweeps** | Yes | Yes (Optuna) | No |
+| **Model registry** | Yes | Yes | No |
+| **Cost** | Free/paid | Open source | Free |
+
+**Recommendation:** Start with W&B for ease of use, consider MLflow if you need self-hosting or already use it.
+
+</Intuition>
+
+## Setup with Weights & Biases
+
+<Implementation>
+
+```python
+import wandb
+import gymnasium as gym
+
+# Initialize
+wandb.init(
+    project="rl-experiments",
+    config={
+        "algorithm": "PPO",
+        "env": "CartPole-v1",
+        "learning_rate": 3e-4,
+        "gamma": 0.99,
+        "clip_eps": 0.2,
+        "seed": 42,
+    }
+)
+
+# Training loop
+for episode in range(1000):
+    state, _ = env.reset()
+    episode_reward = 0
+
+    while True:
+        action = policy.select_action(state)
+        state, reward, done, truncated, _ = env.step(action)
+        episode_reward += reward
+
+        if done or truncated:
+            break
+
+    # Log metrics
+    wandb.log({
+        "episode": episode,
+        "reward": episode_reward,
+        "epsilon": policy.epsilon,
+    })
+
+# Save model artifact
+artifact = wandb.Artifact("policy", type="model")
+artifact.add_file("policy.pt")
+wandb.log_artifact(artifact)
+
+wandb.finish()
+```
+
+**Video logging** (critical for RL debugging):
+
+```python
+# Record evaluation episodes
+frames = []
+state, _ = env.reset()
+while True:
+    frames.append(env.render())
+    action = policy.select_action(state, deterministic=True)
+    state, reward, done, truncated, _ = env.step(action)
+    if done or truncated:
+        break
+
+# Log as video
+wandb.log({"eval_video": wandb.Video(np.array(frames), fps=30)})
+```
+
+</Implementation>
+
+## Hyperparameter Sweeps
+
+<Implementation>
+
+```yaml
+# sweep.yaml
+program: train.py
+method: bayes  # or grid, random
+metric:
+  name: eval_reward
+  goal: maximize
+parameters:
+  learning_rate:
+    distribution: log_uniform
+    min: -5  # 1e-5
+    max: -2  # 1e-2
+  gamma:
+    values: [0.95, 0.99, 0.999]
+  clip_eps:
+    values: [0.1, 0.2, 0.3]
+```
+
+```bash
+# Run sweep
+wandb sweep sweep.yaml
+wandb agent <sweep-id>
+```
+
+</Implementation>
+
+## Best Practices
+
+<Intuition>
+
+1. **Log everything, filter later.** Storage is cheap; missing data is expensive.
+
+2. **Use deterministic evaluation.** Training rewards are noisy; eval with fixed seeds.
+
+3. **Record videos regularly.** Reward curves can look good while behavior is broken.
+
+4. **Tag experiments.** Use tags like "baseline", "ablation", "final" for filtering.
+
+5. **Save configs as artifacts.** Your future self will thank you.
+
+6. **Set random seeds explicitly.** And log them.
+
+</Intuition>
+
+## Further Reading
+
+- [W&B Documentation](https://docs.wandb.ai/)
+- [MLflow Tracking Guide](https://mlflow.org/docs/latest/tracking.html)
+- [Reproducibility Checklist](https://www.cs.mcgill.ca/~jpineau/ReproducibilityChecklist.pdf)
