@@ -48,42 +48,42 @@ const statusLabels: Record<string, string> = {
 ---
 
 <BaseLayout title={title} description={description}>
-  <div class="min-h-screen bg-gray-50">
+  <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
     <!-- Header -->
-    <header class="bg-white border-b border-gray-200">
+    <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
       <div class="max-w-4xl mx-auto px-4 py-8">
-        <nav class="text-sm text-gray-500 mb-4">
-          <a href="/" class="hover:text-primary-600">Home</a>
+        <nav class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          <a href="/" class="hover:text-primary-600 dark:hover:text-primary-400">Home</a>
           <span class="mx-2">→</span>
-          <a href="/applications" class="hover:text-primary-600">Applications</a>
+          <a href="/applications" class="hover:text-primary-600 dark:hover:text-primary-400">Applications</a>
           <span class="mx-2">→</span>
-          <span class="text-gray-900">{title}</span>
+          <span class="text-gray-900 dark:text-gray-100">{title}</span>
         </nav>
         <div class="flex items-center gap-3 mb-2">
-          <span class="text-sm px-2 py-1 bg-rose-100 text-rose-800 rounded-full">
+          <span class="text-sm px-2 py-1 bg-rose-100 dark:bg-rose-900/50 text-rose-800 dark:text-rose-300 rounded-full">
             {statusLabels[status] || status}
           </span>
         </div>
-        <h1 class="text-3xl font-bold mb-2">{title}</h1>
-        {description && <p class="text-lg text-gray-600">{description}</p>}
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">{title}</h1>
+        {description && <p class="text-lg text-gray-600 dark:text-gray-300">{description}</p>}
       </div>
     </header>
 
     <!-- Content -->
     <main class="max-w-4xl mx-auto px-4 py-12">
-      <article class="prose prose-lg max-w-none bg-white rounded-xl border border-gray-200 p-8">
+      <article class="prose prose-lg dark:prose-invert max-w-none bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8">
         <Content />
       </article>
 
       <!-- Footer -->
-      <footer class="mt-8 pt-8 border-t border-gray-200">
+      <footer class="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
         <div class="flex justify-between items-center">
-          <a href="/applications" class="text-primary-600 hover:underline">
+          <a href="/applications" class="text-primary-600 dark:text-primary-400 hover:underline">
             ← Back to Applications
           </a>
           <a
             href={`https://github.com/ebilgin/rlbook/blob/main/content/applications/${dirName}/index.mdx`}
-            class="text-gray-600 hover:text-primary-600"
+            class="text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
             target="_blank"
           >
             Edit on GitHub →
