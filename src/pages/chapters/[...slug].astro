@@ -1,42 +1,105 @@
 ---
 import ChapterLayout from '../../layouts/ChapterLayout.astro';
-import { chapters, type ChapterData } from '../../lib/chapters';
+import SubsectionLayout from '../../layouts/SubsectionLayout.astro';
+import {
+  chapters,
+  type ChapterData,
+  type SubsectionData,
+  getChaptersArray,
+  getAdjacentChapters,
+  getSubsection,
+  getSubsectionsForChapter,
+  getAdjacentSubsections,
+} from '../../lib/chapters';
 
+// Generate static paths for both chapters and subsections
 export function getStaticPaths() {
-  return Object.keys(chapters).map((slug) => ({
-    params: { slug },
-    props: { chapterData: chapters[slug] },
-  }));
+  const paths: Array<{ params: { slug: string }; props: any }> = [];
+
+  // Add chapter paths
+  for (const chapterSlug of Object.keys(chapters)) {
+    const chapter = chapters[chapterSlug];
+    paths.push({
+      params: { slug: chapterSlug },
+      props: {
+        type: 'chapter',
+        chapterData: chapter,
+      },
+    });
+
+    // Add subsection paths for this chapter
+    if (chapter.subsections) {
+      for (const subsection of chapter.subsections) {
+        paths.push({
+          params: { slug: `${chapterSlug}/${subsection.slug}` },
+          props: {
+            type: 'subsection',
+            chapterData: chapter,
+            subsectionData: subsection,
+          },
+        });
+      }
+    }
+  }
+
+  return paths;
 }
 
 interface Props {
+  type: 'chapter' | 'subsection';
   chapterData: ChapterData;
+  subsectionData?: SubsectionData;
 }
 
-const { chapterData } = Astro.props;
+const { type, chapterData, subsectionData } = Astro.props;
 
-// Try to import the MDX content for this chapter
+// Get all chapters for sidebar navigation
+const allChapters = getChaptersArray();
+const { prev: prevChapter, next: nextChapter } = getAdjacentChapters(chapterData.slug);
+const subsections = getSubsectionsForChapter(chapterData.slug);
+
+// For subsection pages, get adjacent subsections
+let adjacentSubs: ReturnType<typeof getAdjacentSubsections> | null = null;
+if (type === 'subsection' && subsectionData) {
+  adjacentSubs = getAdjacentSubsections(chapterData.slug, subsectionData.slug);
+}
+
+// Try to import the MDX content
 let Content = null;
 let frontmatter = null;
 let hasContent = false;
 
 try {
-  // Dynamic import of MDX file based on chapter directory
-  const mdxModules = import.meta.glob('/content/chapters/*/index.mdx', { eager: true });
-  const mdxPath = `/content/chapters/${chapterData.dirName}/index.mdx`;
+  if (type === 'chapter') {
+    // Chapter content: /content/chapters/{dirName}/index.mdx
+    const mdxModules = import.meta.glob('/content/chapters/*/index.mdx', { eager: true });
+    const mdxPath = `/content/chapters/${chapterData.dirName}/index.mdx`;
 
-  if (mdxModules[mdxPath]) {
-    const mdxModule = mdxModules[mdxPath] as any;
-    Content = mdxModule.default;
-    frontmatter = mdxModule.frontmatter || {};
-    hasContent = true;
+    if (mdxModules[mdxPath]) {
+      const mdxModule = mdxModules[mdxPath] as any;
+      Content = mdxModule.default;
+      frontmatter = mdxModule.frontmatter || {};
+      hasContent = true;
+    }
+  } else if (type === 'subsection' && subsectionData) {
+    // Subsection content: /content/chapters/{dirName}/{subsectionSlug}.mdx
+    // Note: Exclude index.mdx files which are chapter overviews
+    const mdxModules = import.meta.glob('/content/chapters/*/*.mdx', { eager: true });
+    const mdxPath = `/content/chapters/${chapterData.dirName}/${subsectionData.slug}.mdx`;
+
+    if (mdxModules[mdxPath] && subsectionData.slug !== 'index') {
+      const mdxModule = mdxModules[mdxPath] as any;
+      Content = mdxModule.default;
+      frontmatter = mdxModule.frontmatter || {};
+      hasContent = true;
+    }
   }
 } catch (e) {
-  // Content not found, will show placeholder
-  console.log(`No content found for ${chapterData.slug}`);
+  console.log(`No content found for ${chapterData.slug}${subsectionData ? '/' + subsectionData.slug : ''}`);
 }
 
-// Merge frontmatter with chapter data
+// Build frontmatter for chapter layout
+const chapterNumber = parseInt(chapterData.dirName.split('-')[0]) / 10;
 const mergedFrontmatter = {
   title: frontmatter?.title || chapterData.title,
   section: frontmatter?.section || chapterData.section,
@@ -44,33 +107,99 @@ const mergedFrontmatter = {
   status: frontmatter?.status || chapterData.status,
   lastReviewed: frontmatter?.lastReviewed,
   prerequisites: frontmatter?.prerequisites,
-  chapter: parseInt(chapterData.dirName.split('-')[0]) / 10, // Convert 1010 -> 101, 2010 -> 201
+  chapter: chapterNumber,
 };
+
+// Build frontmatter for subsection layout
+const subsectionFrontmatter = subsectionData ? {
+  title: frontmatter?.title || subsectionData.title,
+  description: frontmatter?.description || subsectionData.description,
+  chapterTitle: chapterData.title,
+  chapterSlug: chapterData.slug,
+  section: chapterData.section,
+  chapter: chapterNumber,
+  status: frontmatter?.status || chapterData.status,
+} : null;
 ---
 
-<ChapterLayout frontmatter={mergedFrontmatter}>
-  {hasContent && Content ? (
-    <Content />
-  ) : (
-    <div class="text-center py-20 bg-gray-50 rounded-xl">
-      <div class="text-6xl mb-4">🚧</div>
-      <h2 class="text-2xl font-bold mb-4">Content Coming Soon</h2>
-      <p class="text-gray-600 max-w-md mx-auto mb-6">
-        This chapter is currently being generated from our prompt templates.
-        Check back soon or contribute on GitHub!
-      </p>
-      <div class="flex justify-center gap-4">
-        <a
-          href={`https://github.com/ebilgin/rlbook/blob/main/content/chapters/${chapterData.dirName}/prompt.md`}
-          class="text-primary-600 hover:underline"
-          target="_blank"
-        >
-          View Prompt →
-        </a>
-        <a href="/" class="text-gray-600 hover:underline">
-          ← Back to Home
-        </a>
+{type === 'chapter' ? (
+  <ChapterLayout
+    frontmatter={mergedFrontmatter}
+    currentSlug={chapterData.slug}
+    chapters={allChapters}
+    prevChapter={prevChapter}
+    nextChapter={nextChapter}
+    subsections={subsections}
+  >
+    {hasContent && Content ? (
+      <Content />
+    ) : (
+      <div class="text-center py-20 bg-gray-50 dark:bg-gray-800 rounded-xl">
+        <div class="text-6xl mb-4">🚧</div>
+        <h2 class="text-2xl font-bold mb-4">Content Coming Soon</h2>
+        <p class="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-6">
+          This chapter is currently being generated from our prompt templates.
+          Check back soon or contribute on GitHub!
+        </p>
+
+        {subsections.length > 0 && (
+          <div class="mb-8">
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Or jump to a subsection:</p>
+            <div class="flex flex-wrap justify-center gap-2">
+              {subsections.map((sub, i) => (
+                <a
+                  href={`/chapters/${chapterData.slug}/${sub.slug}`}
+                  class="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/50 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+                >
+                  {i + 1}. {sub.title}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div class="flex justify-center gap-4">
+          <a
+            href={`https://github.com/ebilgin/rlbook/blob/main/content/chapters/${chapterData.dirName}/prompt.md`}
+            class="text-primary-600 dark:text-primary-400 hover:underline"
+            target="_blank"
+          >
+            View Prompt →
+          </a>
+          <a href="/" class="text-gray-600 dark:text-gray-400 hover:underline">
+            ← Back to Home
+          </a>
+        </div>
       </div>
-    </div>
-  )}
-</ChapterLayout>
+    )}
+  </ChapterLayout>
+) : (
+  <SubsectionLayout
+    frontmatter={subsectionFrontmatter!}
+    currentSlug={chapterData.slug}
+    currentSubsectionSlug={subsectionData!.slug}
+    chapters={allChapters}
+    subsections={subsections}
+    adjacentSubs={adjacentSubs!}
+  >
+    {hasContent && Content ? (
+      <Content />
+    ) : (
+      <div class="text-center py-20 bg-gray-50 dark:bg-gray-800 rounded-xl">
+        <div class="text-6xl mb-4">🚧</div>
+        <h2 class="text-2xl font-bold mb-4">Content Coming Soon</h2>
+        <p class="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-6">
+          This subsection is currently being generated.
+        </p>
+        <div class="flex justify-center gap-4">
+          <a
+            href={`/chapters/${chapterData.slug}`}
+            class="text-primary-600 dark:text-primary-400 hover:underline"
+          >
+            ← Back to Chapter
+          </a>
+        </div>
+      </div>
+    )}
+  </SubsectionLayout>
+)}

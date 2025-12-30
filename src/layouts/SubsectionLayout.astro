@@ -1,0 +1,184 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import { ComplexityProvider, ComplexityToggle } from '../components/ui/ComplexityToggle';
+import { ContentStatus } from '../components/ui/ContentStatus';
+import { Sidebar } from '../components/ui/Sidebar';
+import type { ChapterData, SubsectionData } from '../lib/chapters';
+
+interface ChapterInfo {
+  slug: string;
+  title: string;
+  section: string;
+}
+
+interface Props {
+  frontmatter: {
+    title: string;
+    description: string;
+    chapterTitle: string;
+    chapterSlug: string;
+    section: string;
+    chapter: number;
+    status?: 'draft' | 'editor_reviewed' | 'community_reviewed' | 'verified';
+  };
+  currentSlug: string;
+  currentSubsectionSlug: string;
+  chapters: ChapterInfo[];
+  subsections: SubsectionData[];
+  adjacentSubs: {
+    prev?: SubsectionData;
+    next?: SubsectionData;
+    prevChapter?: ChapterData;
+    nextChapter?: ChapterData;
+  };
+}
+
+const { frontmatter, currentSlug, currentSubsectionSlug, chapters, subsections, adjacentSubs } = Astro.props;
+const { title, description, chapterTitle, chapterSlug, section, chapter, status = 'draft' } = frontmatter;
+
+// Find current subsection index
+const currentIndex = subsections.findIndex(s => s.slug === currentSubsectionSlug);
+---
+
+<BaseLayout title={`${title} | ${chapterTitle}`} description={description}>
+  <div class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="hidden lg:block w-64 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 bg-white dark:bg-gray-900">
+      <div class="sticky top-0 h-screen overflow-y-auto">
+        <Sidebar
+          chapters={chapters}
+          currentSlug={currentSlug}
+          currentSubsectionSlug={currentSubsectionSlug}
+          subsections={subsections}
+          client:load
+        />
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="flex-1 px-4 py-8 lg:px-8 max-w-4xl mx-auto">
+      <!-- Breadcrumb -->
+      <nav class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+        <a href="/chapters" class="hover:text-primary-600 dark:hover:text-primary-400">Chapters</a>
+        <span class="mx-2">→</span>
+        <a href={`/chapters/${chapterSlug}`} class="hover:text-primary-600 dark:hover:text-primary-400">
+          {chapterTitle}
+        </a>
+        <span class="mx-2">→</span>
+        <span class="text-gray-700 dark:text-gray-300">{title}</span>
+      </nav>
+
+      <!-- Subsection header -->
+      <header class="mb-8">
+        <div class="flex items-center gap-3 mb-2">
+          <span class="text-sm text-gray-500 dark:text-gray-400">
+            {section} • Part {currentIndex + 1} of {subsections.length}
+          </span>
+          <ContentStatus status={status} client:load />
+        </div>
+        <h1 class="text-3xl font-bold mb-2">{title}</h1>
+        <p class="text-lg text-gray-600 dark:text-gray-300">{description}</p>
+      </header>
+
+      <!-- Progress indicator -->
+      <div class="mb-8">
+        <div class="flex items-center gap-1">
+          {subsections.map((sub, i) => (
+            <a
+              href={`/chapters/${chapterSlug}/${sub.slug}`}
+              class={`h-1.5 flex-1 rounded-full transition-colors ${
+                i === currentIndex
+                  ? 'bg-primary-500'
+                  : i < currentIndex
+                    ? 'bg-primary-300 dark:bg-primary-700'
+                    : 'bg-gray-200 dark:bg-gray-700'
+              }`}
+              title={sub.title}
+            />
+          ))}
+        </div>
+      </div>
+
+      <!-- Complexity toggle -->
+      <div class="mb-8">
+        <ComplexityToggle client:load />
+      </div>
+
+      <!-- Subsection content -->
+      <article class="prose prose-lg dark:prose-invert max-w-none">
+        <ComplexityProvider client:load>
+          <slot />
+        </ComplexityProvider>
+      </article>
+
+      <!-- Navigation -->
+      <nav class="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex justify-between gap-4">
+          <!-- Previous -->
+          <div class="flex-1">
+            {adjacentSubs.prev ? (
+              <a
+                href={`/chapters/${chapterSlug}/${adjacentSubs.prev.slug}`}
+                class="block p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
+              >
+                <span class="text-sm text-gray-500 dark:text-gray-400">Previous</span>
+                <div class="font-medium text-gray-900 dark:text-gray-100">{adjacentSubs.prev.title}</div>
+              </a>
+            ) : adjacentSubs.prevChapter ? (
+              <a
+                href={`/chapters/${adjacentSubs.prevChapter.slug}`}
+                class="block p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
+              >
+                <span class="text-sm text-gray-500 dark:text-gray-400">Previous Chapter</span>
+                <div class="font-medium text-gray-900 dark:text-gray-100">{adjacentSubs.prevChapter.title}</div>
+              </a>
+            ) : null}
+          </div>
+
+          <!-- Next -->
+          <div class="flex-1 text-right">
+            {adjacentSubs.next ? (
+              <a
+                href={`/chapters/${chapterSlug}/${adjacentSubs.next.slug}`}
+                class="block p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
+              >
+                <span class="text-sm text-gray-500 dark:text-gray-400">Next</span>
+                <div class="font-medium text-gray-900 dark:text-gray-100">{adjacentSubs.next.title}</div>
+              </a>
+            ) : adjacentSubs.nextChapter ? (
+              <a
+                href={`/chapters/${adjacentSubs.nextChapter.slug}`}
+                class="block p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
+              >
+                <span class="text-sm text-gray-500 dark:text-gray-400">Next Chapter</span>
+                <div class="font-medium text-gray-900 dark:text-gray-100">{adjacentSubs.nextChapter.title}</div>
+              </a>
+            ) : null}
+          </div>
+        </div>
+      </nav>
+
+      <!-- Comments -->
+      <footer class="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">
+        <div id="giscus-container" class="mt-8">
+          <script
+            src="https://giscus.app/client.js"
+            data-repo="ebilgin/rlbook"
+            data-repo-id="R_kgDOQw0g7Q"
+            data-category="General"
+            data-category-id="DIC_kwDOQw0g7c4C0Yda"
+            data-mapping="pathname"
+            data-strict="0"
+            data-reactions-enabled="1"
+            data-emit-metadata="0"
+            data-input-position="bottom"
+            data-theme="dark"
+            data-lang="en"
+            crossorigin="anonymous"
+            async
+          ></script>
+        </div>
+      </footer>
+    </main>
+  </div>
+</BaseLayout>

@@ -1,0 +1,143 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getBlogPosts, getAuthorsFromPosts, formatDate, type Author } from '../../lib/blog';
+
+// Get all blog MDX files
+const mdxModules = import.meta.glob('/content/blog/*/index.mdx', { eager: true });
+const posts = getBlogPosts(mdxModules);
+const authors = getAuthorsFromPosts(posts);
+
+// Get filter params (if any)
+const url = new URL(Astro.request.url);
+const authorFilter = url.searchParams.get('author');
+const filteredPosts = authorFilter
+  ? posts.filter((p) => p.author.slug === authorFilter)
+  : posts;
+const filterAuthor = authorFilter ? authors.find((a) => a.slug === authorFilter) : null;
+---
+
+<BaseLayout title="Blog">
+  <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <!-- Header -->
+    <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <div class="max-w-4xl mx-auto px-4 py-12">
+        <nav class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          <a href="/" class="hover:text-primary-600 dark:hover:text-primary-400">Home</a>
+          <span class="mx-2">&rarr;</span>
+          {filterAuthor ? (
+            <>
+              <a href="/blog" class="hover:text-primary-600 dark:hover:text-primary-400">Blog</a>
+              <span class="mx-2">&rarr;</span>
+              <span class="text-gray-900 dark:text-gray-100">{filterAuthor.name}</span>
+            </>
+          ) : (
+            <span class="text-gray-900 dark:text-gray-100">Blog</span>
+          )}
+        </nav>
+        <div class="flex items-center gap-3 mb-4">
+          <span class="text-4xl">📝</span>
+          <h1 class="text-4xl font-bold text-gray-900 dark:text-gray-100">
+            {filterAuthor ? `Posts by ${filterAuthor.name}` : 'Blog'}
+          </h1>
+        </div>
+        <p class="text-xl text-gray-600 dark:text-gray-300 max-w-2xl">
+          {filterAuthor
+            ? `Articles and insights from ${filterAuthor.name}.`
+            : 'Insights, updates, and guest posts about reinforcement learning and rlbook.ai.'}
+        </p>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-4xl mx-auto px-4 py-12">
+      {posts.length === 0 ? (
+        <div class="text-center py-20 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+          <div class="text-6xl mb-4">📝</div>
+          <h2 class="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Blog Coming Soon</h2>
+          <p class="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-6">
+            We're working on our first posts. Check back soon for updates about rlbook.ai and reinforcement learning insights.
+          </p>
+          <a href="/" class="text-primary-600 dark:text-primary-400 hover:underline">&larr; Back to Home</a>
+        </div>
+      ) : (
+        <div class="space-y-8">
+          {/* Author filter pills (if multiple authors) */}
+          {authors.length > 1 && !filterAuthor && (
+            <div class="flex flex-wrap gap-2 mb-8">
+              <span class="text-sm text-gray-500 dark:text-gray-400 self-center mr-2">Filter by author:</span>
+              {authors.map((author) => (
+                <a
+                  href={`/blog?author=${author.slug}`}
+                  class="px-3 py-1 text-sm rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-primary-100 dark:hover:bg-primary-900/50 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+                >
+                  {author.name}
+                </a>
+              ))}
+            </div>
+          )}
+
+          {filterAuthor && (
+            <div class="mb-8">
+              <a
+                href="/blog"
+                class="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                &larr; View all posts
+              </a>
+            </div>
+          )}
+
+          {/* Blog posts */}
+          <div class="space-y-6">
+            {filteredPosts.map((post) => (
+              <article class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-lg transition-all">
+                <a href={`/blog/${post.slug}`} class="block p-6">
+                  <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100 hover:text-primary-600 dark:hover:text-primary-400 transition-colors mb-3">
+                    {post.title}
+                  </h2>
+                  <p class="text-gray-600 dark:text-gray-400 mb-4">{post.description}</p>
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                      {post.author.avatar ? (
+                        <img
+                          src={post.author.avatar}
+                          alt={post.author.name}
+                          class="w-8 h-8 rounded-full"
+                        />
+                      ) : (
+                        <div class="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-700 dark:text-primary-300 text-sm font-medium">
+                          {post.author.name.charAt(0)}
+                        </div>
+                      )}
+                      <div class="text-sm">
+                        <span class="text-gray-900 dark:text-gray-100 font-medium">
+                          {post.author.name}
+                        </span>
+                        <span class="text-gray-400 dark:text-gray-500 mx-2">&middot;</span>
+                        <time class="text-gray-500 dark:text-gray-400" datetime={post.publishedDate}>
+                          {formatDate(post.publishedDate)}
+                        </time>
+                      </div>
+                    </div>
+                    <div class="flex items-center text-primary-600 dark:text-primary-400 text-sm font-medium">
+                      Read
+                      <svg
+                        class="w-4 h-4 ml-1"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+                </a>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+
+    </main>
+  </div>
+</BaseLayout>

@@ -1,7 +1,15 @@
 ---
 import BaseLayout from './BaseLayout.astro';
-import { ComplexityProvider } from '../components/ui/ComplexityToggle';
+import { ComplexityProvider, ComplexityToggle } from '../components/ui/ComplexityToggle';
 import { ContentStatus } from '../components/ui/ContentStatus';
+import { Sidebar } from '../components/ui/Sidebar';
+import type { SubsectionData } from '../lib/chapters';
+
+interface ChapterInfo {
+  slug: string;
+  title: string;
+  section: string;
+}
 
 interface Props {
   frontmatter: {
@@ -11,23 +19,33 @@ interface Props {
     description: string;
     status?: 'draft' | 'editor_reviewed' | 'community_reviewed' | 'verified';
     lastReviewed?: string;
-    prerequisites?: Array<{ chapter: number; title: string }>;
+    prerequisites?: Array<{ slug: string; title: string }>;
   };
+  currentSlug?: string;
+  chapters?: ChapterInfo[];
+  prevChapter?: ChapterInfo;
+  nextChapter?: ChapterInfo;
+  subsections?: SubsectionData[];
 }
 
-const { frontmatter } = Astro.props;
+const { frontmatter, currentSlug, chapters = [], prevChapter, nextChapter, subsections = [] } = Astro.props;
 const { title, chapter, section, description, status = 'draft', lastReviewed, prerequisites } = frontmatter;
 ---
 
 <BaseLayout title={`Chapter ${chapter}: ${title}`} description={description}>
   <div class="flex min-h-screen">
-    <!-- Sidebar (placeholder) -->
-    <aside class="hidden lg:block w-64 border-r border-gray-200 p-4">
-      <nav>
-        <a href="/" class="block mb-6 text-xl font-bold text-primary-600">rlbook.ai</a>
-        <p class="text-sm text-gray-500 mb-4">{section}</p>
-        <!-- Chapter navigation will go here -->
-      </nav>
+    <!-- Sidebar -->
+    <aside class="hidden lg:block w-64 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 bg-white dark:bg-gray-900">
+      <div class="sticky top-0 h-screen overflow-y-auto">
+        <Sidebar
+          chapters={chapters}
+          currentSlug={currentSlug}
+          prevChapter={prevChapter}
+          nextChapter={nextChapter}
+          subsections={subsections}
+          client:load
+        />
+      </div>
     </aside>
 
     <!-- Main content -->
@@ -35,20 +53,20 @@ const { title, chapter, section, description, status = 'draft', lastReviewed, pr
       <!-- Chapter header -->
       <header class="mb-8">
         <div class="flex items-center gap-3 mb-2">
-          <span class="text-sm text-gray-500">Chapter {chapter}</span>
+          <span class="text-sm text-gray-500 dark:text-gray-400">Chapter {chapter}</span>
           <ContentStatus status={status} lastReviewed={lastReviewed} client:load />
         </div>
         <h1 class="text-4xl font-bold mb-4">{title}</h1>
-        <p class="text-xl text-gray-600">{description}</p>
+        <p class="text-xl text-gray-600 dark:text-gray-300">{description}</p>
 
         {prerequisites && prerequisites.length > 0 && (
-          <div class="mt-4 p-4 bg-gray-50 rounded-lg">
-            <p class="text-sm font-medium text-gray-700 mb-2">Prerequisites:</p>
-            <ul class="text-sm text-gray-600">
+          <div class="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Prerequisites:</p>
+            <ul class="text-sm text-gray-600 dark:text-gray-400">
               {prerequisites.map((prereq) => (
                 <li>
-                  <a href={`/chapters/${prereq.chapter}`} class="text-primary-600 hover:underline">
-                    Chapter {prereq.chapter}: {prereq.title}
+                  <a href={`/chapters/${prereq.slug}`} class="text-primary-600 dark:text-primary-400 hover:underline">
+                    {prereq.title}
                   </a>
                 </li>
               ))}
@@ -57,36 +75,58 @@ const { title, chapter, section, description, status = 'draft', lastReviewed, pr
         )}
       </header>
 
+      <!-- Subsections navigation (if chapter has subsections) -->
+      {subsections.length > 0 && (
+        <nav class="mb-8 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+          <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+            In this chapter
+          </h2>
+          <ol class="space-y-2">
+            {subsections.map((sub, i) => (
+              <li>
+                <a
+                  href={`/chapters/${currentSlug}/${sub.slug}`}
+                  class="flex items-center gap-3 text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                >
+                  <span class="flex-shrink-0 w-6 h-6 flex items-center justify-center text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">
+                    {i + 1}
+                  </span>
+                  <span>{sub.title}</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
+
       <!-- Complexity toggle -->
-      <div class="sticky top-4 z-10 mb-8">
-        <div class="inline-flex bg-white shadow-md rounded-lg p-2">
-          <!-- ComplexityToggle component will be rendered here -->
-        </div>
+      <div class="mb-8">
+        <ComplexityToggle client:load />
       </div>
 
       <!-- Chapter content -->
-      <article class="prose prose-lg max-w-none">
+      <article class="prose prose-lg dark:prose-invert max-w-none">
         <ComplexityProvider client:load>
           <slot />
         </ComplexityProvider>
       </article>
 
       <!-- Chapter footer -->
-      <footer class="mt-16 pt-8 border-t border-gray-200">
-        <!-- Giscus comments will go here -->
+      <footer class="mt-16 pt-8 border-t border-gray-200 dark:border-gray-700">
+        <!-- Giscus comments -->
         <div id="giscus-container" class="mt-8">
           <script
             src="https://giscus.app/client.js"
             data-repo="ebilgin/rlbook"
-            data-repo-id=""
-            data-category="Chapter Discussions"
-            data-category-id=""
+            data-repo-id="R_kgDOQw0g7Q"
+            data-category="General"
+            data-category-id="DIC_kwDOQw0g7c4C0Yda"
             data-mapping="pathname"
             data-strict="0"
             data-reactions-enabled="1"
             data-emit-metadata="0"
-            data-input-position="top"
-            data-theme="light"
+            data-input-position="bottom"
+            data-theme="dark"
             data-lang="en"
             crossorigin="anonymous"
             async

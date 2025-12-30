@@ -18,6 +18,11 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site);
     <meta name="description" content={description} />
     <link rel="canonical" href={canonicalURL} />
 
+    <!-- Default to dark mode -->
+    <script is:inline>
+      document.documentElement.classList.add('dark');
+    </script>
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -39,7 +44,7 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 
     <title>{title} | rlbook.ai</title>
   </head>
-  <body class="min-h-screen bg-white text-gray-900 antialiased">
+  <body class="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 antialiased transition-colors">
     <slot />
   </body>
 </html>

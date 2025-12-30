@@ -51,17 +51,17 @@ const statusLabels: Record<ChapterStatus, string> = {
 ---
 
 <BaseLayout title="Chapters">
-  <div class="min-h-screen bg-gray-50">
+  <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
     <!-- Header -->
-    <header class="bg-white border-b border-gray-200">
+    <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
       <div class="max-w-5xl mx-auto px-4 py-12">
-        <nav class="text-sm text-gray-500 mb-4">
-          <a href="/" class="hover:text-primary-600">Home</a>
+        <nav class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          <a href="/" class="hover:text-primary-600 dark:hover:text-primary-400">Home</a>
           <span class="mx-2">→</span>
-          <span class="text-gray-900">Chapters</span>
+          <span class="text-gray-900 dark:text-gray-100">Chapters</span>
         </nav>
-        <h1 class="text-4xl font-bold mb-4">Chapters</h1>
-        <p class="text-xl text-gray-600 max-w-2xl">
+        <h1 class="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4">Chapters</h1>
+        <p class="text-xl text-gray-600 dark:text-gray-300 max-w-2xl">
           Progressive lessons that build from foundations to advanced topics.
           Each chapter includes intuition, math, code, and exercises.
         </p>
@@ -75,33 +75,33 @@ const statusLabels: Record<ChapterStatus, string> = {
           <section>
             <div class="mb-6">
               <div class="flex items-center gap-3 mb-2">
-                <h2 class="text-2xl font-bold">{section.name}</h2>
+                <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">{section.name}</h2>
                 {sectionIndex === 0 && (
-                  <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
+                  <span class="text-xs bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-full font-medium">
                     Start here
                   </span>
                 )}
               </div>
-              <p class="text-gray-600">{section.description}</p>
+              <p class="text-gray-600 dark:text-gray-400">{section.description}</p>
             </div>
 
             <div class="grid gap-4">
               {chaptersBySection[section.name].map((chapter, index) => (
                 <a
                   href={`/chapters/${chapter.slug}`}
-                  class="group block bg-white rounded-xl border border-gray-200 p-6 hover:border-primary-300 hover:shadow-lg transition-all"
+                  class="group block bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-lg transition-all"
                 >
                   <div class="flex items-start justify-between gap-4">
                     <div class="flex-1">
                       <div class="flex items-center gap-3 mb-2">
-                        <span class="text-sm font-mono text-gray-400">
+                        <span class="text-sm font-mono text-gray-400 dark:text-gray-500">
                           {String(index + 1).padStart(2, '0')}
                         </span>
-                        <h3 class="text-lg font-semibold group-hover:text-primary-600 transition-colors">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
                           {chapter.title}
                         </h3>
                       </div>
-                      <p class="text-gray-600 ml-8">{chapter.description}</p>
+                      <p class="text-gray-600 dark:text-gray-400 ml-8">{chapter.description}</p>
                     </div>
                     <div class="flex items-center gap-2">
                       <span
@@ -111,7 +111,7 @@ const statusLabels: Record<ChapterStatus, string> = {
                         {statusIcons[chapter.status]}
                       </span>
                       <svg
-                        class="w-5 h-5 text-gray-400 group-hover:text-primary-600 group-hover:translate-x-1 transition-all"
+                        class="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-primary-600 dark:group-hover:text-primary-400 group-hover:translate-x-1 transition-all"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -128,24 +128,24 @@ const statusLabels: Record<ChapterStatus, string> = {
       </div>
 
       <!-- Status Legend -->
-      <div class="mt-16 pt-8 border-t border-gray-200">
-        <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Content Status</h3>
+      <div class="mt-16 pt-8 border-t border-gray-200 dark:border-gray-700">
+        <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Content Status</h3>
         <div class="flex flex-wrap gap-6 text-sm">
           <div class="flex items-center gap-2">
             <span>📝</span>
-            <span class="text-gray-600">AI Generated — Pending review</span>
+            <span class="text-gray-600 dark:text-gray-400">AI Generated — Pending review</span>
           </div>
           <div class="flex items-center gap-2">
             <span>✅</span>
-            <span class="text-gray-600">Editor Reviewed — Approved by editor</span>
+            <span class="text-gray-600 dark:text-gray-400">Editor Reviewed — Approved by editor</span>
           </div>
           <div class="flex items-center gap-2">
             <span>👥</span>
-            <span class="text-gray-600">Community Reviewed — Incorporates feedback</span>
+            <span class="text-gray-600 dark:text-gray-400">Community Reviewed — Incorporates feedback</span>
           </div>
           <div class="flex items-center gap-2">
             <span>🔒</span>
-            <span class="text-gray-600">Verified — Code tested, demos working</span>
+            <span class="text-gray-600 dark:text-gray-400">Verified — Code tested, demos working</span>
           </div>
         </div>
       </div>

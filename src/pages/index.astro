@@ -61,6 +61,17 @@ const categories = [
     stats: '1 environment',
     color: 'emerald',
   },
+  {
+    id: 'blog',
+    icon: '📝',
+    title: 'Blog',
+    tagline: 'News and insights',
+    description: 'Updates about rlbook.ai, guest posts, and insights on reinforcement learning from contributors.',
+    href: '/blog',
+    available: true,
+    stats: '1 post',
+    color: 'violet',
+  },
 ];
 ---
 
@@ -119,11 +130,11 @@ const categories = [
     </header>
 
     <!-- Content Categories -->
-    <section class="py-20 bg-white">
+    <section class="py-20 bg-white dark:bg-gray-900">
       <div class="max-w-6xl mx-auto px-4">
         <div class="text-center mb-12">
           <h2 class="text-3xl font-bold mb-4">Many Ways to Learn</h2>
-          <p class="text-gray-600 max-w-2xl mx-auto">
+          <p class="text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
             Different goals, different content. Choose your path based on what you want to accomplish.
           </p>
         </div>
@@ -134,29 +145,29 @@ const categories = [
               href={cat.available ? cat.href : '#'}
               class={`group relative block p-6 rounded-2xl border-2 transition-all ${
                 cat.available
-                  ? 'border-gray-200 hover:border-primary-300 hover:shadow-xl bg-white cursor-pointer'
-                  : 'border-gray-100 bg-gray-50 cursor-default'
+                  ? 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-xl bg-white dark:bg-gray-800 cursor-pointer'
+                  : 'border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 cursor-default'
               }`}
             >
               <div class="flex items-start justify-between mb-4">
                 <span class="text-4xl">{cat.icon}</span>
                 <span class={`text-xs font-medium px-2 py-1 rounded-full ${
                   cat.available
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'bg-gray-200 text-gray-500'
+                    ? 'bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                 }`}>
                   {cat.stats}
                 </span>
               </div>
 
-              <h3 class={`text-xl font-bold mb-1 ${cat.available ? 'group-hover:text-primary-600' : ''}`}>
+              <h3 class={`text-xl font-bold mb-1 ${cat.available ? 'group-hover:text-primary-600 dark:group-hover:text-primary-400' : ''}`}>
                 {cat.title}
               </h3>
-              <p class="text-primary-600 text-sm font-medium mb-3">{cat.tagline}</p>
-              <p class="text-gray-600 text-sm">{cat.description}</p>
+              <p class="text-primary-600 dark:text-primary-400 text-sm font-medium mb-3">{cat.tagline}</p>
+              <p class="text-gray-600 dark:text-gray-400 text-sm">{cat.description}</p>
 
               {cat.available && (
-                <div class="mt-4 flex items-center text-primary-600 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                <div class="mt-4 flex items-center text-primary-600 dark:text-primary-400 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
                   Explore
                   <svg class="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -165,80 +176,54 @@ const categories = [
               )}
             </a>
           ))}
-
-          <!-- Community Card (spans remaining space) -->
-          <a
-            href="#community"
-            class="group block p-6 rounded-2xl border-2 border-gray-200 hover:border-primary-300 hover:shadow-xl bg-gradient-to-br from-primary-50 to-white transition-all"
-          >
-            <div class="flex items-start justify-between mb-4">
-              <span class="text-4xl">🤝</span>
-              <span class="text-xs font-medium px-2 py-1 rounded-full bg-primary-100 text-primary-700">
-                Join us
-              </span>
-            </div>
-
-            <h3 class="text-xl font-bold mb-1 group-hover:text-primary-600">Community</h3>
-            <p class="text-primary-600 text-sm font-medium mb-3">Contribute and connect</p>
-            <p class="text-gray-600 text-sm">
-              Report issues, improve prompts, build demos, review content. Open source collaboration.
-            </p>
-
-            <div class="mt-4 flex items-center text-primary-600 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-              Get involved
-              <svg class="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-              </svg>
-            </div>
-          </a>
         </div>
       </div>
     </section>
 
     <!-- How It Works -->
-    <section class="py-20 bg-gray-50">
+    <section class="py-20 bg-gray-50 dark:bg-gray-800">
       <div class="max-w-6xl mx-auto px-4">
         <div class="text-center mb-12">
           <h2 class="text-3xl font-bold mb-4">How It Works</h2>
-          <p class="text-gray-600 max-w-2xl mx-auto">
+          <p class="text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
             Content is generated from carefully designed prompts, then reviewed and refined through community feedback.
           </p>
         </div>
 
         <div class="grid md:grid-cols-4 gap-8">
           <div class="text-center">
-            <div class="w-16 h-16 bg-white rounded-2xl shadow-sm border border-gray-200 flex items-center justify-center mx-auto mb-4">
+            <div class="w-16 h-16 bg-white dark:bg-gray-700 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-600 flex items-center justify-center mx-auto mb-4">
               <span class="text-2xl">✏️</span>
             </div>
             <h3 class="font-semibold mb-2">Prompt Design</h3>
-            <p class="text-gray-600 text-sm">
+            <p class="text-gray-600 dark:text-gray-400 text-sm">
               Structure, examples, and learning objectives defined upfront
             </p>
           </div>
           <div class="text-center">
-            <div class="w-16 h-16 bg-white rounded-2xl shadow-sm border border-gray-200 flex items-center justify-center mx-auto mb-4">
+            <div class="w-16 h-16 bg-white dark:bg-gray-700 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-600 flex items-center justify-center mx-auto mb-4">
               <span class="text-2xl">🤖</span>
             </div>
             <h3 class="font-semibold mb-2">AI Generation</h3>
-            <p class="text-gray-600 text-sm">
+            <p class="text-gray-600 dark:text-gray-400 text-sm">
               Content follows style guides and mathematical conventions
             </p>
           </div>
           <div class="text-center">
-            <div class="w-16 h-16 bg-white rounded-2xl shadow-sm border border-gray-200 flex items-center justify-center mx-auto mb-4">
+            <div class="w-16 h-16 bg-white dark:bg-gray-700 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-600 flex items-center justify-center mx-auto mb-4">
               <span class="text-2xl">👁️</span>
             </div>
             <h3 class="font-semibold mb-2">Human Review</h3>
-            <p class="text-gray-600 text-sm">
+            <p class="text-gray-600 dark:text-gray-400 text-sm">
               Accuracy, clarity, and pedagogical quality verified
             </p>
           </div>
           <div class="text-center">
-            <div class="w-16 h-16 bg-white rounded-2xl shadow-sm border border-gray-200 flex items-center justify-center mx-auto mb-4">
+            <div class="w-16 h-16 bg-white dark:bg-gray-700 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-600 flex items-center justify-center mx-auto mb-4">
               <span class="text-2xl">🔄</span>
             </div>
             <h3 class="font-semibold mb-2">Community Feedback</h3>
-            <p class="text-gray-600 text-sm">
+            <p class="text-gray-600 dark:text-gray-400 text-sm">
               Readers suggest improvements; content and prompts evolve
             </p>
           </div>
@@ -247,51 +232,51 @@ const categories = [
     </section>
 
     <!-- Community Section -->
-    <section id="community" class="py-20 bg-white">
+    <section id="community" class="py-20 bg-white dark:bg-gray-900">
       <div class="max-w-6xl mx-auto px-4">
         <div class="grid md:grid-cols-2 gap-12 items-center">
           <div>
             <h2 class="text-3xl font-bold mb-4">Join the Community</h2>
-            <p class="text-gray-600 mb-6">
+            <p class="text-gray-600 dark:text-gray-400 mb-6">
               This is an open project. The content, prompts, and code are all on GitHub.
               Contributions of all kinds are welcome.
             </p>
 
             <div class="space-y-4">
               <div class="flex gap-4">
-                <div class="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                <div class="flex-shrink-0 w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
                   <span class="text-lg">💬</span>
                 </div>
                 <div>
                   <h3 class="font-semibold">Report Issues</h3>
-                  <p class="text-gray-600 text-sm">Typos, bugs, unclear explanations</p>
+                  <p class="text-gray-600 dark:text-gray-400 text-sm">Typos, bugs, unclear explanations</p>
                 </div>
               </div>
               <div class="flex gap-4">
-                <div class="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                <div class="flex-shrink-0 w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
                   <span class="text-lg">📝</span>
                 </div>
                 <div>
                   <h3 class="font-semibold">Improve Prompts</h3>
-                  <p class="text-gray-600 text-sm">Better prompts mean better content</p>
+                  <p class="text-gray-600 dark:text-gray-400 text-sm">Better prompts mean better content</p>
                 </div>
               </div>
               <div class="flex gap-4">
-                <div class="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                <div class="flex-shrink-0 w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
                   <span class="text-lg">🎨</span>
                 </div>
                 <div>
                   <h3 class="font-semibold">Build Demos</h3>
-                  <p class="text-gray-600 text-sm">Interactive visualizations and playgrounds</p>
+                  <p class="text-gray-600 dark:text-gray-400 text-sm">Interactive visualizations and playgrounds</p>
                 </div>
               </div>
               <div class="flex gap-4">
-                <div class="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                <div class="flex-shrink-0 w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
                   <span class="text-lg">✅</span>
                 </div>
                 <div>
                   <h3 class="font-semibold">Review Content</h3>
-                  <p class="text-gray-600 text-sm">Help verify accuracy and quality</p>
+                  <p class="text-gray-600 dark:text-gray-400 text-sm">Help verify accuracy and quality</p>
                 </div>
               </div>
             </div>
@@ -300,7 +285,7 @@ const categories = [
           <div class="space-y-4">
             <a
               href="https://github.com/ebilgin/rlbook"
-              class="flex items-center gap-4 p-5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors"
+              class="flex items-center gap-4 p-5 bg-gray-900 dark:bg-gray-800 text-white rounded-xl hover:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
               target="_blank"
             >
               <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
@@ -328,13 +313,13 @@ const categories = [
 
             <a
               href="https://github.com/ebilgin/rlbook/blob/main/docs/CONTRIBUTING.md"
-              class="flex items-center gap-4 p-5 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+              class="flex items-center gap-4 p-5 bg-gray-100 dark:bg-gray-800 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               target="_blank"
             >
               <span class="text-3xl">📖</span>
               <div>
                 <div class="font-semibold">Contributing Guide</div>
-                <div class="text-gray-600 text-sm">How to get started</div>
+                <div class="text-gray-600 dark:text-gray-400 text-sm">How to get started</div>
               </div>
             </a>
           </div>
@@ -343,11 +328,11 @@ const categories = [
     </section>
 
     <!-- About -->
-    <section class="py-12 bg-gray-50 border-t border-gray-200">
+    <section class="py-12 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
       <div class="max-w-6xl mx-auto px-4 text-center">
-        <p class="text-gray-600">
-          Created by <a href="https://www.linkedin.com/in/enesbilgin" class="text-primary-600 hover:underline font-medium" target="_blank">Enes Bilgin</a>,
-          author of <a href="https://www.amazon.com/Mastering-Reinforcement-Learning-Python-next-generation/dp/1838644148" class="text-primary-600 hover:underline" target="_blank">"Mastering Reinforcement Learning with Python"</a>.
+        <p class="text-gray-600 dark:text-gray-400">
+          Created by <a href="https://www.linkedin.com/in/enesbilgin" class="text-primary-600 dark:text-primary-400 hover:underline font-medium" target="_blank">Enes Bilgin</a>,
+          author of <a href="https://www.amazon.com/Mastering-Reinforcement-Learning-Python-next-generation/dp/1838644148" class="text-primary-600 dark:text-primary-400 hover:underline" target="_blank">"Mastering Reinforcement Learning with Python"</a>.
           <br class="hidden md:block" />
           An experiment in AI-assisted education—creating high-quality learning resources through human-AI collaboration.
         </p>
@@ -364,7 +349,6 @@ const categories = [
           <div class="flex gap-6 text-sm">
             <a href="https://github.com/ebilgin/rlbook" class="hover:text-white transition-colors">GitHub</a>
             <a href="https://discord.gg/mJ7n3zNf7r" class="hover:text-white transition-colors">Discord</a>
-            <a href="/chapters" class="hover:text-white transition-colors">Chapters</a>
             <a href="https://github.com/ebilgin/rlbook/blob/main/docs/CONTRIBUTING.md" class="hover:text-white transition-colors">Contribute</a>
           </div>
         </div>
