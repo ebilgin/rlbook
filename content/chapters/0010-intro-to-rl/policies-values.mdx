@@ -1,0 +1,63 @@
+---
+title: "Policies and Value Functions"
+description: "How agents represent knowledge"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+## Real-World Applications
+
+RL isn't just an academic exercise. It's powering real systems:
+
+<Intuition>
+
+**Game Playing**
+- AlphaGo defeated the world champion in Go (2016)
+- OpenAI Five achieved superhuman performance in Dota 2 (2019)
+- MuZero learned to play Atari, chess, and Go with no rules knowledge (2020)
+
+**Robotics**
+- Robots learning to walk, grasp objects, and manipulate tools
+- Autonomous drones learning to fly through obstacles
+- Robotic arms learning assembly tasks
+
+**Recommendation Systems**
+- Personalizing news feeds and video recommendations
+- Optimizing ad placement (contextual bandits)
+- Balancing exploration of new content with user preferences
+
+**Resource Management**
+- Data center cooling optimization (Google DeepMind)
+- Traffic signal control
+- Inventory management and pricing
+
+**Science and Discovery**
+- Drug molecule design
+- Chip design optimization (Google)
+- Plasma control in fusion reactors
+
+</Intuition>
+
+## The RL Algorithm Zoo
+
+RL algorithms fall into several categories. Here's a roadmap:
+
+<Intuition>
+
+**By what they learn:**
+- **Value-based**: Learn how good states/actions are, derive policy from values (Q-learning, DQN)
+- **Policy-based**: Learn the policy directly (REINFORCE, PPO)
+- **Actor-Critic**: Learn both value and policy (A3C, SAC)
+
+**By how they use experience:**
+- **Model-free**: Learn directly from experience without modeling the environment
+- **Model-based**: Learn a model of the environment, use it for planning
+
+**By learning approach:**
+- **On-policy**: Learn from actions the agent is currently taking
+- **Off-policy**: Learn from actions taken by any policy
+
+</Intuition>
+
+Don't worry about understanding these categories now. We'll build up to each one through the book.

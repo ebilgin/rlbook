@@ -1,0 +1,71 @@
+---
+title: "Upper Confidence Bound"
+description: "Optimism in the face of uncertainty"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+## Upper Confidence Bound (UCB)
+
+ε-greedy explores randomly. Can we be smarter? UCB explores systematically based on **uncertainty**.
+
+<Intuition>
+
+The idea: for each arm, consider not just your estimate of its value, but also **how uncertain** you are about that estimate.
+
+Arms you've pulled many times have tight estimates—you know what they're worth. Arms you've rarely tried have wide uncertainty—they might be great!
+
+UCB is **optimistic**: it assumes uncertain arms are as good as they plausibly could be. This encourages trying under-sampled arms.
+
+</Intuition>
+
+<Mathematical>
+
+**UCB action selection:**
+
+$$A_t = \arg\max_a \left[ Q_t(a) + c\sqrt{\frac{\ln t}{N_t(a)}} \right]$$
+
+where:
+- $Q_t(a)$ is the estimated value of arm $a$
+- $N_t(a)$ is the number of times arm $a$ has been selected
+- $t$ is the current time step
+- $c$ controls the exploration-exploitation balance (often $c = \sqrt{2}$)
+
+The second term is the **exploration bonus**:
+- Large when $N_t(a)$ is small (rarely tried)
+- Shrinks as $N_t(a)$ grows (well explored)
+- Grows with $\ln t$ (keeps exploring as time passes)
+
+</Mathematical>
+
+<Implementation>
+
+```python
+class UCBAgent(ActionValueAgent):
+    """UCB bandit agent."""
+
+    def __init__(self, k, c=2.0):
+        super().__init__(k)
+        self.c = c
+        self.t = 0
+
+    def select_action(self):
+        """Select action using UCB."""
+        self.t += 1
+
+        # Try each arm at least once
+        for a in range(self.k):
+            if self.N[a] == 0:
+                return a
+
+        # UCB values
+        ucb_values = self.Q + self.c * np.sqrt(np.log(self.t) / self.N)
+        return np.argmax(ucb_values)
+```
+
+</Implementation>
+
+<Note>
+UCB has theoretical guarantees: it achieves $O(\log T)$ regret, which is optimal for bandits. In practice, it often outperforms ε-greedy, especially when exploration is expensive.
+</Note>

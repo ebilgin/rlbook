@@ -99,17 +99,15 @@ const currentIndex = subsections.findIndex(s => s.slug === currentSubsectionSlug
         </div>
       </div>
 
-      <!-- Complexity toggle -->
-      <div class="mb-8">
-        <ComplexityToggle client:load />
-      </div>
-
-      <!-- Subsection content -->
-      <article class="prose prose-lg dark:prose-invert max-w-none">
-        <ComplexityProvider client:load>
+      <!-- Subsection content with complexity controls -->
+      <ComplexityProvider client:load>
+        <div class="mb-8">
+          <ComplexityToggle client:load />
+        </div>
+        <article class="prose prose-lg dark:prose-invert max-w-none">
           <slot />
-        </ComplexityProvider>
-      </article>
+        </article>
+      </ComplexityProvider>
 
       <!-- Navigation -->
       <nav class="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">

@@ -1,0 +1,97 @@
+---
+title: "Action-Value Methods"
+description: "Estimating the value of actions"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+## Action-Value Estimation
+
+Before we can choose wisely, we need to estimate how good each arm is. The natural approach: track the average reward we've received from each arm.
+
+<Intuition>
+
+After pulling arm $a$ several times, we have a collection of rewards from it. The sample average is our best estimate of its true value.
+
+But there's a clever trick: we don't need to store all past rewards. We can update our estimate **incrementally** after each pull.
+
+</Intuition>
+
+<Mathematical>
+
+Let $Q_n(a)$ be our estimate of arm $a$'s value after the arm has been selected $n-1$ times. The sample average is:
+
+$$Q_n(a) = \frac{R_1 + R_2 + \ldots + R_{n-1}}{n-1}$$
+
+where $R_1, \ldots, R_{n-1}$ are the rewards received from arm $a$.
+
+The **incremental update** formula gives the same result without storing all rewards:
+
+$$Q_{n+1}(a) = Q_n(a) + \frac{1}{n}[R_n - Q_n(a)]$$
+
+In words: new estimate = old estimate + step size × (reward - old estimate)
+
+The term $[R_n - Q_n(a)]$ is the **prediction error**—how far off our estimate was. We move our estimate toward the observed reward.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class BanditEnvironment:
+    """A k-armed bandit with Gaussian rewards."""
+
+    def __init__(self, k=10):
+        # True reward means (unknown to the agent)
+        self.q_true = np.random.randn(k)
+        self.k = k
+
+    def pull(self, action):
+        """Pull an arm and receive a reward."""
+        # Reward is drawn from N(q_true[action], 1)
+        return np.random.randn() + self.q_true[action]
+
+    def optimal_action(self):
+        """Return the best arm (for evaluation)."""
+        return np.argmax(self.q_true)
+
+
+class ActionValueAgent:
+    """Agent that estimates action values using sample averages."""
+
+    def __init__(self, k):
+        self.k = k
+        self.Q = np.zeros(k)      # Value estimates
+        self.N = np.zeros(k)      # Action counts
+
+    def update(self, action, reward):
+        """Update value estimate for an action."""
+        self.N[action] += 1
+        # Incremental update formula
+        self.Q[action] += (reward - self.Q[action]) / self.N[action]
+```
+
+</Implementation>
+
+## The Greedy Strategy (and Why It Fails)
+
+The simplest strategy: always choose the arm with the highest estimated value.
+
+<Intuition>
+
+**Greedy action selection:**
+$$A_t = \arg\max_a Q_t(a)$$
+
+This sounds reasonable—exploit what you know. But there's a fatal flaw.
+
+Early on, our estimates are based on few samples. The arm that *looks* best might not *be* best—we just got lucky (or unlucky) on a few early pulls. If we commit to that arm, we never learn about the others.
+
+A greedy agent gets **stuck** with whatever arm happened to look good initially. It might never discover the truly optimal arm.
+
+</Intuition>
+
+{/* TODO: Interactive Demo - Greedy Failure */}
+{/* Show a greedy agent getting stuck on a suboptimal arm */}

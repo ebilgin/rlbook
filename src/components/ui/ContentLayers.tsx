@@ -2,8 +2,8 @@
  * Content Layer Components - Intuition, Mathematical, Implementation
  *
  * These components wrap content at different complexity levels.
- * Mathematical and Implementation sections are collapsible using native HTML
- * <details>/<summary> elements for no-JS compatibility.
+ * They work with ComplexityToggle via CSS classes that get toggled
+ * on the document body.
  *
  * Usage:
  *   <Intuition>
@@ -24,7 +24,6 @@ import React from 'react';
 interface LayerProps {
   children: React.ReactNode;
   title?: string;
-  defaultOpen?: boolean;
 }
 
 /**
@@ -33,63 +32,63 @@ interface LayerProps {
  */
 export function Intuition({ children, title }: LayerProps) {
   return (
-    <div className="content-layer layer-intuition">
-      {title && <h3 className="layer-title">{title}</h3>}
-      <div className="layer-content">{children}</div>
+    <div className="content-layer layer-intuition not-prose my-6 rounded-lg overflow-hidden">
+      {title && (
+        <div className="layer-header px-4 py-2 bg-blue-600 dark:bg-blue-700">
+          <h4 className="layer-title font-semibold text-white">{title}</h4>
+        </div>
+      )}
+      <div className="layer-content p-4 bg-blue-50 dark:bg-gray-800 border-l-4 border-blue-500 prose prose-blue dark:prose-invert max-w-none">{children}</div>
     </div>
   );
 }
 
 /**
- * Mathematical layer - collapsible
+ * Mathematical layer - controlled by ComplexityToggle via CSS
  * Formal definitions, equations, derivations
- * Uses native <details>/<summary> for no-JS accordion behavior
  */
-export function Mathematical({ children, title = 'Mathematical Details', defaultOpen = true }: LayerProps) {
+export function Mathematical({ children, title = 'Mathematical Details' }: LayerProps) {
   return (
-    <details className="content-layer layer-mathematical" open={defaultOpen}>
-      <summary className="layer-header">
-        <span className="layer-icon">∑</span>
-        <span className="layer-title">{title}</span>
-        <span className="layer-toggle-icon" aria-hidden="true"></span>
-      </summary>
-      <div className="layer-content">{children}</div>
-    </details>
+    <div className="content-layer layer-mathematical not-prose my-6 rounded-lg overflow-hidden" data-layer="math">
+      <div className="layer-header flex items-center gap-2 px-4 py-2 bg-purple-600 dark:bg-purple-700">
+        <span className="layer-icon text-white text-lg">∑</span>
+        <span className="layer-title font-semibold text-white">{title}</span>
+      </div>
+      <div className="layer-content p-4 bg-purple-50 dark:bg-gray-800 border-l-4 border-purple-500 prose prose-purple dark:prose-invert max-w-none">{children}</div>
+    </div>
   );
 }
 
 /**
- * Implementation layer - collapsible
+ * Implementation layer - controlled by ComplexityToggle via CSS
  * Code examples, practical details, debugging tips
- * Uses native <details>/<summary> for no-JS accordion behavior
  */
-export function Implementation({ children, title = 'Implementation', defaultOpen = true }: LayerProps) {
+export function Implementation({ children, title = 'Implementation' }: LayerProps) {
   return (
-    <details className="content-layer layer-implementation" open={defaultOpen}>
-      <summary className="layer-header">
-        <span className="layer-icon">&lt;/&gt;</span>
-        <span className="layer-title">{title}</span>
-        <span className="layer-toggle-icon" aria-hidden="true"></span>
-      </summary>
-      <div className="layer-content">{children}</div>
-    </details>
+    <div className="content-layer layer-implementation not-prose my-6 rounded-lg overflow-hidden" data-layer="code">
+      <div className="layer-header flex items-center gap-2 px-4 py-2 bg-emerald-600 dark:bg-emerald-700">
+        <span className="layer-icon text-white text-lg">&lt;/&gt;</span>
+        <span className="layer-title font-semibold text-white">{title}</span>
+      </div>
+      <div className="layer-content p-4 bg-emerald-50 dark:bg-gray-800 border-l-4 border-emerald-500 prose prose-emerald dark:prose-invert max-w-none">{children}</div>
+    </div>
   );
 }
 
 /**
  * DeepDive - optional advanced content
  * For curious readers who want to go beyond the main material
- * Collapsed by default to not overwhelm readers
+ * Uses native details/summary for individual toggling
  */
-export function DeepDive({ children, title = 'Deep Dive', defaultOpen = false }: LayerProps) {
+export function DeepDive({ children, title = 'Deep Dive' }: LayerProps) {
   return (
-    <details className="content-layer layer-deepdive" open={defaultOpen}>
-      <summary className="layer-header">
-        <span className="layer-icon">🔍</span>
-        <span className="layer-title">{title}</span>
-        <span className="layer-toggle-icon" aria-hidden="true"></span>
+    <details className="content-layer layer-deepdive not-prose my-6 rounded-lg overflow-hidden group">
+      <summary className="layer-header flex items-center gap-2 px-4 py-2 bg-amber-600 dark:bg-amber-700 cursor-pointer list-none">
+        <span className="layer-icon text-white text-lg">🔍</span>
+        <span className="layer-title font-semibold text-white">{title}</span>
+        <span className="ml-auto text-white group-open:rotate-90 transition-transform">▶</span>
       </summary>
-      <div className="layer-content">{children}</div>
+      <div className="layer-content p-4 bg-amber-50 dark:bg-gray-800 border-l-4 border-amber-500 prose prose-amber dark:prose-invert max-w-none">{children}</div>
     </details>
   );
 }

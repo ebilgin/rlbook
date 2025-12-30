@@ -1,0 +1,185 @@
+---
+title: "Thompson Sampling"
+description: "Bayesian approach to exploration"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+## Thompson Sampling: The Bayesian Approach
+
+Thompson Sampling takes a probability-matching approach: select each arm with probability proportional to the probability that it's optimal.
+
+<Intuition>
+
+The idea is beautifully simple:
+1. Maintain a probability distribution over each arm's true value
+2. Sample a value from each arm's distribution
+3. Play the arm with the highest sampled value
+4. Update the distributions based on the observed reward
+
+This automatically balances exploration and exploitation. Arms with uncertain values sometimes get high samples (exploration). Arms with reliably high values get consistently high samples (exploitation).
+
+</Intuition>
+
+<Mathematical>
+
+For Gaussian rewards with known variance, Thompson Sampling maintains a posterior distribution for each arm's mean.
+
+For Bernoulli rewards (success/failure), we use Beta distributions:
+- Prior: $\text{Beta}(1, 1)$ (uniform)
+- After $s$ successes and $f$ failures: $\text{Beta}(1+s, 1+f)$
+
+**Action selection:**
+1. For each arm $a$, sample $\tilde{\mu}_a \sim \text{Beta}(\alpha_a, \beta_a)$
+2. Select $A_t = \arg\max_a \tilde{\mu}_a$
+
+</Mathematical>
+
+<Implementation>
+
+```python
+class ThompsonSamplingAgent:
+    """Thompson Sampling for Bernoulli bandits."""
+
+    def __init__(self, k):
+        self.k = k
+        # Beta distribution parameters: alpha = successes + 1, beta = failures + 1
+        self.alpha = np.ones(k)  # Prior: Beta(1,1)
+        self.beta = np.ones(k)
+
+    def select_action(self):
+        """Sample from posteriors and pick the max."""
+        samples = np.random.beta(self.alpha, self.beta)
+        return np.argmax(samples)
+
+    def update(self, action, reward):
+        """Update posterior for the selected arm."""
+        if reward > 0:  # Success
+            self.alpha[action] += 1
+        else:           # Failure
+            self.beta[action] += 1
+```
+
+</Implementation>
+
+<DeepDive>
+
+### Why Thompson Sampling Works
+
+Thompson Sampling is probability matching: the probability of selecting an arm equals the probability that it's optimal (under the posterior).
+
+This sounds like a lot of exploration—but it works because:
+- Early on, posteriors are wide, so we explore naturally
+- As we learn, posteriors concentrate, and we exploit the true best arm
+- There's no arbitrary exploration parameter to tune
+
+Thompson Sampling often outperforms UCB in practice, especially in complex problems.
+
+</DeepDive>
+
+## Comparing Algorithms
+
+Let's put it all together with a comparison.
+
+<Implementation>
+
+```python
+def run_experiment(env, agent, n_steps=1000):
+    """Run a bandit experiment."""
+    rewards = []
+    optimal_actions = []
+
+    for _ in range(n_steps):
+        action = agent.select_action()
+        reward = env.pull(action)
+        agent.update(action, reward)
+
+        rewards.append(reward)
+        optimal_actions.append(action == env.optimal_action())
+
+    return np.array(rewards), np.array(optimal_actions)
+
+
+def compare_algorithms(k=10, n_steps=1000, n_runs=100):
+    """Compare multiple bandit algorithms."""
+    algorithms = {
+        'Greedy': lambda: EpsilonGreedyAgent(k, epsilon=0),
+        'ε-greedy (0.1)': lambda: EpsilonGreedyAgent(k, epsilon=0.1),
+        'ε-greedy (0.01)': lambda: EpsilonGreedyAgent(k, epsilon=0.01),
+        'UCB': lambda: UCBAgent(k, c=2),
+    }
+
+    results = {name: {'rewards': [], 'optimal': []} for name in algorithms}
+
+    for run in range(n_runs):
+        env = BanditEnvironment(k)
+
+        for name, make_agent in algorithms.items():
+            agent = make_agent()
+            rewards, optimal = run_experiment(env, agent, n_steps)
+            results[name]['rewards'].append(rewards)
+            results[name]['optimal'].append(optimal)
+
+    return results
+
+
+# Run comparison
+# results = compare_algorithms()
+# Plot average reward and % optimal action over time
+```
+
+</Implementation>
+
+<Intuition>
+
+What you'll typically see:
+
+| Algorithm | Early Performance | Late Performance | Regret Growth |
+|-----------|------------------|------------------|---------------|
+| **Greedy** | Lucky or unlucky | Stuck (no improvement) | Linear |
+| **ε-greedy (0.1)** | Moderate | Good but 10% suboptimal | Linear |
+| **ε-greedy (0.01)** | Slow start | Very good | Near-linear |
+| **UCB** | Moderate (tries all) | Excellent | $O(\log T)$ |
+| **Thompson** | Good | Excellent | $O(\log T)$ |
+
+The pure greedy agent is worst. ε-greedy is solid. UCB and Thompson are best for long-term performance.
+
+</Intuition>
+
+## Real-World Applications
+
+Bandits aren't just a toy problem—they power major systems:
+
+<Intuition>
+
+**A/B Testing (Adaptive Experiments)**
+Traditional A/B tests split traffic 50/50 and wait for statistical significance. Bandits allocate more traffic to winning variants as evidence accumulates, reducing "regret" from the losing variant.
+
+**Recommendation Systems**
+Should we show you content we know you'll like, or try something new? Bandits balance personalization with discovery.
+
+**Clinical Trials**
+Adaptive clinical trials use bandit algorithms to assign more patients to treatments that appear effective, reducing exposure to inferior treatments.
+
+**Ad Selection**
+Which ad should we show? Bandits learn user preferences while maximizing click-through rates.
+
+</Intuition>
+
+## Summary
+
+<KeyTakeaways>
+- The **multi-armed bandit** is the simplest RL problem: k actions, unknown rewards, no states.
+- **Action-value estimation** tracks the sample average reward for each arm using incremental updates.
+- **Greedy selection** exploits but gets stuck. **ε-greedy** adds random exploration.
+- **UCB** explores systematically by being optimistic about uncertain arms.
+- **Thompson Sampling** samples from probability distributions, naturally balancing exploration and exploitation.
+- **Regret** measures the cost of learning—good algorithms have sublinear regret.
+- Bandits power real systems: A/B testing, recommendations, ads, clinical trials.
+</KeyTakeaways>
+
+Bandits assume the situation doesn't change—there's no context affecting which arm is best. But what if the best arm depends on who's asking? That's where contextual bandits come in.
+
+<NextChapter slug="contextual-bandits" title="Contextual Bandits" />

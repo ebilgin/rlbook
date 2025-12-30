@@ -99,17 +99,15 @@ const { title, chapter, section, description, status = 'draft', lastReviewed, pr
         </nav>
       )}
 
-      <!-- Complexity toggle -->
-      <div class="mb-8">
-        <ComplexityToggle client:load />
-      </div>
-
-      <!-- Chapter content -->
-      <article class="prose prose-lg dark:prose-invert max-w-none">
-        <ComplexityProvider client:load>
+      <!-- Chapter content with complexity controls -->
+      <ComplexityProvider client:load>
+        <div class="mb-8">
+          <ComplexityToggle client:load />
+        </div>
+        <article class="prose prose-lg dark:prose-invert max-w-none">
           <slot />
-        </ComplexityProvider>
-      </article>
+        </article>
+      </ComplexityProvider>
 
       <!-- Chapter footer -->
       <footer class="mt-16 pt-8 border-t border-gray-200 dark:border-gray-700">

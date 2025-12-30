@@ -1,0 +1,64 @@
+---
+title: "What is Reinforcement Learning?"
+description: "The big picture: learning from interaction"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+## Learning Through Interaction
+
+Every time you teach a dog a trick, you're doing reinforcement learning. Give a treat when it sits; it learns to sit. Every time you figure out which route to work avoids traffic, you're doing reinforcement learning. Try a new road; notice it's faster; take it tomorrow.
+
+**Reinforcement learning (RL)** is the science of learning through trial and error—taking actions, observing consequences, and adjusting behavior to achieve goals. It's perhaps the most natural form of learning, and it's also become one of the most powerful approaches in artificial intelligence.
+
+<Intuition>
+
+At its core, RL is about an **agent** interacting with an **environment**:
+
+1. The agent observes the current **state** of the world
+2. The agent chooses an **action**
+3. The environment responds with a new state and a **reward**
+4. The agent updates its behavior to get more reward in the future
+5. Repeat
+
+This loop—observe, act, learn—is the beating heart of reinforcement learning.
+
+</Intuition>
+
+{/* TODO: Interactive Demo - The RL Loop Visualization */}
+{/* Step through: agent observes state → chooses action → receives reward → new state */}
+
+## RL vs. Other Types of Learning
+
+You might be familiar with **supervised learning** and **unsupervised learning**. Where does RL fit?
+
+<Intuition>
+
+| Type | What it learns from | Example |
+|------|---------------------|---------|
+| **Supervised** | Labeled examples (input → correct output) | Given photos with labels, learn to classify cats vs. dogs |
+| **Unsupervised** | Data without labels | Given customer data, discover natural groupings |
+| **Reinforcement** | Rewards from actions | Given a game, learn to play well by trying moves |
+
+The key differences:
+
+**Supervised learning** gets the right answer handed to it. "This email is spam. This one isn't. Learn the pattern."
+
+**Reinforcement learning** doesn't get answers—it gets feedback. "You took that action. Here's a reward (or punishment). Figure out what to do next time."
+
+This feedback might be delayed (you don't know if a chess move was good until the game ends), sparse (most moves get zero reward), or noisy (sometimes good actions lead to bad outcomes by chance).
+
+</Intuition>
+
+### Why Can't We Just Use Supervised Learning?
+
+A natural question: if we want an agent to play a game, why not just collect expert games and train a classifier to predict the expert's moves?
+
+This approach (called **imitation learning**) can work, but it has limitations:
+
+1. **You need expert data.** What if no expert exists?
+2. **You can only match the expert.** You can never exceed them.
+3. **Distribution shift.** When the agent makes a mistake, it enters states the expert never visited. It doesn't know what to do there.
+
+RL solves these problems by learning directly from interaction. The agent doesn't need a teacher—just a goal.

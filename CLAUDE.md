@@ -278,6 +278,61 @@ When generating or modifying content:
 
 9. **Papers are standalone**: Paper explanations should be self-contained for readers coming from a direct link (e.g., reading group). Include a **Prerequisites** section with links to required chapters
 
+## Technical Implementation Notes
+
+### Content Structure
+
+This project uses a three-level hierarchy:
+- **Section**: Groups of related chapters (e.g., "Foundations", "Q-Learning Foundations")
+- **Chapter**: Main topic (e.g., "Multi-Armed Bandits")
+- **Subsection**: Individual lessons within a chapter (e.g., "UCB", "Thompson Sampling")
+
+Chapters are defined in `src/lib/chapters.ts`. Each chapter can have subsections that appear as separate pages.
+
+### Dark Mode
+
+The site defaults to dark mode. Dark theme is set via the `dark` class on the `<html>` element.
+- Always include `dark:` variants for all color classes
+- Test all new components in dark mode
+- ThemeToggle has been removed - dark mode is the default and only theme
+
+### Content Layers and Complexity Toggle
+
+The complexity toggle (`<ComplexityToggle />`) controls visibility of `<Mathematical>` and `<Implementation>` sections.
+
+**How it works:**
+- ContentLayers components (`Mathematical`, `Implementation`) have `data-layer="math"` and `data-layer="code"` attributes
+- ComplexityToggle adds/removes `hide-math` and `hide-code` classes on `document.body`
+- CSS rules in `global.css` hide layers when body has corresponding class:
+  ```css
+  body.hide-math [data-layer="math"] { display: none; }
+  body.hide-code [data-layer="code"] { display: none; }
+  ```
+
+**Why not React Context?** MDX content is server-rendered at build time, so React hooks/context don't work in MDX components. The CSS-based approach works because it's applied at runtime via client-side JS.
+
+### Prerequisites
+
+Prerequisites in chapter frontmatter must reference **existing** chapter slugs. Before adding a prerequisite, verify the chapter exists in `src/lib/chapters.ts`.
+
+```yaml
+# Good - chapter exists
+prerequisites:
+  - slug: "intro-to-rl"
+    title: "Introduction to RL"
+
+# Bad - chapter doesn't exist, will create broken link
+prerequisites:
+  - slug: "markov-decision-processes"  # Not in chapters.ts!
+    title: "MDPs"
+```
+
+### Giscus Comments
+
+Comments use Giscus connected to GitHub Discussions. The configuration is in ChapterLayout.astro and SubsectionLayout.astro:
+- repo: ebilgin/rlbook
+- Theme is hardcoded to "dark" since that's the site's only theme
+
 ### For Human Contributors
 
 1. **Prompt changes require review**: Prompts affect all generated content. Discuss in issues first.

@@ -1,0 +1,92 @@
+---
+title: "Epsilon-Greedy Exploration"
+description: "Balancing exploration and exploitation"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+
+## ε-Greedy: Simple Exploration
+
+The fix is simple: occasionally take a random action instead of the greedy one.
+
+<Intuition>
+
+**ε-greedy action selection:**
+- With probability $1 - \epsilon$: choose the greedy action (exploit)
+- With probability $\epsilon$: choose a random action (explore)
+
+This ensures every arm gets tried occasionally, so we can learn their true values. Common choices are $\epsilon = 0.1$ (10% exploration) or $\epsilon = 0.01$ (1% exploration).
+
+</Intuition>
+
+<Implementation>
+
+```python
+class EpsilonGreedyAgent(ActionValueAgent):
+    """ε-greedy bandit agent."""
+
+    def __init__(self, k, epsilon=0.1):
+        super().__init__(k)
+        self.epsilon = epsilon
+
+    def select_action(self):
+        """Select action using ε-greedy policy."""
+        if np.random.random() < self.epsilon:
+            return np.random.randint(self.k)  # Explore
+        else:
+            return np.argmax(self.Q)          # Exploit
+```
+
+</Implementation>
+
+{/* TODO: Interactive Demo - Bandit Playground */}
+{/* Compare greedy, ε-greedy with different ε values */}
+
+### The Cost of Exploration
+
+<Intuition>
+
+There's a tradeoff in choosing $\epsilon$:
+
+- **High ε (more exploration)**: Learns quickly about all arms, but wastes many pulls on known-bad arms even late in the game.
+- **Low ε (less exploration)**: Exploits good arms efficiently, but might get stuck if it hasn't explored enough early on.
+
+A fixed $\epsilon$ is never optimal. We explore too much when we've already learned, or too little before we've figured things out.
+
+</Intuition>
+
+<Tip>
+A common improvement is **ε-decay**: start with high exploration (ε = 1.0), gradually reduce it as you learn. This balances early exploration with late exploitation.
+</Tip>
+
+## Measuring Performance: Regret
+
+How do we know if our algorithm is working? We could measure total reward, but that depends on the problem. **Regret** gives us a problem-independent measure.
+
+<Intuition>
+
+**Regret** is the difference between:
+- The reward we would have gotten by always playing the best arm
+- The reward we actually got
+
+It measures the cost of not knowing the optimal action from the start—the price of learning.
+
+</Intuition>
+
+<Mathematical>
+
+After $T$ steps, the **cumulative regret** is:
+
+$$L_T = \sum_{t=1}^{T} [\mu^* - \mu_{A_t}] = T \mu^* - \sum_{t=1}^{T} \mu_{A_t}$$
+
+where $\mu^*$ is the mean of the optimal arm and $A_t$ is the action we chose at time $t$.
+
+**Key insight:** An algorithm with **sublinear regret** (regret grows slower than $T$) is learning effectively. Linear regret (regret grows with $T$) means we're losing a constant fraction to suboptimal choices forever.
+
+Good algorithms achieve $O(\sqrt{T})$ or $O(\log T)$ regret.
+
+</Mathematical>
+
+{/* TODO: Interactive Demo - Regret Comparison */}
+{/* Show cumulative regret for different algorithms over time */}

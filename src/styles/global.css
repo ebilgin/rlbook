@@ -92,6 +92,15 @@
     @apply my-6;
   }
 
+  /* Hide math/code layers when toggled off via body classes */
+  body.hide-math [data-layer="math"] {
+    @apply hidden;
+  }
+
+  body.hide-code [data-layer="code"] {
+    @apply hidden;
+  }
+
   .layer-intuition {
     @apply bg-white dark:bg-gray-900;
   }
