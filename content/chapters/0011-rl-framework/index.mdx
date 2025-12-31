@@ -1,0 +1,107 @@
+---
+title: "The RL Framework"
+slug: "rl-framework"
+section: "Foundations"
+description: "The building blocks: agents, environments, states, actions, rewards, and policies"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "intro-to-rl"
+    title: "What is Reinforcement Learning?"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example } from '@/components/ui/Callouts';
+
+# The RL Framework
+
+<ChapterObjectives>
+- Understand the agent-environment interface and interaction loop
+- Define states, actions, rewards, and transitions
+- Learn about policies: how agents decide what to do
+- Understand value functions: how agents evaluate states and actions
+- See how these concepts fit together in a complete RL system
+</ChapterObjectives>
+
+## Chapter Overview
+
+Now that you know what reinforcement learning is and where it's used, it's time to understand the precise framework that makes it work. Every RL problem—from playing Atari games to training language models—can be described using the same fundamental components.
+
+In this chapter, we'll formalize the building blocks of RL: what agents observe, how they act, what rewards they receive, and how they represent what they've learned.
+
+<div className="my-8">
+  <div className="text-slate-400 text-sm mb-4">In this chapter:</div>
+
+  <div className="space-y-3">
+    <a href="/chapters/rl-framework/agent-environment" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-cyan-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-cyan-400 font-bold text-lg">The Agent-Environment Interface</div>
+      <div className="text-slate-400 text-sm mt-1">States, actions, and the interaction loop that defines RL problems</div>
+    </a>
+
+    <a href="/chapters/rl-framework/rewards-returns" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-amber-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-amber-400 font-bold text-lg">Rewards and Returns</div>
+      <div className="text-slate-400 text-sm mt-1">Defining goals through reward signals and cumulative returns</div>
+    </a>
+
+    <a href="/chapters/rl-framework/policies-values" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-violet-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-violet-400 font-bold text-lg">Policies and Value Functions</div>
+      <div className="text-slate-400 text-sm mt-1">How agents represent and store what they've learned</div>
+    </a>
+
+    <a href="/chapters/rl-framework/exploration-exploitation" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-pink-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-pink-400 font-bold text-lg">Exploration vs Exploitation</div>
+      <div className="text-slate-400 text-sm mt-1">The fundamental tradeoff at the heart of reinforcement learning</div>
+    </a>
+  </div>
+</div>
+
+## The Complete Picture
+
+<Intuition>
+
+<div className="my-8 flex justify-center">
+  <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 max-w-2xl">
+    <div className="text-center mb-4 text-slate-300 font-medium">The RL Framework</div>
+
+    <div className="grid grid-cols-3 gap-4 text-sm">
+      <div className="bg-cyan-600/20 border border-cyan-500/50 rounded-lg p-3 text-center">
+        <div className="text-cyan-400 font-bold">States</div>
+        <div className="text-slate-400 text-xs mt-1">What the agent observes</div>
+      </div>
+      <div className="bg-emerald-600/20 border border-emerald-500/50 rounded-lg p-3 text-center">
+        <div className="text-emerald-400 font-bold">Actions</div>
+        <div className="text-slate-400 text-xs mt-1">What the agent can do</div>
+      </div>
+      <div className="bg-amber-600/20 border border-amber-500/50 rounded-lg p-3 text-center">
+        <div className="text-amber-400 font-bold">Rewards</div>
+        <div className="text-slate-400 text-xs mt-1">Feedback signals</div>
+      </div>
+    </div>
+
+    <div className="mt-4 text-center text-slate-500 text-xs">↓</div>
+
+    <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
+      <div className="bg-blue-600/20 border border-blue-500/50 rounded-lg p-3 text-center">
+        <div className="text-blue-400 font-bold">Policy</div>
+        <div className="text-slate-400 text-xs mt-1">Decides actions from states</div>
+      </div>
+      <div className="bg-violet-600/20 border border-violet-500/50 rounded-lg p-3 text-center">
+        <div className="text-violet-400 font-bold">Value Function</div>
+        <div className="text-slate-400 text-xs mt-1">Predicts future rewards</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+These components form a complete framework for describing any RL problem. The agent uses its **policy** to choose **actions** based on **states**, receives **rewards** from the environment, and uses **value functions** to guide learning.
+
+</Intuition>
+
+<Tip title="Building on Chapter 1">
+
+This chapter formalizes the concepts introduced in [What is RL?](/chapters/intro-to-rl). If any terms feel unfamiliar, review the previous chapter first.
+
+</Tip>
+
+<NextChapter slug="getting-started" title="Getting Started" />

@@ -1,8 +1,8 @@
 ---
-title: "Introduction to Reinforcement Learning"
+title: "What is Reinforcement Learning?"
 slug: "intro-to-rl"
 section: "Foundations"
-description: "Understand the core concepts of RL: agents, environments, rewards, and the learning loop"
+description: "The big picture: what RL is, where it came from, and where you see it today"
 status: "draft"
 lastReviewed: null
 prerequisites: []
@@ -10,290 +10,48 @@ prerequisites: []
 
 import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
 import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
-import { Note, Warning, Tip } from '@/components/ui/Callouts';
+import { Note, Warning, Tip, Example } from '@/components/ui/Callouts';
 
-# Introduction to Reinforcement Learning
+# What is Reinforcement Learning?
 
 <ChapterObjectives>
-- Define reinforcement learning and distinguish it from other types of machine learning
-- Identify the key components of an RL problem: agent, environment, state, action, reward
-- Give examples of real-world RL applications
-- Understand the exploration-exploitation tradeoff at a high level
-- Know how to navigate the rest of this book
+- Define reinforcement learning and distinguish it from supervised and unsupervised learning
+- Understand the core idea: learning from interaction and consequences
+- See real-world examples of RL in action, from games to LLMs
+- Know the key milestones in RL's history
 </ChapterObjectives>
 
-## Learning Through Interaction
+## Chapter Overview
 
-Every time you teach a dog a trick, you're doing reinforcement learning. Give a treat when it sits; it learns to sit. Every time you figure out which route to work avoids traffic, you're doing reinforcement learning. Try a new road; notice it's faster; take it tomorrow.
+Every time you teach a dog a trick, you're doing reinforcement learning. Every time you learn which route to work avoids traffic, you're doing reinforcement learning. It's perhaps the most natural form of learning—and also one of the most powerful approaches in artificial intelligence.
 
-**Reinforcement learning (RL)** is the science of learning through trial and error—taking actions, observing consequences, and adjusting behavior to achieve goals. It's perhaps the most natural form of learning, and it's also become one of the most powerful approaches in artificial intelligence.
+In this chapter, we'll explore what makes RL unique, see it in action across many domains, and trace its journey from theoretical foundations to powering today's most impressive AI systems.
 
-<Intuition>
+<div className="my-8">
+  <div className="text-slate-400 text-sm mb-4">In this chapter:</div>
 
-At its core, RL is about an **agent** interacting with an **environment**:
+  <div className="space-y-3">
+    <a href="/chapters/intro-to-rl/what-is-rl" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-blue-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-blue-400 font-bold text-lg">The Core Idea</div>
+      <div className="text-slate-400 text-sm mt-1">Learning from interaction: how RL differs from supervised and unsupervised learning</div>
+    </a>
 
-1. The agent observes the current **state** of the world
-2. The agent chooses an **action**
-3. The environment responds with a new state and a **reward**
-4. The agent updates its behavior to get more reward in the future
-5. Repeat
+    <a href="/chapters/intro-to-rl/rl-in-the-wild" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-emerald-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-emerald-400 font-bold text-lg">RL in the Wild</div>
+      <div className="text-slate-400 text-sm mt-1">Real-world examples from everyday decisions to LLMs and game-playing AI</div>
+    </a>
 
-This loop—observe, act, learn—is the beating heart of reinforcement learning.
+    <a href="/chapters/intro-to-rl/rl-history" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-teal-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-teal-400 font-bold text-lg">A Brief History</div>
+      <div className="text-slate-400 text-sm mt-1">From Bellman to ChatGPT: the milestones that shaped reinforcement learning</div>
+    </a>
+  </div>
+</div>
 
-</Intuition>
+<Tip title="Start Here">
 
-{/* TODO: Interactive Demo - The RL Loop Visualization */}
-{/* Step through: agent observes state → chooses action → receives reward → new state */}
+New to RL? Begin with [The Core Idea](/chapters/intro-to-rl/what-is-rl) to understand what makes reinforcement learning unique, then continue through the sections in order.
 
-## RL vs. Other Types of Learning
+</Tip>
 
-You might be familiar with **supervised learning** and **unsupervised learning**. Where does RL fit?
-
-<Intuition>
-
-| Type | What it learns from | Example |
-|------|---------------------|---------|
-| **Supervised** | Labeled examples (input → correct output) | Given photos with labels, learn to classify cats vs. dogs |
-| **Unsupervised** | Data without labels | Given customer data, discover natural groupings |
-| **Reinforcement** | Rewards from actions | Given a game, learn to play well by trying moves |
-
-The key differences:
-
-**Supervised learning** gets the right answer handed to it. "This email is spam. This one isn't. Learn the pattern."
-
-**Reinforcement learning** doesn't get answers—it gets feedback. "You took that action. Here's a reward (or punishment). Figure out what to do next time."
-
-This feedback might be delayed (you don't know if a chess move was good until the game ends), sparse (most moves get zero reward), or noisy (sometimes good actions lead to bad outcomes by chance).
-
-</Intuition>
-
-### Why Can't We Just Use Supervised Learning?
-
-A natural question: if we want an agent to play a game, why not just collect expert games and train a classifier to predict the expert's moves?
-
-This approach (called **imitation learning**) can work, but it has limitations:
-
-1. **You need expert data.** What if no expert exists?
-2. **You can only match the expert.** You can never exceed them.
-3. **Distribution shift.** When the agent makes a mistake, it enters states the expert never visited. It doesn't know what to do there.
-
-RL solves these problems by learning directly from interaction. The agent doesn't need a teacher—just a goal.
-
-## The Components of RL
-
-Let's define our terms more precisely.
-
-<Intuition>
-
-**Agent**: The learner and decision-maker. This is what we're building.
-
-**Environment**: Everything outside the agent. The world it interacts with.
-
-**State** ($s$): A description of the current situation. In a chess game, the positions of all pieces. In driving, your location, speed, and surroundings.
-
-**Action** ($a$): A choice the agent can make. Move a chess piece, press the accelerator, turn left.
-
-**Reward** ($r$): A number indicating how good the outcome was. Win the game: +1. Lose: -1. Each step in a maze: -0.01 (encouraging speed).
-
-**Policy** ($\pi$): The agent's strategy—a mapping from states to actions. "In this state, do that."
-
-**Value**: How good a state (or action) is in the long run. High value means lots of future reward expected.
-
-</Intuition>
-
-### The Goal: Maximize Cumulative Reward
-
-The agent's objective isn't to maximize immediate reward—it's to maximize **cumulative reward** over time, also called the **return**.
-
-<Intuition>
-
-This distinction is crucial. A move in chess that captures a pawn might look good now, but if it leads to losing your queen, the cumulative reward is negative.
-
-RL agents must learn to delay gratification. Sometimes the best immediate action is to invest in future rewards.
-
-</Intuition>
-
-<Mathematical>
-
-Formally, the agent tries to maximize the expected return:
-
-$$G_t = R_{t+1} + R_{t+2} + R_{t+3} + \ldots$$
-
-where $R_{t+1}$ is the reward received after time step $t$.
-
-Often we add **discounting**—valuing immediate rewards more than distant ones:
-
-$$G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \ldots$$
-
-where $\gamma$ (gamma) is the discount factor, typically between 0.9 and 0.999.
-
-</Mathematical>
-
-## The Exploration-Exploitation Dilemma
-
-Here's a fundamental challenge every RL agent faces.
-
-<Intuition>
-
-Imagine you're in a new city looking for a good restaurant. You've found a decent place that you know serves acceptable food. Do you:
-
-- **Exploit**: Go back to the known restaurant. You're guaranteed an acceptable meal.
-- **Explore**: Try a new place. It might be amazing—or terrible.
-
-This is the **exploration-exploitation tradeoff**:
-
-- **Exploitation**: Use what you know to get reward now
-- **Exploration**: Try new things to learn more for the future
-
-Too much exploitation and you get stuck with mediocrity. Too much exploration and you waste time on bad options. The art of RL is balancing these forces.
-
-</Intuition>
-
-We'll develop strategies for this balance throughout the book, starting with simple approaches in the next chapter on multi-armed bandits.
-
-## Real-World Applications
-
-RL isn't just an academic exercise. It's powering real systems:
-
-<Intuition>
-
-**Game Playing**
-- AlphaGo defeated the world champion in Go (2016)
-- OpenAI Five achieved superhuman performance in Dota 2 (2019)
-- MuZero learned to play Atari, chess, and Go with no rules knowledge (2020)
-
-**Robotics**
-- Robots learning to walk, grasp objects, and manipulate tools
-- Autonomous drones learning to fly through obstacles
-- Robotic arms learning assembly tasks
-
-**Recommendation Systems**
-- Personalizing news feeds and video recommendations
-- Optimizing ad placement (contextual bandits)
-- Balancing exploration of new content with user preferences
-
-**Resource Management**
-- Data center cooling optimization (Google DeepMind)
-- Traffic signal control
-- Inventory management and pricing
-
-**Science and Discovery**
-- Drug molecule design
-- Chip design optimization (Google)
-- Plasma control in fusion reactors
-
-</Intuition>
-
-## A Simple Example: GridWorld
-
-Throughout this book, we'll use **GridWorld** as our primary example environment. It's simple enough to understand completely, yet rich enough to illustrate key concepts.
-
-<Intuition>
-
-Imagine a 4×4 grid. Your agent starts in one corner. The goal is in the opposite corner. Each step, the agent can move up, down, left, or right (if not blocked by a wall).
-
-```
-┌───┬───┬───┬───┐
-│ A │   │   │   │
-├───┼───┼───┼───┤
-│   │   │   │   │
-├───┼───┼───┼───┤
-│   │   │   │   │
-├───┼───┼───┼───┤
-│   │   │   │ G │
-└───┴───┴───┴───┘
-```
-
-- **State**: The agent's position (row, column)
-- **Actions**: Up, Down, Left, Right
-- **Reward**: -1 for each step (encourages finding the shortest path), +10 for reaching the goal
-- **Episode**: Ends when the agent reaches the goal
-
-This simple setup illustrates the core RL loop: observe position, choose direction, receive reward, repeat.
-
-</Intuition>
-
-{/* TODO: Interactive Demo - Simple GridWorld */}
-{/* Let readers step through or watch an agent learn */}
-
-## The RL Algorithm Zoo
-
-RL algorithms fall into several categories. Here's a roadmap:
-
-<Intuition>
-
-**By what they learn:**
-- **Value-based**: Learn how good states/actions are, derive policy from values (Q-learning, DQN)
-- **Policy-based**: Learn the policy directly (REINFORCE, PPO)
-- **Actor-Critic**: Learn both value and policy (A3C, SAC)
-
-**By how they use experience:**
-- **Model-free**: Learn directly from experience without modeling the environment
-- **Model-based**: Learn a model of the environment, use it for planning
-
-**By learning approach:**
-- **On-policy**: Learn from actions the agent is currently taking
-- **Off-policy**: Learn from actions taken by any policy
-
-</Intuition>
-
-Don't worry about understanding these categories now. We'll build up to each one through the book.
-
-## How This Book Is Organized
-
-Here's your roadmap:
-
-<Intuition>
-
-**Part 1: Foundations**
-- Introduction to RL (you are here)
-- Multi-Armed Bandits (simplest RL: no states)
-- Contextual Bandits (adding context features)
-- Markov Decision Processes (formalizing sequential decisions)
-
-**Part 2: Value-Based Methods**
-- Dynamic Programming (with full environment knowledge)
-- Monte Carlo Methods (learning from complete episodes)
-- Temporal Difference Learning (learning step-by-step)
-- Q-Learning (the foundation of modern RL)
-
-**Part 3: Deep Reinforcement Learning**
-- Deep Q-Networks (Q-learning with neural networks)
-- Policy Gradient Methods (learning policies directly)
-- Actor-Critic Architectures (combining value and policy)
-- Advanced Topics (curiosity, multi-agent, etc.)
-
-</Intuition>
-
-Each chapter builds on previous ones. We'll start simple and add complexity gradually.
-
-## Summary
-
-<KeyTakeaways>
-- **Reinforcement learning** is learning from interaction: take actions, observe rewards, improve behavior.
-- The RL loop: Agent observes **state** → chooses **action** → receives **reward** → new state → repeat.
-- Unlike supervised learning, RL learns from **delayed, sparse, evaluative feedback**, not correct labels.
-- The goal is to maximize **cumulative reward** over time, not just immediate reward.
-- The **exploration-exploitation tradeoff** is fundamental: exploit what you know vs. explore to learn more.
-- RL powers game-playing AI, robotics, recommendations, and more.
-</KeyTakeaways>
-
-Now that we have the big picture, let's start with the simplest possible RL problem: choosing between options with uncertain rewards. This is the multi-armed bandit problem, and it's where we'll learn the fundamental techniques that scale to complex environments.
-
-<NextChapter slug="multi-armed-bandits" title="Multi-Armed Bandits" />
-
-## Exercises
-
-### Conceptual Questions
-
-1. **List three everyday examples of reinforcement learning** (human or animal, not computer). For each, identify the agent, environment, states, actions, and rewards.
-
-2. **Why can't we use supervised learning for game playing?** What specific challenges does RL address that supervised learning cannot?
-
-3. **What's the risk if an agent only exploits and never explores?** Give a concrete example where this would lead to poor performance.
-
-### Think About It
-
-4. **Frame a problem you face as RL.** Think of a repeated decision you make (commute route, workout routine, study schedule). What would be the state, actions, and rewards? What makes it hard to optimize?
-
-5. **When is RL overkill?** Some problems don't need RL—supervised learning or even simple rules work fine. What characteristics of a problem make RL the right choice?
+<NextChapter slug="rl-framework" title="The RL Framework" />

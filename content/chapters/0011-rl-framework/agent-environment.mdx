@@ -1,0 +1,141 @@
+---
+title: "The Agent-Environment Interface"
+description: "States, actions, and the interaction loop"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+## The Building Blocks of RL
+
+Now that we've seen RL in action, let's define our terms precisely. Every RL system has the same core components.
+
+<div className="my-8 grid md:grid-cols-2 gap-4">
+  {/* Agent */}
+  <div className="bg-gradient-to-br from-blue-900/30 to-blue-800/10 border border-blue-700/50 rounded-xl p-5">
+    <div className="flex items-center gap-3 mb-3">
+      <div className="text-3xl">🤖</div>
+      <div>
+        <div className="text-blue-400 font-bold text-lg">Agent</div>
+        <div className="text-slate-500 text-xs">The learner and decision-maker</div>
+      </div>
+    </div>
+    <div className="text-slate-300 text-sm">
+      This is what we're building. The agent observes, decides, and learns from experience.
+    </div>
+  </div>
+
+  {/* Environment */}
+  <div className="bg-gradient-to-br from-purple-900/30 to-purple-800/10 border border-purple-700/50 rounded-xl p-5">
+    <div className="flex items-center gap-3 mb-3">
+      <div className="text-3xl">🌍</div>
+      <div>
+        <div className="text-purple-400 font-bold text-lg">Environment</div>
+        <div className="text-slate-500 text-xs">Everything outside the agent</div>
+      </div>
+    </div>
+    <div className="text-slate-300 text-sm">
+      The world the agent interacts with. Responds to actions with new states and rewards.
+    </div>
+  </div>
+</div>
+
+<Intuition>
+
+<div className="my-6 space-y-4">
+  <div className="flex items-start gap-4 bg-slate-800/30 rounded-lg p-4">
+    <div className="bg-cyan-600/20 border border-cyan-500 rounded px-3 py-1 text-cyan-400 font-mono text-sm min-w-[70px] text-center">State</div>
+    <div>
+      <div className="text-slate-300 font-medium">$s$ — A snapshot of the current situation</div>
+      <div className="text-slate-400 text-sm">In chess: positions of all pieces. In driving: your location, speed, and surroundings.</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-4 bg-slate-800/30 rounded-lg p-4">
+    <div className="bg-emerald-600/20 border border-emerald-500 rounded px-3 py-1 text-emerald-400 font-mono text-sm min-w-[70px] text-center">Action</div>
+    <div>
+      <div className="text-slate-300 font-medium">$a$ — A choice the agent can make</div>
+      <div className="text-slate-400 text-sm">Move a chess piece, press the accelerator, turn left.</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-4 bg-slate-800/30 rounded-lg p-4">
+    <div className="bg-amber-600/20 border border-amber-500 rounded px-3 py-1 text-amber-400 font-mono text-sm min-w-[70px] text-center">Reward</div>
+    <div>
+      <div className="text-slate-300 font-medium">$r$ — Feedback on how good the outcome was</div>
+      <div className="text-slate-400 text-sm">Win the game: +1. Lose: -1. Each step in a maze: -0.01 (encouraging speed).</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-4 bg-slate-800/30 rounded-lg p-4">
+    <div className="bg-violet-600/20 border border-violet-500 rounded px-3 py-1 text-violet-400 font-mono text-sm min-w-[70px] text-center">Policy</div>
+    <div>
+      <div className="text-slate-300 font-medium">$\pi$ — The agent's strategy</div>
+      <div className="text-slate-400 text-sm">A mapping from states to actions. "In this state, do that."</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-4 bg-slate-800/30 rounded-lg p-4">
+    <div className="bg-pink-600/20 border border-pink-500 rounded px-3 py-1 text-pink-400 font-mono text-sm min-w-[70px] text-center">Value</div>
+    <div>
+      <div className="text-slate-300 font-medium">How good a state is in the long run</div>
+      <div className="text-slate-400 text-sm">High value = lots of future reward expected from this point onward.</div>
+    </div>
+  </div>
+</div>
+
+</Intuition>
+
+## A Simple Example: GridWorld
+
+Throughout this book, we'll use **GridWorld** as our primary example environment. It's simple enough to understand completely, yet rich enough to illustrate key concepts.
+
+<Example title="GridWorld Setup">
+
+Imagine a 4×4 grid. Your agent starts in one corner. The goal is in the opposite corner. Each step, the agent can move up, down, left, or right (if not blocked by a wall).
+
+</Example>
+
+<div className="my-8 flex justify-center">
+  <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+    <div style={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px'}} className="font-mono text-sm">
+      <div className="w-12 h-12 bg-blue-600/30 border border-blue-500 rounded flex items-center justify-center text-blue-400 font-bold">A</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center text-slate-500">·</div><div className="w-12 h-12 bg-emerald-600/30 border border-emerald-500 rounded flex items-center justify-center text-emerald-400 font-bold">G</div>
+    </div>
+    <div className="flex justify-center gap-6 mt-4 text-xs">
+      <div className="flex items-center gap-2">
+        <div className="w-3 h-3 bg-blue-600/30 border border-blue-500 rounded"></div>
+        <span className="text-slate-400">Agent</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="w-3 h-3 bg-emerald-600/30 border border-emerald-500 rounded"></div>
+        <span className="text-slate-400">Goal</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  <div className="bg-slate-800/30 rounded-lg p-4">
+    <div className="text-slate-300 font-medium mb-2">In GridWorld terms:</div>
+    <ul className="text-slate-400 text-sm space-y-2">
+      <li><span className="text-cyan-400 font-medium">State:</span> Agent's position (row, column)</li>
+      <li><span className="text-emerald-400 font-medium">Actions:</span> Up, Down, Left, Right</li>
+      <li><span className="text-amber-400 font-medium">Reward:</span> -1 per step, +10 at goal</li>
+      <li><span className="text-violet-400 font-medium">Episode:</span> Ends when agent reaches goal</li>
+    </ul>
+  </div>
+
+  <div className="bg-slate-800/30 rounded-lg p-4">
+    <div className="text-slate-300 font-medium mb-2">Why -1 per step?</div>
+    <div className="text-slate-400 text-sm">
+      This encourages the agent to find the <span className="text-amber-300">shortest path</span>. Without step penalties, the agent wouldn't care how long it takes to reach the goal.
+    </div>
+  </div>
+</div>
+
+<Tip title="GridWorld Is Your Friend">
+
+This simple setup illustrates the core RL loop: observe position → choose direction → receive reward → repeat. We'll return to GridWorld throughout the book to test new algorithms.
+
+</Tip>
+

@@ -1,0 +1,133 @@
+---
+title: "Getting Started"
+slug: "getting-started"
+section: "Foundations"
+description: "The algorithm landscape, your roadmap, and your first hands-on demo"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "intro-to-rl"
+    title: "What is Reinforcement Learning?"
+  - slug: "rl-framework"
+    title: "The RL Framework"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example } from '@/components/ui/Callouts';
+
+# Getting Started
+
+<ChapterObjectives>
+- Survey the landscape of RL algorithms: value-based, policy-based, and actor-critic
+- Understand the difference between model-free and model-based methods
+- Know the roadmap for the rest of this book
+- Experience the RL loop hands-on with an interactive demo
+</ChapterObjectives>
+
+## Chapter Overview
+
+You've learned what RL is and the framework behind it. Now it's time to see the bigger picture: the different families of algorithms you'll learn, and where they fit in the landscape. Then, you'll get hands-on experience with your first interactive demo.
+
+<div className="my-8">
+  <div className="text-slate-400 text-sm mb-4">In this chapter:</div>
+
+  <div className="space-y-3">
+    <a href="/chapters/getting-started/rl-landscape" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-pink-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-pink-400 font-bold text-lg">The RL Landscape</div>
+      <div className="text-slate-400 text-sm mt-1">Algorithm families: value-based, policy-based, model-free, model-based</div>
+    </a>
+
+    <a href="/chapters/getting-started/try-it-yourself" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-orange-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-orange-400 font-bold text-lg">Try It Yourself</div>
+      <div className="text-slate-400 text-sm mt-1">Experience the RL loop with an interactive GridWorld demo</div>
+    </a>
+  </div>
+</div>
+
+## Your Learning Journey
+
+<Intuition>
+
+<div className="my-8">
+  <div className="space-y-4">
+    <div className="bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-blue-500">
+      <div className="text-blue-400 font-bold text-lg mb-1">Part 1: Foundations</div>
+      <div className="text-slate-400 text-sm">You are here! Understanding the basics of RL.</div>
+    </div>
+
+    <div className="bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-amber-500">
+      <div className="text-amber-400 font-bold text-lg mb-1">Part 2: Bandit Problems</div>
+      <div className="text-slate-400 text-sm">The simplest RL setting: choosing between options with uncertain rewards.</div>
+    </div>
+
+    <div className="bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-cyan-500">
+      <div className="text-cyan-400 font-bold text-lg mb-1">Part 3: Q-Learning Foundations</div>
+      <div className="text-slate-400 text-sm">Value-based methods: TD learning, Q-learning, and Deep Q-Networks.</div>
+    </div>
+
+    <div className="bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-emerald-500">
+      <div className="text-emerald-400 font-bold text-lg mb-1">Part 4: Policy Gradient Methods</div>
+      <div className="text-slate-400 text-sm">Policy-based methods: REINFORCE, actor-critic, and PPO.</div>
+    </div>
+  </div>
+</div>
+
+Each part builds on the previous. By the end, you'll understand the algorithms behind modern AI systems like ChatGPT and AlphaGo.
+
+</Intuition>
+
+<Tip title="Ready to Get Hands-On?">
+
+After surveying the landscape, head to [Try It Yourself](/chapters/getting-started/try-it-yourself) for an interactive demo where you'll see an RL agent navigate a GridWorld.
+
+</Tip>
+
+## Foundations Summary
+
+<KeyTakeaways>
+- **Reinforcement learning** is learning from interaction: take actions, observe rewards, improve behavior
+- The RL loop: Agent observes **state** → chooses **action** → receives **reward** → new state → repeat
+- Unlike supervised learning, RL learns from **delayed, sparse, evaluative feedback**, not correct labels
+- The goal is to maximize **cumulative reward** over time, not just immediate reward
+- The **exploration-exploitation tradeoff** is fundamental: exploit what you know vs. explore to learn more
+- **Policies** tell agents what to do; **value functions** tell agents how good states are
+- RL powers game-playing AI, robotics, recommendations, LLMs, and more
+</KeyTakeaways>
+
+## Exercises
+
+### Conceptual Questions
+
+<div className="my-6 space-y-4">
+  <div className="bg-slate-800/30 rounded-lg p-4">
+    <div className="text-slate-300 font-medium mb-2">1. List three everyday examples of reinforcement learning</div>
+    <div className="text-slate-500 text-sm">Human or animal, not computer. For each, identify the agent, environment, states, actions, and rewards.</div>
+  </div>
+
+  <div className="bg-slate-800/30 rounded-lg p-4">
+    <div className="text-slate-300 font-medium mb-2">2. Why can't we use supervised learning for game playing?</div>
+    <div className="text-slate-500 text-sm">What specific challenges does RL address that supervised learning cannot?</div>
+  </div>
+
+  <div className="bg-slate-800/30 rounded-lg p-4">
+    <div className="text-slate-300 font-medium mb-2">3. What's the risk if an agent only exploits and never explores?</div>
+    <div className="text-slate-500 text-sm">Give a concrete example where this would lead to poor performance.</div>
+  </div>
+</div>
+
+### Think About It
+
+<div className="my-6 space-y-4">
+  <div className="bg-slate-800/30 rounded-lg p-4">
+    <div className="text-slate-300 font-medium mb-2">4. Frame a problem you face as RL</div>
+    <div className="text-slate-500 text-sm">Think of a repeated decision you make (commute route, workout routine, study schedule). What would be the state, actions, and rewards? What makes it hard to optimize?</div>
+  </div>
+
+  <div className="bg-slate-800/30 rounded-lg p-4">
+    <div className="text-slate-300 font-medium mb-2">5. When is RL overkill?</div>
+    <div className="text-slate-500 text-sm">Some problems don't need RL—supervised learning or even simple rules work fine. What characteristics of a problem make RL the right choice?</div>
+  </div>
+</div>
+
+<NextChapter slug="multi-armed-bandits" title="Multi-Armed Bandits" />

@@ -1,33 +1,80 @@
 ---
-title: "What is Reinforcement Learning?"
-description: "The big picture: learning from interaction"
+title: "The Core Idea"
+description: "Learning from interaction: the essence of RL"
 ---
 
 import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
-import { Note, Warning, Tip } from '@/components/ui/Callouts';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
 
 ## Learning Through Interaction
 
+<Example title="RL in Everyday Life">
+
 Every time you teach a dog a trick, you're doing reinforcement learning. Give a treat when it sits; it learns to sit. Every time you figure out which route to work avoids traffic, you're doing reinforcement learning. Try a new road; notice it's faster; take it tomorrow.
 
+</Example>
+
+<Definition title="Reinforcement Learning">
+
 **Reinforcement learning (RL)** is the science of learning through trial and error—taking actions, observing consequences, and adjusting behavior to achieve goals. It's perhaps the most natural form of learning, and it's also become one of the most powerful approaches in artificial intelligence.
+
+</Definition>
 
 <Intuition>
 
 At its core, RL is about an **agent** interacting with an **environment**:
 
-1. The agent observes the current **state** of the world
-2. The agent chooses an **action**
-3. The environment responds with a new state and a **reward**
-4. The agent updates its behavior to get more reward in the future
-5. Repeat
+{/* The RL Loop Diagram */}
+<div className="my-8 flex justify-center">
+  <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 font-mono text-sm">
+    <div className="flex items-center justify-center gap-8">
+      {/* Agent Box */}
+      <div className="bg-blue-600/20 border-2 border-blue-500 rounded-lg px-6 py-4 text-center">
+        <div className="text-blue-400 font-bold text-lg">Agent</div>
+        <div className="text-slate-400 text-xs mt-1">Learns & Decides</div>
+      </div>
+
+      {/* Arrows */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-emerald-400">action</span>
+          <span className="text-slate-500">→</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500">←</span>
+          <span className="text-amber-400">state, reward</span>
+        </div>
+      </div>
+
+      {/* Environment Box */}
+      <div className="bg-purple-600/20 border-2 border-purple-500 rounded-lg px-6 py-4 text-center">
+        <div className="text-purple-400 font-bold text-lg">Environment</div>
+        <div className="text-slate-400 text-xs mt-1">Responds & Rewards</div>
+      </div>
+    </div>
+
+    {/* Loop indicator */}
+    <div className="text-center mt-4 text-slate-500 text-xs">
+      ↻ This loop repeats at each timestep
+    </div>
+  </div>
+</div>
+
+<div className="mt-8">
+
+The agent follows this cycle:
+
+1. **Observe** the current state of the world
+2. **Choose** an action based on what it has learned
+3. **Receive** a reward and observe the new state
+4. **Update** its behavior to get more reward in the future
+5. **Repeat**
 
 This loop—observe, act, learn—is the beating heart of reinforcement learning.
 
-</Intuition>
+</div>
 
-{/* TODO: Interactive Demo - The RL Loop Visualization */}
-{/* Step through: agent observes state → chooses action → receives reward → new state */}
+</Intuition>
 
 ## RL vs. Other Types of Learning
 
@@ -35,19 +82,62 @@ You might be familiar with **supervised learning** and **unsupervised learning**
 
 <Intuition>
 
-| Type | What it learns from | Example |
-|------|---------------------|---------|
-| **Supervised** | Labeled examples (input → correct output) | Given photos with labels, learn to classify cats vs. dogs |
-| **Unsupervised** | Data without labels | Given customer data, discover natural groupings |
-| **Reinforcement** | Rewards from actions | Given a game, learn to play well by trying moves |
+{/* Learning Type Comparison Cards */}
+<div className="grid md:grid-cols-3 gap-4 my-8">
+  {/* Supervised Learning Card */}
+  <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 border border-cyan-700/50 rounded-xl p-5">
+    <div className="flex items-center gap-3 mb-3">
+      <div className="text-2xl">🏷️</div>
+      <div className="text-cyan-400 font-bold">Supervised</div>
+    </div>
+    <div className="text-slate-300 text-sm mb-3">
+      Learns from <span className="text-cyan-300 font-medium">labeled examples</span>
+    </div>
+    <div className="text-slate-400 text-xs bg-slate-800/50 rounded-lg p-3">
+      "This photo is a cat. This one is a dog. Learn the pattern."
+    </div>
+  </div>
 
-The key differences:
+  {/* Unsupervised Learning Card */}
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 border border-violet-700/50 rounded-xl p-5">
+    <div className="flex items-center gap-3 mb-3">
+      <div className="text-2xl">🔍</div>
+      <div className="text-violet-400 font-bold">Unsupervised</div>
+    </div>
+    <div className="text-slate-300 text-sm mb-3">
+      Learns from <span className="text-violet-300 font-medium">unlabeled data</span>
+    </div>
+    <div className="text-slate-400 text-xs bg-slate-800/50 rounded-lg p-3">
+      "Here's customer data. Find natural groupings yourself."
+    </div>
+  </div>
 
-**Supervised learning** gets the right answer handed to it. "This email is spam. This one isn't. Learn the pattern."
+  {/* Reinforcement Learning Card */}
+  <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 border-2 border-amber-500/70 rounded-xl p-5 ring-2 ring-amber-500/20">
+    <div className="flex items-center gap-3 mb-3">
+      <div className="text-2xl">🎮</div>
+      <div className="text-amber-400 font-bold">Reinforcement</div>
+    </div>
+    <div className="text-slate-300 text-sm mb-3">
+      Learns from <span className="text-amber-300 font-medium">rewards & actions</span>
+    </div>
+    <div className="text-slate-400 text-xs bg-slate-800/50 rounded-lg p-3">
+      "You took that action. Here's your reward. Figure out what works."
+    </div>
+  </div>
+</div>
 
-**Reinforcement learning** doesn't get answers—it gets feedback. "You took that action. Here's a reward (or punishment). Figure out what to do next time."
+**The key difference:** Supervised learning gets the right answer handed to it. Reinforcement learning doesn't get answers—it gets *feedback*.
 
-This feedback might be delayed (you don't know if a chess move was good until the game ends), sparse (most moves get zero reward), or noisy (sometimes good actions lead to bad outcomes by chance).
+<Note title="RL Feedback is Tricky">
+
+Unlike supervised learning where you immediately know if you're right, RL feedback can be:
+
+- **Delayed** — You don't know if a chess move was good until the game ends
+- **Sparse** — Most actions get zero reward
+- **Noisy** — Sometimes good actions lead to bad outcomes by chance
+
+</Note>
 
 </Intuition>
 
@@ -57,8 +147,34 @@ A natural question: if we want an agent to play a game, why not just collect exp
 
 This approach (called **imitation learning**) can work, but it has limitations:
 
-1. **You need expert data.** What if no expert exists?
-2. **You can only match the expert.** You can never exceed them.
-3. **Distribution shift.** When the agent makes a mistake, it enters states the expert never visited. It doesn't know what to do there.
+<div className="my-6 space-y-3">
+  <div className="flex items-start gap-3 bg-red-900/20 border border-red-800/40 rounded-lg p-4">
+    <div className="text-red-400 font-bold text-lg">1.</div>
+    <div>
+      <div className="text-red-300 font-medium">You need expert data</div>
+      <div className="text-slate-400 text-sm">What if no expert exists for your problem?</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-3 bg-red-900/20 border border-red-800/40 rounded-lg p-4">
+    <div className="text-red-400 font-bold text-lg">2.</div>
+    <div>
+      <div className="text-red-300 font-medium">You can only match the expert</div>
+      <div className="text-slate-400 text-sm">You can never exceed their performance.</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-3 bg-red-900/20 border border-red-800/40 rounded-lg p-4">
+    <div className="text-red-400 font-bold text-lg">3.</div>
+    <div>
+      <div className="text-red-300 font-medium">Distribution shift</div>
+      <div className="text-slate-400 text-sm">When the agent makes a mistake, it enters states the expert never visited. It doesn't know what to do there.</div>
+    </div>
+  </div>
+</div>
+
+<Tip title="The RL Advantage">
 
 RL solves these problems by learning directly from interaction. The agent doesn't need a teacher—just a goal.
+
+</Tip>

@@ -1,0 +1,136 @@
+---
+title: "The RL Landscape"
+description: "Model-free vs model-based, value vs policy methods"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+## The Algorithm Zoo
+
+RL algorithms come in many flavors. Here's a map to help you navigate.
+
+<Intuition>
+
+<div className="my-8">
+  <div className="text-slate-400 text-sm mb-4 text-center">Major algorithm families</div>
+
+  <div className="grid md:grid-cols-3 gap-4">
+    {/* Value-Based */}
+    <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 border border-cyan-700/50 rounded-xl p-5">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="text-2xl">📊</div>
+        <div className="text-cyan-400 font-bold">Value-Based</div>
+      </div>
+      <div className="text-slate-300 text-sm mb-3">
+        Learn how good states/actions are, derive policy from values
+      </div>
+      <div className="text-slate-500 text-xs space-y-1">
+        <div>• Q-Learning</div>
+        <div>• DQN</div>
+        <div>• SARSA</div>
+      </div>
+    </div>
+
+    {/* Policy-Based */}
+    <div className="bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 border border-emerald-700/50 rounded-xl p-5">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="text-2xl">🎯</div>
+        <div className="text-emerald-400 font-bold">Policy-Based</div>
+      </div>
+      <div className="text-slate-300 text-sm mb-3">
+        Learn the policy directly without value functions
+      </div>
+      <div className="text-slate-500 text-xs space-y-1">
+        <div>• REINFORCE</div>
+        <div>• PPO</div>
+        <div>• TRPO</div>
+      </div>
+    </div>
+
+    {/* Actor-Critic */}
+    <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 border border-violet-700/50 rounded-xl p-5">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="text-2xl">🎭</div>
+        <div className="text-violet-400 font-bold">Actor-Critic</div>
+      </div>
+      <div className="text-slate-300 text-sm mb-3">
+        Learn both value and policy together
+      </div>
+      <div className="text-slate-500 text-xs space-y-1">
+        <div>• A2C / A3C</div>
+        <div>• SAC</div>
+        <div>• TD3</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+### Model-Free vs. Model-Based
+
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  <div className="bg-gradient-to-br from-blue-900/30 to-blue-800/10 border border-blue-700/50 rounded-xl p-5">
+    <div className="text-blue-400 font-bold text-lg mb-2">Model-Free</div>
+    <div className="text-slate-300 text-sm mb-3">
+      Learn directly from experience without modeling the environment
+    </div>
+    <div className="flex items-start gap-2 text-xs">
+      <span className="text-emerald-400">✓</span>
+      <span className="text-slate-400">Simpler, more flexible</span>
+    </div>
+    <div className="flex items-start gap-2 text-xs">
+      <span className="text-red-400">✗</span>
+      <span className="text-slate-400">Needs more samples</span>
+    </div>
+  </div>
+
+  <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 border border-amber-700/50 rounded-xl p-5">
+    <div className="text-amber-400 font-bold text-lg mb-2">Model-Based</div>
+    <div className="text-slate-300 text-sm mb-3">
+      Learn a model of the environment, use it for planning
+    </div>
+    <div className="flex items-start gap-2 text-xs">
+      <span className="text-emerald-400">✓</span>
+      <span className="text-slate-400">More sample efficient</span>
+    </div>
+    <div className="flex items-start gap-2 text-xs">
+      <span className="text-red-400">✗</span>
+      <span className="text-slate-400">Model errors can compound</span>
+    </div>
+  </div>
+</div>
+
+### On-Policy vs. Off-Policy
+
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  <div className="bg-slate-800/30 rounded-lg p-4">
+    <div className="text-pink-400 font-bold mb-2">On-Policy</div>
+    <div className="text-slate-400 text-sm">
+      Learn from actions the agent is currently taking. Must collect new data as policy changes.
+    </div>
+    <div className="text-slate-500 text-xs mt-2">Examples: SARSA, PPO</div>
+  </div>
+
+  <div className="bg-slate-800/30 rounded-lg p-4">
+    <div className="text-teal-400 font-bold mb-2">Off-Policy</div>
+    <div className="text-slate-400 text-sm">
+      Learn from actions taken by any policy. Can reuse old data.
+    </div>
+    <div className="text-slate-500 text-xs mt-2">Examples: Q-Learning, DQN, SAC</div>
+  </div>
+</div>
+
+</Intuition>
+
+<Tip title="Don't Memorize This">
+
+You don't need to understand these categories now. We'll build up to each one through the book. This map is here so you know where we're going.
+
+</Tip>
+
+<Note title="Next Up">
+
+Head to [Try It Yourself](/chapters/getting-started/try-it-yourself) to see an RL agent in action with an interactive demo.
+
+</Note>

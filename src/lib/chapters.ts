@@ -42,52 +42,99 @@ export interface NavigationItem {
 }
 
 export const chapters: Record<string, ChapterData> = {
-  // Foundations Section
+  // Foundations Section - Chapter 1: What is RL?
   'intro-to-rl': {
     slug: 'intro-to-rl',
     dirName: '0010-intro-to-rl',
-    title: 'Introduction to Reinforcement Learning',
+    title: 'What is Reinforcement Learning?',
     section: 'Foundations',
-    description: 'Understand the core concepts of RL: agents, environments, rewards, and the learning loop',
-    status: 'draft',
+    description: 'The big picture: what RL is, where it came from, and where you see it today',
+    status: 'editor_reviewed',
     subsections: [
       {
         slug: 'what-is-rl',
-        title: 'What is Reinforcement Learning?',
-        description: 'The big picture: learning from interaction',
+        title: 'The Core Idea',
+        description: 'Learning from interaction: the essence of RL',
         order: 10,
       },
+      {
+        slug: 'rl-in-the-wild',
+        title: 'RL in the Wild',
+        description: 'Real-world examples from everyday life to LLMs',
+        order: 20,
+      },
+      {
+        slug: 'rl-history',
+        title: 'A Brief History',
+        description: 'From Bellman to ChatGPT: the milestones that shaped RL',
+        order: 30,
+      },
+    ],
+  },
+  // Foundations Section - Chapter 2: The RL Framework
+  'rl-framework': {
+    slug: 'rl-framework',
+    dirName: '0011-rl-framework',
+    title: 'The RL Framework',
+    section: 'Foundations',
+    description: 'The building blocks: agents, environments, states, actions, rewards, and policies',
+    status: 'editor_reviewed',
+    subsections: [
       {
         slug: 'agent-environment',
         title: 'The Agent-Environment Interface',
         description: 'States, actions, and the interaction loop',
-        order: 20,
+        order: 10,
       },
       {
         slug: 'rewards-returns',
         title: 'Rewards and Returns',
         description: 'Defining goals through reward signals',
-        order: 30,
+        order: 20,
       },
       {
         slug: 'policies-values',
         title: 'Policies and Value Functions',
         description: 'How agents represent knowledge',
+        order: 30,
+      },
+      {
+        slug: 'exploration-exploitation',
+        title: 'Exploration vs Exploitation',
+        description: 'The fundamental tradeoff at the heart of RL',
         order: 40,
       },
+    ],
+  },
+  // Foundations Section - Chapter 3: Getting Started
+  'getting-started': {
+    slug: 'getting-started',
+    dirName: '0012-getting-started',
+    title: 'Getting Started',
+    section: 'Foundations',
+    description: 'The algorithm landscape, your roadmap, and your first hands-on demo',
+    status: 'editor_reviewed',
+    subsections: [
       {
         slug: 'rl-landscape',
         title: 'The RL Landscape',
         description: 'Model-free vs model-based, value vs policy methods',
-        order: 50,
+        order: 10,
+      },
+      {
+        slug: 'try-it-yourself',
+        title: 'Try It Yourself',
+        description: 'Experience the RL loop with an interactive GridWorld demo',
+        order: 20,
       },
     ],
   },
+  // Bandit Problems Section
   'multi-armed-bandits': {
     slug: 'multi-armed-bandits',
     dirName: '0020-multi-armed-bandits',
     title: 'Multi-Armed Bandits',
-    section: 'Foundations',
+    section: 'Bandit Problems',
     description: 'Master the exploration-exploitation tradeoff in the simplest RL setting',
     status: 'draft',
     subsections: [
@@ -127,7 +174,7 @@ export const chapters: Record<string, ChapterData> = {
     slug: 'contextual-bandits',
     dirName: '0030-contextual-bandits',
     title: 'Contextual Bandits',
-    section: 'Foundations',
+    section: 'Bandit Problems',
     description: 'Learn to make personalized decisions based on context features',
     status: 'draft',
   },

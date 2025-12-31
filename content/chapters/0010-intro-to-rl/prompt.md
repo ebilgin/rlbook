@@ -174,3 +174,102 @@ while not done:
 - [ ] Exploration-exploitation introduced intuitively
 - [ ] Book roadmap provided
 - [ ] Reader feels oriented and motivated to continue
+
+---
+
+## Iteration Notes
+
+### Visual Style Decisions (2025-12-30)
+- **Styled callout components work well**: Used `<Example>`, `<Definition>`, `<Note>`, and `<Tip>` components to break up text and highlight key content
+- **Inline JSX diagrams**: The RL loop diagram was implemented as inline Tailwind-styled JSX divs rather than ASCII art or images. This provides:
+  - Dark mode compatibility out of the box
+  - Consistent styling with the site
+  - No external assets to manage
+- **Comparison cards over tables**: Replaced the markdown table comparing learning types with three styled gradient cards. More visually engaging and scannable.
+- **Limitation cards with red theme**: Styled the "imitation learning limitations" as red-themed cards to convey "problems/downsides"
+- **Spacing matters**: Added explicit `mt-8` wrapper after the RL loop diagram to separate it from the following text
+
+### Style Patterns That Worked Well
+- Gradient backgrounds with low opacity: `bg-gradient-to-br from-{color}-900/30 to-{color}-800/10`
+- Colored borders to distinguish cards: `border border-{color}-700/50`
+- Highlight the key card with ring: `ring-2 ring-amber-500/20` on the RL card
+- Small descriptive quotes in `bg-slate-800/50` boxes within cards
+
+### Considerations for Style Guide
+User expressed preference for this visual style. Created `prompts/VISUAL_PATTERNS.md` with:
+- Guidelines for when to use styled cards vs tables
+- Patterns for inline JSX diagrams
+- Color theming conventions (cyan=supervised, violet=unsupervised, amber=RL, red=limitations/warnings)
+
+### Chapter Restructure (2025-12-30)
+- **index.mdx is now a chapter overview**: Changed from full content to a navigation page with links to subsections and a quick RL loop diagram
+- **Added new subsection: RL in the Wild** (order: 15): Real-world examples including LLMs/RLHF, everyday decisions, and industry applications
+- **policies-values.mdx refocused**: Moved "Real-World Applications" content to rl-in-the-wild.mdx; now properly covers policies and value functions
+- **Content deduplication**: Removed duplicate content that was in both index.mdx and individual subsections
+
+### Technical Fixes
+- **GridWorld rendering**: MDX parser breaks `grid-cols-4` with newlines between child divs. Fixed by using inline `style={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)'}}` and putting all grid items on one line
+- **Callout imports**: Added `Example` and `Definition` to imports in all files that use them
+
+### Added RL History Subsection (2025-12-30)
+- **New file: rl-history.mdx** (order: 16, after rl-in-the-wild)
+- **Timeline visual**: Vertical timeline from 1950s to 2025 with colored milestone cards
+- **Key milestones covered**: Bellman (1957), Sutton TD (1988), Watkins Q-learning (1989), TD-Gammon (1992), Sutton & Barto book (1998), DQN (2013), AlphaGo (2016), AlphaZero (2017), PPO (2017), OpenAI Five & AlphaStar (2019), MuZero (2020), RLHF era (2022-2024), current applications (2025)
+- **References**: All major papers cited with proper attribution
+- **Key themes section**: Games as proving grounds, compute scaling, deep learning + RL, games to real world
+
+### Added Interactive GridWorld Demo (2025-12-30)
+- **New file: try-it-yourself.mdx** (order: 55, at end of chapter)
+- **New component: GridWorldIntro.tsx** - Simplified 4x4 GridWorld with pre-learned optimal policy
+- **Interactive features**: Step-by-step execution, Play/Pause, Reset, Show/Hide Policy arrows
+- **Purpose**: Showcase platform's interactive capabilities, build intuition before diving into math
+- **Visual style**: Emoji-based (robot agent, target goal), colored reward/step counters, gradient arrows for policy
+
+### Moved Complexity Toggles to Sidebar (2025-12-30)
+- **Sidebar update**: Added Math/Code visibility toggles to left sidebar for global control
+- **Removed from**: ChapterLayout.astro and SubsectionLayout.astro
+- **Kept in**: Papers, Applications, Environments pages (standalone pages without sidebar)
+- **Implementation**: Same localStorage-based persistence, CSS class toggling on body element
+- **UI**: Compact toggle buttons with purple (Math) and emerald (Code) colors
+
+### Section Reorganization (2025-12-30)
+- **Bandit chapters** moved from "Foundations" to "Bandit Problems" section
+- **New section structure**: Foundations → Bandit Problems → Q-Learning Foundations → Policy Gradient Methods
+
+### Foundations Split into 3 Chapters (2025-12-30)
+- **Problem**: Single chapter with 8 subsections looked unbalanced
+- **Solution**: Split into 3 focused chapters:
+  1. **What is RL?** (`intro-to-rl`, 0010): what-is-rl, rl-in-the-wild, rl-history
+  2. **The RL Framework** (`rl-framework`, 0011): agent-environment, rewards-returns, policies-values, exploration-exploitation
+  3. **Getting Started** (`getting-started`, 0012): rl-landscape, try-it-yourself
+- **New directories**: `0011-rl-framework/`, `0012-getting-started/`
+- **Chapter titles updated**: "Introduction to Reinforcement Learning" → "What is Reinforcement Learning?"
+- **Each chapter now has 2-4 subsections** for better balance
+
+### Exploration-Exploitation as Standalone Subsection (2025-12-30)
+- **Problem**: Exploration-exploitation was buried inside rewards-returns.mdx
+- **Solution**: Made it a dedicated subsection in rl-framework
+- **New file**: `exploration-exploitation.mdx` (order: 40)
+- **New interactive component**: `ExplorationExploitation.tsx` - slot machine bandit demo
+  - 3 machines with hidden probabilities
+  - User can pull machines and observe rewards
+  - Shows estimated vs true values
+  - Tracks regret for pedagogical insight
+- **rewards-returns.mdx**: Now ends with a note linking to the exploration-exploitation section
+
+### Consistency Review Fixes (2025-12-30)
+- **Title alignment**: Subsection titles in MDX frontmatter must match chapters.ts entries
+  - Fixed: what-is-rl.mdx title changed from "What is Reinforcement Learning?" to "The Core Idea"
+- **No TODO comments in production**: Removed visible `{/* TODO... */}` from agent-environment.mdx
+- **Chapter-level content placement**:
+  - Chapter Summary and Exercises belong in chapter index.mdx, NOT subsections
+  - Moved these from rl-landscape.mdx to getting-started/index.mdx
+- **Duplicate content removal**:
+  - RL loop diagram should appear once (either in chapter index OR first subsection, not both)
+  - Roadmap should appear once (in chapter index, not also in subsections)
+
+### Status Update (2025-12-30)
+- **All 3 Foundations chapters marked as editor_reviewed**:
+  - intro-to-rl
+  - rl-framework
+  - getting-started

@@ -3,10 +3,24 @@
  *
  * Displays hierarchical chapter navigation grouped by section.
  * Supports three levels: Section > Chapter > Subsection
+ * Also includes global complexity controls for Math/Code visibility.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { SubsectionData } from '../../lib/chapters';
+
+// Storage key for complexity preferences
+const STORAGE_KEY = 'rlbook-complexity-preferences';
+
+interface ComplexityPreferences {
+  showMath: boolean;
+  showCode: boolean;
+}
+
+const defaultPreferences: ComplexityPreferences = {
+  showMath: true,
+  showCode: true,
+};
 
 interface ChapterData {
   slug: string;
@@ -51,6 +65,55 @@ export function Sidebar({
     new Set(currentSlug && subsections.length > 0 ? [currentSlug] : [])
   );
 
+  // Complexity preferences state
+  const [preferences, setPreferences] = useState<ComplexityPreferences>(defaultPreferences);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  // Load preferences from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setPreferences(parsed);
+      }
+    } catch (e) {
+      console.warn('Failed to load complexity preferences:', e);
+    }
+    setIsHydrated(true);
+  }, []);
+
+  // Apply CSS classes to document body and save preferences
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    if (preferences.showMath) {
+      document.body.classList.remove('hide-math');
+    } else {
+      document.body.classList.add('hide-math');
+    }
+
+    if (preferences.showCode) {
+      document.body.classList.remove('hide-code');
+    } else {
+      document.body.classList.add('hide-code');
+    }
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+    } catch (e) {
+      console.warn('Failed to save complexity preferences:', e);
+    }
+  }, [preferences, isHydrated]);
+
+  const toggleMath = () => {
+    setPreferences(prev => ({ ...prev, showMath: !prev.showMath }));
+  };
+
+  const toggleCode = () => {
+    setPreferences(prev => ({ ...prev, showCode: !prev.showCode }));
+  };
+
   const toggleSection = (section: string) => {
     setExpandedSections(prev => {
       const next = new Set(prev);
@@ -83,6 +146,39 @@ export function Sidebar({
       <a href="/" className="block px-4 py-4 text-xl font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 border-b border-gray-200 dark:border-gray-700">
         rlbook.ai
       </a>
+
+      {/* Content visibility toggles */}
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+          Show Content
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={toggleMath}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded text-xs font-medium transition-all ${
+              preferences.showMath
+                ? 'bg-purple-600 dark:bg-purple-700 text-white'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+            }`}
+            title={preferences.showMath ? 'Hide math sections' : 'Show math sections'}
+          >
+            <span>∑</span>
+            <span>Math</span>
+          </button>
+          <button
+            onClick={toggleCode}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded text-xs font-medium transition-all ${
+              preferences.showCode
+                ? 'bg-emerald-600 dark:bg-emerald-700 text-white'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+            }`}
+            title={preferences.showCode ? 'Hide code sections' : 'Show code sections'}
+          >
+            <span>&lt;/&gt;</span>
+            <span>Code</span>
+          </button>
+        </div>
+      </div>
 
       {/* Chapter navigation */}
       <nav className="flex-1 overflow-y-auto py-4">

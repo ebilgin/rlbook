@@ -1,0 +1,86 @@
+---
+title: "Rewards and Returns"
+description: "Defining goals through reward signals"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+## The Goal: Maximize Cumulative Reward
+
+The agent's objective isn't to maximize immediate reward—it's to maximize **cumulative reward** over time, also called the **return**.
+
+<Definition title="Return">
+
+The **return** $G_t$ is the total accumulated reward from time $t$ onward. This is what the agent tries to maximize—not just the next reward, but all future rewards combined.
+
+</Definition>
+
+<Intuition>
+
+<Example title="Chess: Why Immediate Reward Misleads">
+
+A move that captures a pawn might look good now (+1 point). But if it leads to losing your queen (-9 points), the cumulative reward is deeply negative.
+
+RL agents must learn to **delay gratification**. Sometimes the best immediate action is to invest in future rewards.
+
+</Example>
+
+</Intuition>
+
+<Mathematical>
+
+Formally, the agent tries to maximize the expected return:
+
+<div className="my-6 flex justify-center">
+  <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+    <div className="text-center mb-4">
+      <span className="text-slate-400 text-sm">Simple Return (sum of all future rewards)</span>
+    </div>
+    <div className="text-xl text-center font-mono">
+      <span className="text-amber-400">$G_t$</span> <span className="text-slate-500">=</span> <span className="text-slate-300">$R_{t+1} + R_{t+2} + R_{t+3} + \ldots$</span>
+    </div>
+  </div>
+</div>
+
+Often we add **discounting**—valuing immediate rewards more than distant ones:
+
+<div className="my-6 flex justify-center">
+  <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+    <div className="text-center mb-4">
+      <span className="text-slate-400 text-sm">Discounted Return</span>
+    </div>
+    <div className="text-xl text-center font-mono">
+      <span className="text-amber-400">$G_t$</span> <span className="text-slate-500">=</span> <span className="text-slate-300">$R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \ldots$</span>
+    </div>
+    <div className="text-center mt-4 text-slate-500 text-sm">
+      where <span className="text-violet-400">$\gamma$</span> (gamma) is the discount factor, typically 0.9–0.999
+    </div>
+  </div>
+</div>
+
+<div className="grid md:grid-cols-3 gap-4 my-8">
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 border border-violet-700/50 rounded-xl p-4 text-center">
+    <div className="text-violet-400 font-mono text-lg mb-2">$\gamma = 0$</div>
+    <div className="text-slate-400 text-sm">Completely myopic</div>
+    <div className="text-slate-500 text-xs">Only cares about immediate reward</div>
+  </div>
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 border border-violet-700/50 rounded-xl p-4 text-center">
+    <div className="text-violet-400 font-mono text-lg mb-2">$\gamma = 0.99$</div>
+    <div className="text-slate-400 text-sm">Far-sighted</div>
+    <div className="text-slate-500 text-xs">Values future almost as much as present</div>
+  </div>
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 border border-violet-700/50 rounded-xl p-4 text-center">
+    <div className="text-violet-400 font-mono text-lg mb-2">$\gamma = 1$</div>
+    <div className="text-slate-400 text-sm">No discounting</div>
+    <div className="text-slate-500 text-xs">All rewards weighted equally</div>
+  </div>
+</div>
+
+</Mathematical>
+
+<Note title="What About Exploration?">
+
+There's another critical concept in RL: the **exploration-exploitation tradeoff**. Should the agent use what it knows (exploit) or try new things to learn more (explore)? This fundamental dilemma deserves its own section—we cover it next in [Exploration vs Exploitation](/chapters/rl-framework/exploration-exploitation).
+
+</Note>

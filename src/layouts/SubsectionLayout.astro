@@ -1,6 +1,5 @@
 ---
 import BaseLayout from './BaseLayout.astro';
-import { ComplexityProvider, ComplexityToggle } from '../components/ui/ComplexityToggle';
 import { ContentStatus } from '../components/ui/ContentStatus';
 import { Sidebar } from '../components/ui/Sidebar';
 import type { ChapterData, SubsectionData } from '../lib/chapters';
@@ -99,15 +98,10 @@ const currentIndex = subsections.findIndex(s => s.slug === currentSubsectionSlug
         </div>
       </div>
 
-      <!-- Subsection content with complexity controls -->
-      <ComplexityProvider client:load>
-        <div class="mb-8">
-          <ComplexityToggle client:load />
-        </div>
-        <article class="prose prose-lg dark:prose-invert max-w-none">
-          <slot />
-        </article>
-      </ComplexityProvider>
+      <!-- Subsection content -->
+      <article class="prose prose-lg dark:prose-invert max-w-none">
+        <slot />
+      </article>
 
       <!-- Navigation -->
       <nav class="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">

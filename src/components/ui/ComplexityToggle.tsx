@@ -79,12 +79,9 @@ export function ComplexityToggle() {
 
   return (
     <div className="complexity-toggle p-4 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
           Content Visibility
-        </span>
-        <span className="text-xs text-gray-500 dark:text-gray-400">
-          Toggle sections on/off
         </span>
       </div>
 

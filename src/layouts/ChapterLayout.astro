@@ -1,6 +1,5 @@
 ---
 import BaseLayout from './BaseLayout.astro';
-import { ComplexityProvider, ComplexityToggle } from '../components/ui/ComplexityToggle';
 import { ContentStatus } from '../components/ui/ContentStatus';
 import { Sidebar } from '../components/ui/Sidebar';
 import type { SubsectionData } from '../lib/chapters';
@@ -99,15 +98,10 @@ const { title, chapter, section, description, status = 'draft', lastReviewed, pr
         </nav>
       )}
 
-      <!-- Chapter content with complexity controls -->
-      <ComplexityProvider client:load>
-        <div class="mb-8">
-          <ComplexityToggle client:load />
-        </div>
-        <article class="prose prose-lg dark:prose-invert max-w-none">
-          <slot />
-        </article>
-      </ComplexityProvider>
+      <!-- Chapter content -->
+      <article class="prose prose-lg dark:prose-invert max-w-none">
+        <slot />
+      </article>
 
       <!-- Chapter footer -->
       <footer class="mt-16 pt-8 border-t border-gray-200 dark:border-gray-700">

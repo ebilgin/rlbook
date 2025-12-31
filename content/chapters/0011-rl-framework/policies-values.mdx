@@ -1,0 +1,210 @@
+---
+title: "Policies and Value Functions"
+description: "How agents represent knowledge"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+## Two Ways to Encode Knowledge
+
+How does an RL agent remember what it has learned? There are two fundamental representations: **policies** and **value functions**.
+
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  {/* Policy */}
+  <div className="bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 border-2 border-emerald-600/50 rounded-xl p-5">
+    <div className="flex items-center gap-3 mb-4">
+      <div className="text-3xl">🎯</div>
+      <div>
+        <div className="text-emerald-400 font-bold text-lg">Policy</div>
+        <div className="text-slate-500 text-xs">$\pi(s)$ or $\pi(a|s)$</div>
+      </div>
+    </div>
+    <div className="text-slate-300 text-sm mb-3">
+      <strong>What to do</strong> in each situation
+    </div>
+    <div className="text-slate-400 text-xs bg-slate-800/50 rounded-lg p-3">
+      "In state A, go right. In state B, go up."
+    </div>
+  </div>
+
+  {/* Value Function */}
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 border-2 border-violet-600/50 rounded-xl p-5">
+    <div className="flex items-center gap-3 mb-4">
+      <div className="text-3xl">📊</div>
+      <div>
+        <div className="text-violet-400 font-bold text-lg">Value Function</div>
+        <div className="text-slate-500 text-xs">$V(s)$ or $Q(s,a)$</div>
+      </div>
+    </div>
+    <div className="text-slate-300 text-sm mb-3">
+      <strong>How good</strong> each situation is
+    </div>
+    <div className="text-slate-400 text-xs bg-slate-800/50 rounded-lg p-3">
+      "State A is worth 10. State B is worth 3."
+    </div>
+  </div>
+</div>
+
+## The Policy: Your Agent's Playbook
+
+<Definition title="Policy">
+
+A **policy** $\pi$ maps states to actions. It's the agent's strategy—given the current situation, what should I do?
+
+</Definition>
+
+<Intuition>
+
+<Example title="GPS Navigation as a Policy">
+
+Your GPS has a policy: given your current location (state), it tells you which turn to make (action). The policy might be:
+- At Main St. → turn right
+- At Oak Ave. → go straight
+- At destination → stop
+
+</Example>
+
+Policies can be:
+
+<div className="my-6 space-y-3">
+  <div className="flex items-start gap-3 bg-slate-800/30 rounded-lg p-4">
+    <div className="bg-blue-600/20 border border-blue-500 rounded px-3 py-1 text-blue-400 font-medium text-sm min-w-[120px] text-center">Deterministic</div>
+    <div>
+      <div className="text-slate-300">$\pi(s) = a$</div>
+      <div className="text-slate-400 text-sm">Always take the same action in the same state</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-3 bg-slate-800/30 rounded-lg p-4">
+    <div className="bg-purple-600/20 border border-purple-500 rounded px-3 py-1 text-purple-400 font-medium text-sm min-w-[120px] text-center">Stochastic</div>
+    <div>
+      <div className="text-slate-300">$\pi(a|s) = P(\text{action } a \text{ in state } s)$</div>
+      <div className="text-slate-400 text-sm">Probability distribution over actions—allows exploration</div>
+    </div>
+  </div>
+</div>
+
+</Intuition>
+
+## The Value Function: Rating States and Actions
+
+<Definition title="Value Function">
+
+A **value function** estimates how good it is to be in a state (or take an action). "Good" means the expected cumulative reward from that point forward.
+
+</Definition>
+
+<Intuition>
+
+<Example title="Chess Position Evaluation">
+
+Strong chess players can look at a board and estimate who's winning. This is a value function—rating positions based on expected outcome. A position with material advantage, good piece activity, and king safety has high value.
+
+</Example>
+
+There are two flavors:
+
+<div className="my-8 flex justify-center">
+  <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 max-w-2xl">
+    <div className="space-y-6">
+      {/* State Value */}
+      <div className="flex items-start gap-4">
+        <div className="bg-cyan-600/20 border border-cyan-500 rounded-lg px-4 py-2 text-cyan-400 font-mono text-lg min-w-[80px] text-center">$V(s)$</div>
+        <div>
+          <div className="text-slate-300 font-medium">State Value</div>
+          <div className="text-slate-400 text-sm">How good is it to <em>be</em> in this state?</div>
+          <div className="text-slate-500 text-xs mt-1">"This chess position is worth +2 pawns"</div>
+        </div>
+      </div>
+
+      {/* Action Value */}
+      <div className="flex items-start gap-4">
+        <div className="bg-amber-600/20 border border-amber-500 rounded-lg px-4 py-2 text-amber-400 font-mono text-lg min-w-[80px] text-center">$Q(s,a)$</div>
+        <div>
+          <div className="text-slate-300 font-medium">Action Value (Q-value)</div>
+          <div className="text-slate-400 text-sm">How good is it to <em>take action $a$</em> in state $s$?</div>
+          <div className="text-slate-500 text-xs mt-1">"Moving the knight here is worth +1.5 pawns"</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</Intuition>
+
+<Note title="Q-Values Are Especially Useful">
+
+If you know $Q(s,a)$ for all actions, you can derive a policy: just pick the action with the highest Q-value. This is the foundation of **Q-learning**, which we'll study in depth later.
+
+</Note>
+
+## The Connection: Policy ↔ Value
+
+<Intuition>
+
+Policies and values are deeply connected:
+
+<div className="my-8 flex justify-center">
+  <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+    <div className="flex items-center justify-center gap-6">
+      {/* Policy */}
+      <div className="bg-emerald-600/20 border-2 border-emerald-500 rounded-lg px-6 py-4 text-center">
+        <div className="text-emerald-400 font-bold text-lg">Policy $\pi$</div>
+        <div className="text-slate-400 text-xs mt-1">What to do</div>
+      </div>
+
+      {/* Arrows */}
+      <div className="flex flex-col gap-2 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400">evaluate</span>
+          <span className="text-slate-500">→</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500">←</span>
+          <span className="text-slate-400">improve</span>
+        </div>
+      </div>
+
+      {/* Value */}
+      <div className="bg-violet-600/20 border-2 border-violet-500 rounded-lg px-6 py-4 text-center">
+        <div className="text-violet-400 font-bold text-lg">Value $V$ or $Q$</div>
+        <div className="text-slate-400 text-xs mt-1">How good it is</div>
+      </div>
+    </div>
+
+    <div className="text-center mt-4 text-slate-500 text-xs">
+      ↻ This loop drives learning in many RL algorithms
+    </div>
+  </div>
+</div>
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="bg-slate-800/30 rounded-lg p-4">
+    <div className="text-emerald-400 font-medium mb-2">Policy → Value</div>
+    <div className="text-slate-400 text-sm">
+      Given a policy, we can <strong>evaluate</strong> it by computing the value of each state under that policy.
+    </div>
+  </div>
+
+  <div className="bg-slate-800/30 rounded-lg p-4">
+    <div className="text-violet-400 font-medium mb-2">Value → Policy</div>
+    <div className="text-slate-400 text-sm">
+      Given value estimates, we can <strong>improve</strong> the policy by choosing actions that lead to higher-value states.
+    </div>
+  </div>
+</div>
+
+This evaluate-improve cycle is at the heart of many RL algorithms. We'll see it again and again.
+
+</Intuition>
+
+<Tip title="Different Algorithms, Different Approaches">
+
+- **Value-based methods** (like Q-learning): Learn values, derive policy from them
+- **Policy-based methods** (like REINFORCE): Learn policy directly, skip values
+- **Actor-Critic methods**: Learn both simultaneously
+
+We'll explore all three approaches in this book.
+
+</Tip>

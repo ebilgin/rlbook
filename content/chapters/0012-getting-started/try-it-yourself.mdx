@@ -1,0 +1,105 @@
+---
+title: "Try It Yourself"
+description: "Experience the RL loop with an interactive GridWorld demo"
+---
+
+import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+import GridWorldIntro from '@/components/interactive/GridWorldIntro';
+
+## See RL in Action
+
+You've learned the concepts—now let's see them in action. This interactive demo lets you step through an RL agent navigating a simple GridWorld.
+
+<Intuition>
+
+The agent (🤖) needs to reach the goal (🎯). Watch what happens at each step:
+
+1. The agent **observes** its current position (state)
+2. The agent **chooses** an action based on its learned policy
+3. The agent **receives** a reward (-1 for each step, +10 for reaching the goal)
+4. The agent **moves** to a new state
+5. **Repeat** until the goal is reached
+
+</Intuition>
+
+<GridWorldIntro client:load />
+
+## What to Notice
+
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  <div className="bg-gradient-to-br from-blue-900/30 to-blue-800/10 border border-blue-700/50 rounded-xl p-5">
+    <div className="text-blue-400 font-bold mb-2">The Policy Matters</div>
+    <div className="text-slate-400 text-sm">
+      Click "Show Policy" to see the arrows. The agent has learned which direction to go from each cell. This is its <strong>policy</strong>—a mapping from states to actions.
+    </div>
+  </div>
+
+  <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 border border-amber-700/50 rounded-xl p-5">
+    <div className="text-amber-400 font-bold mb-2">Rewards Shape Behavior</div>
+    <div className="text-slate-400 text-sm">
+      The -1 step penalty encourages the shortest path. Without it, the agent wouldn't care how long it takes. <strong>Reward design</strong> is crucial in RL.
+    </div>
+  </div>
+
+  <div className="bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 border border-emerald-700/50 rounded-xl p-5">
+    <div className="text-emerald-400 font-bold mb-2">Cumulative Reward</div>
+    <div className="text-slate-400 text-sm">
+      Watch the total reward. The agent maximizes this over the whole episode, not just the next step. That's why it takes the shortest path.
+    </div>
+  </div>
+
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 border border-violet-700/50 rounded-xl p-5">
+    <div className="text-violet-400 font-bold mb-2">This Is Just the Beginning</div>
+    <div className="text-slate-400 text-sm">
+      This agent uses a pre-learned policy. In the chapters ahead, you'll learn <strong>how</strong> agents learn these policies from scratch through trial and error.
+    </div>
+  </div>
+</div>
+
+<Tip title="Experiment!">
+
+Try these:
+- Reset and step through manually to see each action
+- Use "Play" and watch the agent navigate automatically
+- Toggle "Show Policy" to see the learned strategy
+- Notice how the total reward is always maximized (6 steps × -1 + 10 = +4)
+
+</Tip>
+
+## The RL Loop, Visualized
+
+What you just saw is the core of all reinforcement learning:
+
+<div className="my-8 flex justify-center">
+  <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 max-w-lg">
+    <div className="space-y-3 text-sm">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 bg-cyan-600/30 rounded-full flex items-center justify-center text-cyan-400 font-bold">1</div>
+        <div className="text-slate-300">Agent sees current <span className="text-cyan-400">state</span> (position)</div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 bg-emerald-600/30 rounded-full flex items-center justify-center text-emerald-400 font-bold">2</div>
+        <div className="text-slate-300">Agent picks <span className="text-emerald-400">action</span> from policy</div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 bg-amber-600/30 rounded-full flex items-center justify-center text-amber-400 font-bold">3</div>
+        <div className="text-slate-300">Environment gives <span className="text-amber-400">reward</span></div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 bg-violet-600/30 rounded-full flex items-center justify-center text-violet-400 font-bold">4</div>
+        <div className="text-slate-300">Agent moves to <span className="text-violet-400">new state</span></div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 bg-pink-600/30 rounded-full flex items-center justify-center text-pink-400 font-bold">↻</div>
+        <div className="text-slate-300">Repeat until episode ends</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<Note title="Ready for More?">
+
+In the next chapter, we'll start with the simplest RL problem: **Multi-Armed Bandits**. There's only one state—just a choice between options with uncertain rewards. It's where you'll learn the fundamentals of exploration and exploitation that power all of RL.
+
+</Note>

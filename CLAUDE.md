@@ -19,7 +19,7 @@
 | **docs/CONTENT_WORKFLOW.md** | Content creators | Phases from prompt to publication, iteration notes |
 | **docs/CONTENT_TYPES.md** | Content creators | Six content categories with structure/templates |
 | **docs/ARCHITECTURE.md** | Developers | Technical stack, component patterns, deployment |
-| **prompts/*.md** | AI generators | Foundation docs (PRINCIPLES, STYLE_GUIDE, etc.) |
+| **prompts/*.md** | AI generators | Foundation docs (PRINCIPLES, STYLE_GUIDE, VISUAL_PATTERNS, etc.) |
 
 ## Core Philosophy
 
@@ -43,6 +43,7 @@ rlbook/
 ├── prompts/                  # Foundation documents for content generation
 │   ├── PRINCIPLES.md         # Core content principles (always read first)
 │   ├── STYLE_GUIDE.md        # Writing style, tone, formatting
+│   ├── VISUAL_PATTERNS.md    # Reusable visual patterns (cards, diagrams, colors)
 │   ├── MATH_CONVENTIONS.md   # Mathematical notation standards
 │   ├── CODE_STANDARDS.md     # Code example standards
 │   ├── MDX_AUTHORING.md      # MDX syntax rules (critical!)
@@ -408,15 +409,24 @@ Comments use Giscus connected to GitHub Discussions. The configuration is in Cha
 
 ```
 content/chapters/
-├── 0010-intro-to-rl/              # Introduction to RL
-├── 0020-multi-armed-bandits/      # Exploration-exploitation basics
+# Foundations Section
+├── 0010-intro-to-rl/              # What is RL? (The Core Idea, RL in the Wild, History)
+├── 0011-rl-framework/             # The RL Framework (Agent-Environment, Rewards, Policies, Exploration)
+├── 0012-getting-started/          # Getting Started (RL Landscape, Try It Yourself)
+
+# Bandit Problems Section
+├── 0020-multi-armed-bandits/      # Multi-Armed Bandits
 ├── 0030-contextual-bandits/       # Context-dependent decisions
+
+# Q-Learning Foundations Section
 ├── 1010-intro-to-td/              # TD Learning foundations
 ├── 1020-q-learning-basics/        # Tabular Q-learning
 ├── 1030-exploration-exploitation/ # ε-greedy, UCB, etc.
 ├── 1040-deep-q-networks/          # DQN and variants
 ├── 1050-q-learning-applications/  # Practical applications
 ├── 1060-q-learning-frontiers/     # Current research
+
+# Policy Gradient Methods Section
 ├── 2010-intro-to-policy-gradients/    # Policy-based methods intro
 ├── 2020-policy-gradient-theorem/      # REINFORCE algorithm
 ├── 2030-actor-critic-methods/         # A2C, A3C
@@ -424,7 +434,7 @@ content/chapters/
 └── 2050-policy-methods-applications/  # RLHF, robotics, etc.
 ```
 
-**Note**: Directory numbering uses increments of 10 (1010, 1020, etc.) to allow inserting new chapters between existing ones without renumbering. Navigation uses slugs (e.g., `q-learning-basics`) rather than numbers to ensure links remain stable.
+**Note**: Directory numbering uses increments of 10 (1010, 1020, etc.) to allow inserting new chapters between existing ones without renumbering. The Foundations section uses 0010, 0011, 0012 etc. Navigation uses slugs (e.g., `q-learning-basics`) rather than numbers to ensure links remain stable.
 
 ## Build Commands
 
