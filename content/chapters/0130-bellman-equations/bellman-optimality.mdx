@@ -1,0 +1,501 @@
+---
+title: "Bellman Optimality Equations"
+slug: "bellman-optimality"
+section: "Markov Decision Processes"
+description: "The equations that define optimal behavior"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Bellman Optimality Equations
+
+The Bellman optimality equations describe the best possible values---what you'd achieve if you acted perfectly. They're the target that RL algorithms try to solve, and they contain a beautiful insight: **you can define optimal behavior without explicitly specifying an optimal policy**.
+
+## From Expectation to Optimality
+
+The Bellman expectation equations average over actions according to a policy $\pi$. But what if we want to find the *best* policy?
+
+<Intuition>
+
+Consider two policies at the same state:
+- **Policy A**: Takes action `left` with value 5
+- **Policy B**: Takes action `right` with value 8
+
+Clearly Policy B is better at this state. The optimal policy would choose `right`.
+
+The key insight: **The optimal value of a state is the value of the best action from that state.** We don't need to average over a policy---we just take the maximum.
+
+</Intuition>
+
+This leads to a fundamental shift in the Bellman equation:
+
+<div className="my-6 p-4 bg-gradient-to-r from-slate-800/50 to-slate-700/30 rounded-lg border border-slate-600">
+  <div className="grid md:grid-cols-2 gap-6">
+    <div className="text-center">
+      <div className="text-cyan-400 font-semibold mb-2">Expectation Equation</div>
+      <div className="text-slate-300">$$V^\pi(s) = \sum_a \pi(a|s) [\ldots]$$</div>
+      <div className="text-slate-500 text-sm mt-2">Average over policy</div>
+    </div>
+    <div className="text-center">
+      <div className="text-violet-400 font-semibold mb-2">Optimality Equation</div>
+      <div className="text-slate-300">$$V^*(s) = \max_a [\ldots]$$</div>
+      <div className="text-slate-500 text-sm mt-2">Maximum over actions</div>
+    </div>
+  </div>
+</div>
+
+## The Bellman Optimality Equation for $V^*$
+
+<Definition title="Bellman Optimality Equation for V*">
+$$V^*(s) = \max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^*(s') \right]$$
+
+The optimal value of a state is the maximum expected return achievable by taking the best action.
+</Definition>
+
+<Mathematical>
+
+Let's derive this from the definition of optimal value. The optimal value function is defined as:
+
+$$V^*(s) = \max_\pi V^\pi(s)$$
+
+For any policy $\pi$, we have:
+
+$$V^\pi(s) = \sum_a \pi(a|s) Q^\pi(s,a)$$
+
+The maximum over policies is achieved by a policy that puts all probability on the best action:
+
+$$V^*(s) = \max_a Q^*(s,a)$$
+
+Substituting the definition of $Q^*(s,a)$:
+
+$$V^*(s) = \max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^*(s') \right]$$
+
+</Mathematical>
+
+<Intuition>
+
+The equation says: "The optimal value of state $s$ is achieved by taking the action that maximizes immediate reward plus discounted future value."
+
+Notice that we don't need to know the optimal policy! The $\max$ operator **finds** the optimal action for us. Wherever $V^*$ appears on the right side, we assume future optimal behavior.
+
+</Intuition>
+
+## The Bellman Optimality Equation for $Q^*$
+
+<Definition title="Bellman Optimality Equation for Q*">
+$$Q^*(s,a) = R(s,a) + \gamma \sum_{s'} P(s'|s,a) \max_{a'} Q^*(s',a')$$
+
+The optimal action-value equals the immediate reward plus the discounted optimal value of the next state.
+</Definition>
+
+<Intuition>
+
+Compare the two optimality equations:
+
+**For $V^*$**: The $\max$ is on the *outside*---we're choosing which action to take in state $s$
+
+**For $Q^*$**: The $\max$ is on the *inside*---we've already taken action $a$, and we assume optimal action selection in the next state
+
+This distinction matters for algorithms. Q-learning updates $Q^*$ directly; value iteration updates $V^*$ directly.
+
+</Intuition>
+
+<Mathematical>
+
+The placement of $\max$ reflects what's already been decided:
+
+$$V^*(s) = \max_a [\underbrace{R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^*(s')}_{\text{This is } Q^*(s,a)}]$$
+
+$$Q^*(s,a) = R(s,a) + \gamma \sum_{s'} P(s'|s,a) \underbrace{\max_{a'} Q^*(s',a')}_{\text{This is } V^*(s')}$$
+
+So we have the fundamental relationships:
+- $V^*(s) = \max_a Q^*(s,a)$
+- $Q^*(s,a) = R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^*(s')$
+
+</Mathematical>
+
+## The Circular Problem---Solved
+
+Here's a puzzle that seems to make optimal control impossible:
+
+<Warning>
+**The Circular Problem:**
+- To find the optimal policy $\pi^*$, you need to know $V^*$
+- To compute $V^*$, you need to follow policy $\pi^*$
+
+How can we break this cycle?
+</Warning>
+
+<Intuition>
+
+The Bellman optimality equation elegantly solves this circularity. The $\max$ operator **embeds** the optimal policy directly into the equation.
+
+Think about it: if we have $V^*(s')$ for all successor states, then:
+
+$$\pi^*(s) = \arg\max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^*(s') \right]$$
+
+The optimal policy just picks the action that achieves the maximum. We don't need to know it in advance---it falls out of solving for $V^*$.
+
+</Intuition>
+
+<Tip>
+This is why the Bellman optimality equations are so powerful: they define what optimal values look like without requiring us to specify the optimal policy. We can solve for $V^*$ first, then extract $\pi^*$ by acting greedily.
+</Tip>
+
+## Visualizing with Backup Diagrams
+
+The backup diagram for optimality equations looks similar to expectation diagrams, but with a crucial difference.
+
+<Example title="Backup Diagram for V*">
+
+<div className="my-6 flex justify-center">
+  <div className="inline-block text-center">
+    <div className="flex flex-col items-center gap-2">
+      <div className="w-16 h-16 bg-violet-600/40 border-2 border-violet-500 rounded-full flex items-center justify-center text-lg font-semibold">$V^*$</div>
+    </div>
+    <div className="my-3 text-violet-400 font-semibold">MAX</div>
+    <div className="flex justify-center gap-8">
+      <div className="flex flex-col items-center">
+        <div className="w-8 h-8 bg-emerald-600/60 border border-emerald-500 rounded-full"></div>
+        <div className="text-slate-500 text-xs mt-1">$a_1$</div>
+        <div className="flex gap-2 mt-2">
+          <div className="w-8 h-8 bg-slate-600/40 border border-slate-500 rounded-full text-xs flex items-center justify-center">$s'_1$</div>
+          <div className="w-8 h-8 bg-slate-600/40 border border-slate-500 rounded-full text-xs flex items-center justify-center">$s'_2$</div>
+        </div>
+      </div>
+      <div className="flex flex-col items-center">
+        <div className="w-8 h-8 bg-emerald-600/60 border border-emerald-500 rounded-full"></div>
+        <div className="text-slate-500 text-xs mt-1">$a_2$</div>
+        <div className="flex gap-2 mt-2">
+          <div className="w-8 h-8 bg-slate-600/40 border border-slate-500 rounded-full text-xs flex items-center justify-center">$s'_3$</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+**Key difference from expectation backup:**
+- Instead of summing over actions with policy weights $\pi(a|s)$
+- We take the **max** over actions
+
+The arc labeled "MAX" indicates we select the best action, not average over them.
+
+</Example>
+
+<Example title="Backup Diagram for Q*">
+
+<div className="my-6 flex justify-center">
+  <div className="inline-block text-center">
+    <div className="flex flex-col items-center gap-2">
+      <div className="w-14 h-14 bg-violet-600/40 border-2 border-violet-500 rounded-full flex items-center justify-center font-semibold text-sm">$Q^*$</div>
+      <div className="text-slate-500 text-xs">(s, a)</div>
+    </div>
+    <div className="my-3 text-slate-400">$\downarrow$ take action $a$</div>
+    <div className="flex justify-center gap-4">
+      <div className="flex flex-col items-center">
+        <div className="w-10 h-10 bg-slate-600/40 border border-slate-500 rounded-full text-xs flex items-center justify-center">$s'_1$</div>
+        <div className="text-violet-400 text-xs mt-1">MAX</div>
+        <div className="flex gap-1 mt-1">
+          <div className="w-6 h-6 bg-emerald-600/40 border border-emerald-500 rounded-full"></div>
+          <div className="w-6 h-6 bg-emerald-600/40 border border-emerald-500 rounded-full"></div>
+        </div>
+      </div>
+      <div className="flex flex-col items-center">
+        <div className="w-10 h-10 bg-slate-600/40 border border-slate-500 rounded-full text-xs flex items-center justify-center">$s'_2$</div>
+        <div className="text-violet-400 text-xs mt-1">MAX</div>
+        <div className="flex gap-1 mt-1">
+          <div className="w-6 h-6 bg-emerald-600/40 border border-emerald-500 rounded-full"></div>
+          <div className="w-6 h-6 bg-emerald-600/40 border border-emerald-500 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+For $Q^*$, the action is already chosen (we're at the $(s, a)$ node). The MAX is over the **next** action $a'$ at each successor state.
+
+</Example>
+
+## A Worked Example
+
+Let's compute optimal values for a simple decision problem.
+
+<Example title="Two-Path Choice">
+
+An agent starts at state S and can go left or right:
+
+<div className="my-6 flex justify-center">
+  <div className="inline-block text-center">
+    <div className="flex flex-col items-center gap-2">
+      <div className="flex items-center gap-8">
+        <div className="flex flex-col items-center">
+          <div className="w-14 h-14 bg-amber-600/40 border border-slate-600 rounded-lg flex items-center justify-center text-lg font-semibold">L</div>
+          <div className="text-amber-400 text-sm mt-1">+5</div>
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <div className="text-slate-400 text-xs">left</div>
+          <div className="text-slate-300">&larr;</div>
+        </div>
+        <div className="flex flex-col items-center">
+          <div className="w-14 h-14 bg-blue-600/40 border border-slate-600 rounded-lg flex items-center justify-center text-lg font-semibold">S</div>
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <div className="text-slate-400 text-xs">right</div>
+          <div className="text-slate-300">&rarr;</div>
+        </div>
+        <div className="flex flex-col items-center">
+          <div className="w-14 h-14 bg-emerald-600/40 border border-slate-600 rounded-lg flex items-center justify-center text-lg font-semibold">R</div>
+          <div className="text-emerald-400 text-sm mt-1">+10</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+**Setup:**
+- States: S (start), L (left, terminal), R (right, terminal)
+- Actions: `left`, `right` from S only
+- Rewards: +5 for reaching L, +10 for reaching R
+- Discount: $\gamma = 0.9$
+
+**Computing Optimal Values:**
+
+Terminal states have their reward as value:
+- $V^*(L) = 5$
+- $V^*(R) = 10$
+
+For state S, apply the Bellman optimality equation:
+
+$$V^*(S) = \max\left\{ \underbrace{0 + 0.9 \times 5}_{\text{go left}}, \underbrace{0 + 0.9 \times 10}_{\text{go right}} \right\}$$
+
+$$V^*(S) = \max\{4.5, 9.0\} = 9.0$$
+
+The optimal action is `right`, and the optimal value is 9.0.
+
+**Computing Optimal Q-Values:**
+- $Q^*(S, \text{left}) = 0 + 0.9 \times 5 = 4.5$
+- $Q^*(S, \text{right}) = 0 + 0.9 \times 10 = 9.0$
+
+The optimal policy is: $\pi^*(S) = \text{right}$
+
+</Example>
+
+## Why Optimality Equations Are Nonlinear
+
+<Warning>
+Unlike the Bellman expectation equations, the optimality equations are **nonlinear** due to the $\max$ operator. This has important implications for how we solve them.
+</Warning>
+
+<Mathematical>
+
+Consider the expectation equation in matrix form:
+
+$$\mathbf{v}^\pi = \mathbf{r}^\pi + \gamma \mathbf{P}^\pi \mathbf{v}^\pi$$
+
+This is **linear** in $\mathbf{v}^\pi$---we can solve it by matrix inversion.
+
+The optimality equation cannot be written this way because $\max$ is not a linear operation:
+
+$$V^*(s) = \max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^*(s') \right]$$
+
+The action that achieves the maximum depends on the current values, creating a nonlinear relationship.
+
+</Mathematical>
+
+<Intuition>
+
+Why does this matter? Because we can't just solve a linear system to find optimal values.
+
+Instead, we need **iterative methods**:
+1. Start with any initial guess for $V^*$
+2. Apply the Bellman optimality operator repeatedly
+3. The values converge to the true optimum
+
+This is the basis of **Value Iteration**, which we'll study in the Dynamic Programming chapter.
+
+</Intuition>
+
+## Extracting the Optimal Policy
+
+Once we have $V^*$ or $Q^*$, extracting the optimal policy is straightforward.
+
+<Implementation>
+
+```python
+def extract_policy_from_v(V_star, mdp, gamma=0.99):
+    """
+    Extract optimal policy from optimal value function V*.
+
+    Args:
+        V_star: Dictionary mapping states to optimal values
+        mdp: MDP with transitions and reward methods
+        gamma: Discount factor
+
+    Returns:
+        policy: Dictionary mapping states to best actions
+    """
+    policy = {}
+
+    for s in mdp.states:
+        if mdp.is_terminal(s):
+            continue
+
+        best_action = None
+        best_value = float('-inf')
+
+        for a in mdp.actions(s):
+            # Compute Q*(s, a) from V*
+            action_value = mdp.reward(s, a)
+            for s_next, prob in mdp.transitions(s, a):
+                action_value += gamma * prob * V_star.get(s_next, 0.0)
+
+            if action_value > best_value:
+                best_value = action_value
+                best_action = a
+
+        policy[s] = best_action
+
+    return policy
+
+
+def extract_policy_from_q(Q_star, mdp):
+    """
+    Extract optimal policy from optimal Q-function.
+    This is even simpler!
+    """
+    policy = {}
+
+    for s in mdp.states:
+        if mdp.is_terminal(s):
+            continue
+
+        # Just pick the action with highest Q-value
+        best_action = max(
+            mdp.actions(s),
+            key=lambda a: Q_star.get((s, a), float('-inf'))
+        )
+        policy[s] = best_action
+
+    return policy
+```
+
+</Implementation>
+
+<Tip>
+This is why **Q-learning** is so popular: if you learn $Q^*$ directly, the optimal policy is simply $\pi^*(s) = \arg\max_a Q^*(s, a)$. No need to know the MDP dynamics!
+</Tip>
+
+## Comparing Expectation and Optimality
+
+Let's see how the same MDP has different values under a policy versus optimal:
+
+<Example title="Policy vs Optimal Values">
+
+Consider a GridWorld where the agent can move in four directions:
+
+<div className="my-6 flex justify-center">
+  <div className="inline-block">
+    <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2px'}}>
+      <div className="w-16 h-16 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div>
+      <div className="w-16 h-16 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div>
+      <div className="w-16 h-16 bg-emerald-600/40 border border-slate-600 rounded flex items-center justify-center text-emerald-400 font-semibold">+10</div>
+      <div className="w-16 h-16 bg-blue-600/40 border border-slate-600 rounded flex items-center justify-center text-lg">S</div>
+      <div className="w-16 h-16 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div>
+      <div className="w-16 h-16 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div>
+      <div className="w-16 h-16 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div>
+      <div className="w-16 h-16 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div>
+      <div className="w-16 h-16 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div>
+    </div>
+  </div>
+</div>
+
+**Random policy** (25% each direction):
+
+With $\gamma = 0.9$, the agent wanders randomly. $V^\pi(S) \approx 4.3$ (takes many steps on average).
+
+**Optimal policy** (right, then up):
+
+The agent goes directly to the goal. $V^*(S) = 0.9^2 \times 10 = 8.1$.
+
+The optimal value is nearly twice as high because it doesn't waste time wandering.
+
+</Example>
+
+## Implementation: Value Iteration
+
+<Implementation>
+
+Here's a basic implementation of value iteration, which repeatedly applies the Bellman optimality operator:
+
+```python
+def value_iteration(mdp, gamma=0.99, theta=1e-6, max_iterations=1000):
+    """
+    Find optimal values using the Bellman optimality equation.
+
+    Args:
+        mdp: MDP with states, actions, transitions, reward methods
+        gamma: Discount factor
+        theta: Convergence threshold
+        max_iterations: Maximum iterations
+
+    Returns:
+        V_star: Dictionary of optimal values
+        policy: Dictionary of optimal actions
+    """
+    # Initialize values arbitrarily
+    V = {s: 0.0 for s in mdp.states}
+
+    for iteration in range(max_iterations):
+        delta = 0.0
+
+        for s in mdp.states:
+            if mdp.is_terminal(s):
+                continue
+
+            old_value = V[s]
+
+            # Apply Bellman optimality operator
+            action_values = []
+            for a in mdp.actions(s):
+                q_value = mdp.reward(s, a)
+                for s_next, prob in mdp.transitions(s, a):
+                    q_value += gamma * prob * V.get(s_next, 0.0)
+                action_values.append(q_value)
+
+            V[s] = max(action_values) if action_values else 0.0
+            delta = max(delta, abs(V[s] - old_value))
+
+        if delta < theta:
+            print(f"Value iteration converged in {iteration + 1} iterations")
+            break
+
+    # Extract optimal policy
+    policy = extract_policy_from_v(V, mdp, gamma)
+
+    return V, policy
+```
+
+**Key points:**
+- We don't need to specify a policy---the $\max$ finds the best action
+- Convergence is guaranteed for $\gamma < 1$
+- After convergence, we extract the policy by acting greedily with respect to $V^*$
+
+</Implementation>
+
+## Summary
+
+The Bellman optimality equations define what optimal behavior looks like:
+
+- **$V^*(s) = \max_a [R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^*(s')]$**
+- **$Q^*(s,a) = R(s,a) + \gamma \sum_{s'} P(s'|s,a) \max_{a'} Q^*(s',a')$**
+
+Key insights:
+- The $\max$ operator replaces policy averaging, finding the best action automatically
+- Optimality equations are **nonlinear**, requiring iterative solution methods
+- Once we have $V^*$ or $Q^*$, the optimal policy is just greedy action selection
+- The circular problem (need $\pi^*$ to find $V^*$, need $V^*$ to find $\pi^*$) is elegantly solved
+
+<Note>
+The Bellman equations tell us *what* optimal values must satisfy, but not *how* to find them. In the next section, we'll explore **why** this recursive structure is so powerful---and how the concept of **bootstrapping** enables practical algorithms.
+</Note>

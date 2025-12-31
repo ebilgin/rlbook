@@ -1,0 +1,138 @@
+---
+title: "Q-Learning"
+slug: "q-learning"
+section: "Temporal Difference Learning"
+description: "Off-policy TD control: learning the optimal policy while exploring"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "sarsa"
+    title: "SARSA"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Q-Learning: Off-Policy TD Control
+
+<ChapterObjectives>
+- Explain the key difference between SARSA and Q-learning
+- Implement Q-learning for control
+- Explain what "off-policy" means and why it matters
+- Demonstrate Q-learning on Cliff Walking
+- Identify the "deadly triad" and its implications
+</ChapterObjectives>
+
+SARSA is safe but learns the value of being epsilon-greedy. What if we could learn the optimal policy while still exploring? Q-learning does exactly this—it learns $Q^*$ regardless of what behavior policy we follow. It's perhaps the most important algorithm in reinforcement learning.
+
+## Why Q-Learning?
+
+Q-learning's key innovation is using **max** over next actions instead of the actual next action. This means we're always learning toward the optimal policy, even while behaving suboptimally. The behavior policy can be anything—as long as it tries all actions eventually.
+
+<Definition title="Q-Learning">
+An off-policy TD control algorithm that learns the optimal action-value function $Q^*$ directly. Unlike SARSA, Q-learning uses the maximum Q-value for the next state, learning about the greedy policy while following an exploratory one.
+</Definition>
+
+## The Q-Learning Update
+
+<Mathematical>
+
+The Q-learning update rule:
+
+$$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha \left[ R_{t+1} + \gamma \max_{a'} Q(S_{t+1}, a') - Q(S_t, A_t) \right]$$
+
+The difference from SARSA is just one word: **max** instead of the actual next action $A_{t+1}$. But this one change is profound—it means we learn $Q^*$ instead of $Q^\pi$.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def q_learning_update(Q, state, action, reward, next_state,
+                      alpha=0.1, gamma=0.99, done=False):
+    """Single Q-learning update."""
+    if done:
+        td_target = reward
+    else:
+        # Key difference from SARSA: use max, not the actual next action
+        td_target = reward + gamma * np.max(Q[next_state])
+
+    td_error = td_target - Q[state][action]
+    Q[state][action] += alpha * td_error
+    return td_error
+```
+
+</Implementation>
+
+## Chapter Overview
+
+This chapter introduces Q-learning—the foundation of modern deep RL. We'll cover:
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <a href="/chapters/q-learning/q-learning-idea" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">The Q-Learning Idea</h3>
+    <p className="text-slate-400 text-sm mt-1">Learning optimal values regardless of behavior policy</p>
+  </a>
+  <a href="/chapters/q-learning/q-learning-algorithm" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">The Q-Learning Algorithm</h3>
+    <p className="text-slate-400 text-sm mt-1">Complete algorithm with implementation and examples</p>
+  </a>
+  <a href="/chapters/q-learning/sarsa-vs-q-learning" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">SARSA vs Q-Learning</h3>
+    <p className="text-slate-400 text-sm mt-1">The CliffWalking experiment and when to use each</p>
+  </a>
+  <a href="/chapters/q-learning/convergence" className="block p-4 bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 rounded-lg border border-emerald-700/50 hover:border-emerald-500/50 transition-colors">
+    <h3 className="font-semibold text-emerald-400">Convergence and the Deadly Triad</h3>
+    <p className="text-slate-400 text-sm mt-1">When Q-learning works and when it breaks</p>
+  </a>
+</div>
+
+## Prerequisites
+
+This chapter assumes you're comfortable with:
+- [SARSA](/chapters/sarsa) — The on-policy TD control algorithm
+- [Introduction to TD Learning](/chapters/intro-to-td) — TD updates and the TD error
+
+## Key Questions We'll Answer
+
+- What does "off-policy" mean and why is it powerful?
+- How does one word change (max vs $A'$) transform the algorithm?
+- Why does Q-learning find the risky path in Cliff Walking?
+- What is the "deadly triad" and why should we care?
+
+## The Big Picture
+
+<Intuition>
+
+The relationship between SARSA and Q-learning parallels a fundamental question in RL:
+
+**Should we learn about what we do, or what we should do?**
+
+- **SARSA** learns about the policy being followed (including exploration)
+- **Q-learning** learns about the optimal policy (ignoring exploration)
+
+Both are valid choices with different trade-offs. Q-learning finds the true optimal, but ignores exploration risk. SARSA is safer during training but may not find the best policy.
+
+</Intuition>
+
+| Aspect | SARSA | Q-Learning |
+|--------|-------|------------|
+| **Target** | $Q(S', A')$ | $\max_a Q(S', a)$ |
+| **Learns** | $Q^\pi$ | $Q^*$ |
+| **Type** | On-policy | Off-policy |
+| **Safety** | Safer (accounts for $\varepsilon$) | Riskier during training |
+| **Optimality** | Eventually (as $\varepsilon \to 0$) | Yes |
+
+---
+
+<KeyTakeaways>
+- Q-learning uses $\max_{a'} Q(S', a')$ instead of $Q(S', A')$
+- This makes it **off-policy**: it learns $Q^*$ regardless of behavior
+- Q-learning finds optimal policies but ignores exploration risk
+- The **deadly triad** (off-policy + function approximation + bootstrapping) can cause instability
+- **Double Q-learning** addresses maximization bias
+- Q-learning is the foundation for DQN and modern deep RL
+</KeyTakeaways>
+
+<NextChapter slug="function-approximation" title="Function Approximation" />

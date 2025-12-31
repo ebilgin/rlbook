@@ -1,0 +1,495 @@
+---
+title: "Comparing Strategies"
+slug: "comparing-strategies"
+section: "Bandit Problems"
+description: "When to use which exploration method"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Comparing Exploration Strategies
+
+We've now seen three approaches to exploration: epsilon-greedy, UCB, and Thompson Sampling. Each has its strengths and weaknesses. In this section, we'll compare them empirically and provide practical guidance on when to use each.
+
+## The 10-Armed Testbed
+
+<Intuition>
+
+Let's use the classic testbed from Sutton & Barto: a 10-armed bandit where each arm's true value is drawn from a standard normal distribution $\mathcal{N}(0, 1)$. When pulled, each arm returns a reward from $\mathcal{N}(\mu_a, 1)$.
+
+This setup is simple enough to understand but complex enough to reveal the differences between strategies:
+- Some arms are clearly better than others
+- Noise makes it hard to distinguish similar arms
+- The best arm varies across problem instances
+
+We'll compare algorithms on two metrics:
+1. **Average reward** over time (higher is better)
+2. **Cumulative regret** over time (lower is better)
+
+</Intuition>
+
+<Implementation>
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+from typing import Dict, List, Tuple
+
+class MultiArmedBandit:
+    """Standard 10-armed testbed."""
+
+    def __init__(self, n_arms: int = 10, seed: int = None):
+        self.n_arms = n_arms
+        self.rng = np.random.default_rng(seed)
+        self.reset()
+
+    def reset(self):
+        """Reset bandit with new arm values."""
+        self.true_values = self.rng.standard_normal(self.n_arms)
+        self.optimal_value = np.max(self.true_values)
+        self.optimal_arm = np.argmax(self.true_values)
+
+    def pull(self, arm: int) -> float:
+        """Pull an arm and get a noisy reward."""
+        return self.rng.normal(self.true_values[arm], 1.0)
+
+    def get_regret(self, arm: int) -> float:
+        """Return instantaneous regret for this arm."""
+        return self.optimal_value - self.true_values[arm]
+
+
+def run_experiment(
+    bandit: MultiArmedBandit,
+    agents: Dict[str, object],
+    n_steps: int = 1000,
+    n_runs: int = 200
+) -> Dict[str, np.ndarray]:
+    """
+    Run bandit experiment comparing multiple agents.
+
+    Returns dict mapping agent name to (n_runs, n_steps) reward array.
+    """
+    results = {name: np.zeros((n_runs, n_steps)) for name in agents}
+    regrets = {name: np.zeros((n_runs, n_steps)) for name in agents}
+
+    for run in range(n_runs):
+        bandit.reset()
+
+        # Reset each agent
+        for name, agent_class in agents.items():
+            agent = agent_class(bandit.n_arms)
+            results[name][run] = np.zeros(n_steps)
+            regrets[name][run] = np.zeros(n_steps)
+
+            for t in range(n_steps):
+                action = agent.select_action()
+                reward = bandit.pull(action)
+                agent.update(action, reward)
+
+                results[name][run, t] = reward
+                regrets[name][run, t] = bandit.get_regret(action)
+
+    return results, regrets
+
+
+# Agent implementations
+class EpsilonGreedy:
+    def __init__(self, n_arms, epsilon=0.1):
+        self.n_arms = n_arms
+        self.epsilon = epsilon
+        self.Q = np.zeros(n_arms)
+        self.N = np.zeros(n_arms)
+
+    def select_action(self):
+        if np.random.random() < self.epsilon:
+            return np.random.randint(self.n_arms)
+        return np.argmax(self.Q)
+
+    def update(self, action, reward):
+        self.N[action] += 1
+        self.Q[action] += (reward - self.Q[action]) / self.N[action]
+
+
+class UCB:
+    def __init__(self, n_arms, c=2.0):
+        self.n_arms = n_arms
+        self.c = c
+        self.Q = np.zeros(n_arms)
+        self.N = np.zeros(n_arms)
+        self.t = 0
+
+    def select_action(self):
+        self.t += 1
+        for a in range(self.n_arms):
+            if self.N[a] == 0:
+                return a
+        ucb_values = self.Q + self.c * np.sqrt(np.log(self.t) / self.N)
+        return np.argmax(ucb_values)
+
+    def update(self, action, reward):
+        self.N[action] += 1
+        self.Q[action] += (reward - self.Q[action]) / self.N[action]
+
+
+class ThompsonSamplingGaussian:
+    def __init__(self, n_arms, prior_var=1.0):
+        self.n_arms = n_arms
+        self.post_mean = np.zeros(n_arms)
+        self.post_precision = np.ones(n_arms) / prior_var
+
+    def select_action(self):
+        post_std = 1.0 / np.sqrt(self.post_precision)
+        samples = np.random.normal(self.post_mean, post_std)
+        return np.argmax(samples)
+
+    def update(self, action, reward):
+        new_precision = self.post_precision[action] + 1.0
+        self.post_mean[action] = (
+            self.post_precision[action] * self.post_mean[action] + reward
+        ) / new_precision
+        self.post_precision[action] = new_precision
+```
+
+</Implementation>
+
+## Empirical Comparison
+
+<Intuition>
+
+Running the testbed with 2000 runs of 1000 steps each, here's what we typically observe:
+
+**Average Reward over Time:**
+- All strategies start similarly (exploring)
+- Epsilon-greedy with $\varepsilon = 0.1$ converges to about 1.4 average reward
+- UCB with $c = 2$ reaches about 1.5 average reward
+- Thompson Sampling reaches about 1.55 average reward
+
+**Cumulative Regret:**
+- Epsilon-greedy: regret grows linearly after initial phase
+- UCB: regret grows logarithmically (slows down over time)
+- Thompson Sampling: similar to UCB, often slightly better
+
+The key insight: Thompson Sampling and UCB both achieve sublinear regret, while epsilon-greedy's regret keeps growing at a constant rate.
+
+</Intuition>
+
+<Example title="Typical Results">
+
+After 1000 steps on the 10-armed testbed:
+
+| Algorithm | Avg Reward | Total Regret | % Optimal Arm |
+|-----------|------------|--------------|---------------|
+| Greedy | 1.0 | 550 | ~40% |
+| e-greedy (e=0.1) | 1.4 | 180 | ~82% |
+| e-greedy (e=0.01) | 1.35 | 200 | ~78% |
+| UCB (c=2) | 1.5 | 120 | ~92% |
+| Thompson Sampling | 1.55 | 100 | ~95% |
+
+Notes:
+- "% Optimal Arm" is the percentage of time the best arm was selected
+- Results vary with the random seed; these are typical averages
+- Thompson Sampling often edges out UCB on this testbed
+
+</Example>
+
+<Implementation>
+
+```python
+def compare_algorithms():
+    """Run and plot comparison of bandit algorithms."""
+    np.random.seed(42)
+
+    n_arms = 10
+    n_steps = 1000
+    n_runs = 500
+
+    bandit = MultiArmedBandit(n_arms)
+
+    # Define agents to compare
+    agents = {
+        'e-greedy (e=0.1)': lambda n: EpsilonGreedy(n, epsilon=0.1),
+        'e-greedy (e=0.01)': lambda n: EpsilonGreedy(n, epsilon=0.01),
+        'UCB (c=2)': lambda n: UCB(n, c=2.0),
+        'Thompson Sampling': lambda n: ThompsonSamplingGaussian(n),
+    }
+
+    # Run experiments
+    all_rewards = {name: np.zeros((n_runs, n_steps)) for name in agents}
+    all_regrets = {name: np.zeros((n_runs, n_steps)) for name in agents}
+
+    for run in range(n_runs):
+        bandit.reset()
+
+        for name, make_agent in agents.items():
+            agent = make_agent(n_arms)
+
+            for t in range(n_steps):
+                action = agent.select_action()
+                reward = bandit.pull(action)
+                agent.update(action, reward)
+
+                all_rewards[name][run, t] = reward
+                all_regrets[name][run, t] = bandit.get_regret(action)
+
+    # Plot average reward
+    print("Average reward in last 100 steps:")
+    for name in agents:
+        mean_rewards = np.mean(all_rewards[name], axis=0)
+        final_avg = np.mean(mean_rewards[-100:])
+        print(f"  {name}: {final_avg:.3f}")
+
+    # Plot cumulative regret
+    print("\nTotal regret after 1000 steps:")
+    for name in agents:
+        cum_regret = np.cumsum(all_regrets[name], axis=1)
+        final_regret = np.mean(cum_regret[:, -1])
+        print(f"  {name}: {final_regret:.1f}")
+
+
+compare_algorithms()
+```
+
+</Implementation>
+
+## Analysis: Why These Differences?
+
+<Intuition>
+
+**Epsilon-greedy's linear regret**: Even after finding the best arm, epsilon-greedy keeps exploring with probability $\varepsilon$. In 1000 steps with $\varepsilon = 0.1$, that's ~100 random pulls—many wasted on clearly bad arms.
+
+**UCB's directed exploration**: UCB only explores arms that might plausibly be best. Once an arm is clearly bad, UCB stops trying it. This leads to logarithmic regret.
+
+**Thompson Sampling's efficiency**: Like UCB, Thompson Sampling focuses on competitive arms. But its probabilistic nature means it can be more aggressive about eliminating clearly inferior options.
+
+</Intuition>
+
+<Mathematical>
+
+The regret bounds tell the story:
+
+**Epsilon-greedy** (fixed $\varepsilon$):
+$$\mathbb{E}[\text{Regret}(T)] = O\left(\varepsilon T + \frac{k}{\varepsilon}\right)$$
+
+The $\varepsilon T$ term grows linearly forever—you keep exploring bad arms.
+
+**UCB**:
+$$\mathbb{E}[\text{Regret}(T)] = O\left(\sum_{a: \mu_a < \mu^*} \frac{\ln T}{\Delta_a}\right)$$
+
+Logarithmic in $T$, with larger gaps (easier problems) contributing less.
+
+**Thompson Sampling**:
+$$\mathbb{E}[\text{Regret}(T)] = O\left(\sum_{a: \mu_a < \mu^*} \frac{\ln T}{D_{KL}(\mu_a || \mu^*)}\right)$$
+
+Also logarithmic, often with better constants in practice.
+
+</Mathematical>
+
+## Sensitivity to Parameters
+
+<Intuition>
+
+Each algorithm has parameters that affect performance:
+
+**Epsilon-greedy**: The $\varepsilon$ parameter
+- $\varepsilon = 0$: No exploration, can get stuck forever
+- $\varepsilon = 0.01$: Slow exploration, might not find best arm quickly
+- $\varepsilon = 0.1$: Good balance for moderate time horizons
+- $\varepsilon = 0.3$: Too much exploration, wastes time on known bad arms
+
+**UCB**: The exploration constant $c$
+- $c = 0.5$: Under-explores, might miss the best arm
+- $c = 2$: Standard choice, usually works well
+- $c = 5$: Over-explores, especially early on
+
+**Thompson Sampling**: Prior parameters
+- Uninformative prior (Beta(1,1) or wide Gaussian): Safe default
+- Informative prior: Faster convergence if prior is accurate, disaster if wrong
+
+</Intuition>
+
+<Warning>
+**Parameter Sensitivity**
+
+Epsilon-greedy is the most sensitive to its parameter. Choosing the wrong $\varepsilon$ can dramatically hurt performance.
+
+UCB is moderately sensitive—$c$ affects how aggressively it explores, but reasonable values (1-3) usually work.
+
+Thompson Sampling is the least sensitive—the prior matters mainly at the start, and the posterior quickly dominates.
+
+When in doubt, Thompson Sampling with uninformative priors is a safe choice.
+</Warning>
+
+## Non-Stationary Environments
+
+<Intuition>
+
+Real problems often change over time. What if the best arm today isn't the best tomorrow?
+
+**Epsilon-greedy** handles this naturally: constant exploration means you'll notice changes eventually.
+
+**UCB** struggles: once you've played an arm many times, the exploration bonus stays small even if the arm's value has changed.
+
+**Thompson Sampling** also struggles: a concentrated posterior won't generate high samples for an arm that has become better.
+
+For non-stationary problems, use:
+- Constant epsilon-greedy (not decaying)
+- Sliding window UCB (only use recent data)
+- Discounted Thompson Sampling (give recent observations more weight)
+
+</Intuition>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class SlidingWindowUCB:
+    """
+    UCB with a sliding window for non-stationary bandits.
+
+    Only considers the last `window_size` observations for each arm.
+    """
+
+    def __init__(self, n_arms, c=2.0, window_size=100):
+        self.n_arms = n_arms
+        self.c = c
+        self.window_size = window_size
+        self.history = [[] for _ in range(n_arms)]
+        self.t = 0
+
+    def select_action(self):
+        self.t += 1
+
+        # Try each arm at least once
+        for a in range(self.n_arms):
+            if len(self.history[a]) == 0:
+                return a
+
+        # Compute windowed statistics
+        Q = np.zeros(self.n_arms)
+        N = np.zeros(self.n_arms)
+
+        for a in range(self.n_arms):
+            recent = self.history[a][-self.window_size:]
+            if len(recent) > 0:
+                Q[a] = np.mean(recent)
+                N[a] = len(recent)
+
+        # UCB with windowed counts
+        ucb_values = Q + self.c * np.sqrt(np.log(self.t) / np.maximum(N, 1))
+        return np.argmax(ucb_values)
+
+    def update(self, action, reward):
+        self.history[action].append(reward)
+
+
+class DiscountedThompsonSampling:
+    """
+    Thompson Sampling with exponential discounting for non-stationary bandits.
+
+    Recent observations are weighted more heavily.
+    """
+
+    def __init__(self, n_arms, discount=0.99, prior_alpha=1.0, prior_beta=1.0):
+        self.n_arms = n_arms
+        self.discount = discount
+        self.alpha = np.full(n_arms, prior_alpha)
+        self.beta = np.full(n_arms, prior_beta)
+
+    def select_action(self):
+        samples = np.random.beta(self.alpha, self.beta)
+        return np.argmax(samples)
+
+    def update(self, action, reward):
+        # Discount existing counts (pseudo-counts decay over time)
+        self.alpha = 1.0 + self.discount * (self.alpha - 1.0)
+        self.beta = 1.0 + self.discount * (self.beta - 1.0)
+
+        # Add new observation
+        if reward > 0.5:  # Treat as success
+            self.alpha[action] += 1
+        else:
+            self.beta[action] += 1
+```
+
+</Implementation>
+
+## Decision Guide: Which Algorithm to Use?
+
+<Tip>
+**Quick Decision Framework**
+
+1. **Need something simple and robust?** Use epsilon-greedy with $\varepsilon = 0.1$
+
+2. **Care about sample efficiency in a stationary problem?** Use UCB or Thompson Sampling
+
+3. **Have prior knowledge about arm values?** Use Thompson Sampling with informative prior
+
+4. **Problem is non-stationary?** Use epsilon-greedy (constant) or sliding window variants
+
+5. **Need theoretical guarantees?** Use UCB (most analyzed)
+
+6. **Want best empirical performance?** Usually Thompson Sampling
+
+7. **Debugging or explaining to stakeholders?** UCB (deterministic, intuitive formula)
+</Tip>
+
+<Intuition>
+
+Here's a more detailed breakdown:
+
+**Use Epsilon-Greedy when:**
+- You're prototyping and need quick results
+- The problem might be non-stationary
+- Simplicity is more important than optimality
+- You have a very long time horizon (the linear regret term becomes less significant)
+
+**Use UCB when:**
+- Sample efficiency matters
+- You want theoretical guarantees
+- You need deterministic, reproducible behavior
+- You're working with a stationary problem
+
+**Use Thompson Sampling when:**
+- You want the best empirical performance
+- You have useful prior information
+- You have many arms (it scales well)
+- You're comfortable with stochastic decisions
+
+</Intuition>
+
+## Summary Comparison Table
+
+<div className="my-6 overflow-x-auto">
+
+| Aspect | Epsilon-Greedy | UCB | Thompson Sampling |
+|--------|----------------|-----|-------------------|
+| **Exploration type** | Random | Directed (uncertainty) | Probabilistic (beliefs) |
+| **Parameters** | $\varepsilon$ | $c$ | Prior |
+| **Regret** | $O(T)$ | $O(\ln T)$ | $O(\ln T)$ |
+| **Stationarity** | Good | Poor | Poor |
+| **Scalability** | Good | Good | Good |
+| **Implementation** | Simple | Simple | Moderate |
+| **Interpretability** | Simple | Intuitive | Requires Bayesian thinking |
+| **Empirical performance** | Fair | Good | Often best |
+
+</div>
+
+## Practical Recommendations
+
+<Note>
+**Final Recommendations**
+
+1. **Start with Thompson Sampling** as your default for Bernoulli or Gaussian rewards. It usually performs best and requires minimal tuning.
+
+2. **Use UCB** when you need determinism or are working with unusual reward distributions.
+
+3. **Use Epsilon-greedy** for quick prototyping or non-stationary problems.
+
+4. **Always run multiple random seeds** to understand variance in performance.
+
+5. **Consider the business context**: In clinical trials, the ethical implications of suboptimal arm pulls might favor more aggressive exploration. In ad selection, accumulated regret directly translates to lost revenue.
+</Note>
+
+This concludes our exploration of multi-armed bandits. In the next chapter, we'll see how to extend these ideas when context matters—contextual bandits for personalized decisions.

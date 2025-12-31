@@ -1,0 +1,482 @@
+---
+title: "Advantage Actor-Critic (A2C)"
+slug: "a2c"
+section: "Policy Gradient Methods"
+description: "Synchronous actor-critic training"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Advantage Actor-Critic (A2C)
+
+A2C (Advantage Actor-Critic) is the synchronous variant of A3C (Asynchronous Advantage Actor-Critic). It combines policy gradients with TD learning in a clean, practical algorithm that forms the foundation for PPO and other modern methods.
+
+## What Is A2C?
+
+<Definition title="A2C (Advantage Actor-Critic)">
+
+A2C is an actor-critic algorithm that:
+1. Uses advantage estimates to reduce variance in policy gradients
+2. Trains actor (policy) and critic (value function) simultaneously
+3. Runs synchronously (all workers update together)
+4. Adds entropy regularization for exploration
+
+It's simpler than A3C (no asynchronous updates) and often just as effective.
+
+</Definition>
+
+<Intuition>
+
+A2C is like REINFORCE with several key improvements:
+
+1. **Bootstrapped returns**: Don't wait for episode end; use value estimates
+2. **Advantage estimation**: Use $A(s,a)$ instead of returns for lower variance
+3. **Entropy bonus**: Prevent premature convergence to deterministic policies
+4. **Batched updates**: Collect multiple steps of experience before updating
+
+These changes make learning faster and more stable.
+
+</Intuition>
+
+## The A2C Algorithm
+
+<Mathematical>
+
+A2C minimizes a combined loss:
+
+$$L = L^{actor} + c_1 L^{critic} - c_2 H[\pi]$$
+
+Where:
+
+**Actor loss** (policy gradient with advantages):
+$$L^{actor} = -\mathbb{E}_t[\log \pi_\theta(a_t|s_t) \cdot \hat{A}_t]$$
+
+**Critic loss** (value function regression):
+$$L^{critic} = \mathbb{E}_t[(V_\phi(s_t) - \hat{G}_t)^2]$$
+
+**Entropy bonus** (for exploration):
+$$H[\pi] = -\sum_a \pi_\theta(a|s) \log \pi_\theta(a|s)$$
+
+Typical coefficients: $c_1 = 0.5$, $c_2 = 0.01$
+
+</Mathematical>
+
+### Algorithm Steps
+
+<Intuition>
+
+The A2C training loop:
+
+1. **Collect**: Run policy for n steps, storing $(s, a, r, s')$ transitions
+2. **Compute returns**: Bootstrap with $V(s_{n+1})$ at the end
+3. **Compute advantages**: $\hat{A}_t = \hat{G}_t - V(s_t)$
+4. **Update**: Single gradient step on combined loss
+5. **Repeat**
+
+This is "n-step" A2C. Common values: n=5 or n=20 steps.
+
+</Intuition>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+
+
+class ActorCriticNetwork(nn.Module):
+    """Actor-Critic network with shared backbone."""
+
+    def __init__(self, state_dim, n_actions, hidden_dim=64):
+        super().__init__()
+
+        self.shared = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Tanh(),
+        )
+
+        self.actor = nn.Linear(hidden_dim, n_actions)
+        self.critic = nn.Linear(hidden_dim, 1)
+
+    def forward(self, state):
+        features = self.shared(state)
+        logits = self.actor(features)
+        value = self.critic(features).squeeze(-1)
+        return logits, value
+
+    def get_action(self, state):
+        """Sample action and return action, log_prob, value, entropy."""
+        logits, value = self.forward(state)
+        dist = torch.distributions.Categorical(logits=logits)
+        action = dist.sample()
+        log_prob = dist.log_prob(action)
+        entropy = dist.entropy()
+        return action.item(), log_prob, value, entropy
+
+    def evaluate(self, states, actions):
+        """Evaluate actions for given states."""
+        logits, values = self.forward(states)
+        dist = torch.distributions.Categorical(logits=logits)
+        log_probs = dist.log_prob(actions)
+        entropy = dist.entropy()
+        return log_probs, values, entropy
+
+
+class A2C:
+    """Advantage Actor-Critic implementation."""
+
+    def __init__(
+        self,
+        state_dim,
+        n_actions,
+        lr=3e-4,
+        gamma=0.99,
+        value_coef=0.5,
+        entropy_coef=0.01,
+        max_grad_norm=0.5
+    ):
+        self.gamma = gamma
+        self.value_coef = value_coef
+        self.entropy_coef = entropy_coef
+        self.max_grad_norm = max_grad_norm
+
+        self.network = ActorCriticNetwork(state_dim, n_actions)
+        self.optimizer = torch.optim.Adam(self.network.parameters(), lr=lr)
+
+    def compute_returns(self, rewards, values, dones, last_value):
+        """Compute n-step returns with bootstrapping."""
+        returns = []
+        R = last_value
+
+        for t in reversed(range(len(rewards))):
+            if dones[t]:
+                R = 0
+            R = rewards[t] + self.gamma * R
+            returns.insert(0, R)
+
+        return torch.tensor(returns, dtype=torch.float32)
+
+    def update(self, states, actions, rewards, dones, last_value):
+        """Perform A2C update."""
+        states = torch.stack(states)
+        actions = torch.tensor(actions, dtype=torch.long)
+
+        # Compute returns
+        with torch.no_grad():
+            returns = self.compute_returns(rewards, None, dones, last_value)
+
+        # Get log probs, values, and entropy
+        log_probs, values, entropy = self.network.evaluate(states, actions)
+
+        # Compute advantages
+        advantages = returns - values.detach()
+        # Normalize advantages
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        # Actor loss: -log_prob * advantage
+        actor_loss = -(log_probs * advantages).mean()
+
+        # Critic loss: MSE between values and returns
+        critic_loss = F.mse_loss(values, returns)
+
+        # Entropy bonus (negative because we minimize loss)
+        entropy_loss = -entropy.mean()
+
+        # Combined loss
+        loss = (
+            actor_loss
+            + self.value_coef * critic_loss
+            + self.entropy_coef * entropy_loss
+        )
+
+        # Gradient step
+        self.optimizer.zero_grad()
+        loss.backward()
+        nn.utils.clip_grad_norm_(self.network.parameters(), self.max_grad_norm)
+        self.optimizer.step()
+
+        return {
+            'actor_loss': actor_loss.item(),
+            'critic_loss': critic_loss.item(),
+            'entropy': entropy.mean().item(),
+            'total_loss': loss.item()
+        }
+```
+
+</Implementation>
+
+## The Entropy Bonus
+
+<Intuition>
+
+Entropy measures how "spread out" the policy is:
+- **High entropy**: Policy is uncertain, assigns probability to many actions
+- **Low entropy**: Policy is confident, concentrated on one action
+
+The entropy bonus encourages exploration by penalizing overly confident policies.
+
+Without entropy regularization, the policy might collapse to always taking the same action - even if that action is only slightly better than alternatives. The entropy bonus keeps options open.
+
+</Intuition>
+
+<Mathematical>
+
+The entropy of a discrete policy:
+
+$$H[\pi(\cdot|s)] = -\sum_a \pi(a|s) \log \pi(a|s)$$
+
+For a deterministic policy (all probability on one action): $H = 0$
+
+For a uniform policy over $n$ actions: $H = \log n$ (maximum)
+
+By maximizing entropy (subtracting $H$ from loss), we encourage the policy to stay stochastic until it has strong evidence that one action is best.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def compute_entropy_bonus(logits):
+    """
+    Compute entropy of categorical distribution.
+
+    Args:
+        logits: Unnormalized log-probabilities [batch, n_actions]
+
+    Returns:
+        Mean entropy across the batch
+    """
+    dist = torch.distributions.Categorical(logits=logits)
+    return dist.entropy().mean()
+
+
+# In the loss function:
+# entropy_loss = -entropy_coef * compute_entropy_bonus(logits)
+# Adding this to loss = minimizing = maximizing entropy
+```
+
+</Implementation>
+
+<Tip>
+
+Typical entropy coefficients: 0.01 - 0.05
+
+- Start higher (0.05) for exploration in early training
+- Can anneal to lower values over time
+- If policy collapses, increase entropy coefficient
+- If policy is too random, decrease it
+
+</Tip>
+
+## N-Step Returns
+
+<Mathematical>
+
+A2C typically uses n-step returns rather than pure TD or Monte Carlo:
+
+$$G_t^{(n)} = r_t + \gamma r_{t+1} + ... + \gamma^{n-1} r_{t+n-1} + \gamma^n V(s_{t+n})$$
+
+The advantage estimate:
+
+$$\hat{A}_t = G_t^{(n)} - V(s_t)$$
+
+**Why n-step?**
+- More actual rewards = less bias than 1-step TD
+- Bootstrapping at the end = less variance than full MC
+- Common values: n=5, n=20
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def compute_n_step_returns(rewards, dones, last_value, gamma=0.99):
+    """
+    Compute returns with bootstrapping at the end.
+
+    Args:
+        rewards: List of rewards from the rollout
+        dones: List of done flags
+        last_value: V(s_n) - bootstrap value at end of rollout
+        gamma: Discount factor
+
+    Returns:
+        Tensor of returns
+    """
+    returns = []
+    R = last_value
+
+    # Work backwards from the end
+    for t in reversed(range(len(rewards))):
+        if dones[t]:
+            R = 0  # Reset at episode boundary
+        R = rewards[t] + gamma * R
+        returns.insert(0, R)
+
+    return torch.tensor(returns, dtype=torch.float32)
+```
+
+</Implementation>
+
+## Complete A2C Training Loop
+
+<Implementation>
+
+```python
+import gymnasium as gym
+import numpy as np
+import torch
+
+
+def train_a2c(
+    env_name='CartPole-v1',
+    n_steps=5,
+    n_updates=1000,
+    gamma=0.99,
+    lr=3e-4,
+    value_coef=0.5,
+    entropy_coef=0.01
+):
+    """Train A2C on a Gym environment."""
+
+    env = gym.make(env_name)
+    state_dim = env.observation_space.shape[0]
+    n_actions = env.action_space.n
+
+    agent = A2C(
+        state_dim=state_dim,
+        n_actions=n_actions,
+        lr=lr,
+        gamma=gamma,
+        value_coef=value_coef,
+        entropy_coef=entropy_coef
+    )
+
+    state, _ = env.reset()
+    episode_reward = 0
+    episode_rewards = []
+
+    for update in range(n_updates):
+        # Collect n_steps of experience
+        states, actions, rewards, dones = [], [], [], []
+
+        for _ in range(n_steps):
+            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+            action, _, _, _ = agent.network.get_action(state_tensor)
+
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+
+            states.append(torch.tensor(state, dtype=torch.float32))
+            actions.append(action)
+            rewards.append(reward)
+            dones.append(done)
+
+            episode_reward += reward
+            state = next_state
+
+            if done:
+                episode_rewards.append(episode_reward)
+                episode_reward = 0
+                state, _ = env.reset()
+
+        # Bootstrap value for last state
+        with torch.no_grad():
+            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+            _, last_value = agent.network(state_tensor)
+            last_value = last_value.item()
+            # If episode ended, don't bootstrap
+            if dones[-1]:
+                last_value = 0
+
+        # Update
+        losses = agent.update(states, actions, rewards, dones, last_value)
+
+        # Logging
+        if (update + 1) % 100 == 0:
+            avg_reward = np.mean(episode_rewards[-100:]) if episode_rewards else 0
+            print(f"Update {update + 1}, Avg Reward: {avg_reward:.2f}, "
+                  f"Actor Loss: {losses['actor_loss']:.4f}, "
+                  f"Entropy: {losses['entropy']:.4f}")
+
+    env.close()
+    return agent, episode_rewards
+
+
+if __name__ == "__main__":
+    agent, rewards = train_a2c(n_updates=2000)
+```
+
+</Implementation>
+
+## A2C vs A3C
+
+<Intuition>
+
+A3C (Asynchronous Advantage Actor-Critic) was the original algorithm. A2C is the synchronous version:
+
+**A3C:**
+- Multiple workers update asynchronously
+- Lock-free updates to shared parameters
+- Can have stale gradients
+- More complex to implement
+
+**A2C:**
+- All workers update synchronously
+- Collect all experience, then update
+- No stale gradients
+- Simpler and often equally effective
+
+Research showed that A3C's asynchrony wasn't essential for performance. A2C is now more commonly used because it's simpler and allows better use of GPU parallelism.
+
+</Intuition>
+
+## Hyperparameter Guidance
+
+<Tip>
+
+**Key hyperparameters for A2C:**
+
+| Parameter | Typical Range | Notes |
+|-----------|--------------|-------|
+| Learning rate | 1e-4 to 3e-3 | Start with 3e-4 |
+| N-steps | 5-20 | Balance bias/variance |
+| Value coefficient | 0.5 | Relative importance of critic |
+| Entropy coefficient | 0.01-0.1 | Higher = more exploration |
+| Gamma | 0.99 | Discount factor |
+| Max grad norm | 0.5 | Gradient clipping |
+
+**Tuning tips:**
+- If learning is unstable: lower learning rate, increase n-steps
+- If policy collapses: increase entropy coefficient
+- If value loss is high: increase value coefficient or use separate networks
+
+</Tip>
+
+<Warning>
+
+Common A2C pitfalls:
+
+1. **Forgetting to normalize advantages**: High-magnitude advantages cause unstable updates
+2. **Not clipping gradients**: Can cause exploding gradients
+3. **Wrong entropy sign**: Remember to maximize entropy (subtract from loss)
+4. **Forgetting detach()**: Don't backprop through advantage when updating actor
+
+</Warning>
+
+## Summary
+
+A2C is a practical actor-critic algorithm:
+
+- **Advantages**: Uses $\hat{A}_t = G_t - V(s_t)$ for low-variance gradients
+- **N-step returns**: Balances bias and variance
+- **Entropy bonus**: Encourages exploration
+- **Combined loss**: Actor, critic, and entropy terms
+- **Synchronous**: Simpler than A3C, equally effective
+
+A2C is the foundation for PPO. The main difference is how PPO constrains policy updates - which is the subject of the next chapter.

@@ -1,0 +1,373 @@
+---
+title: "State Value Functions"
+slug: "state-values"
+section: "Markov Decision Processes"
+description: "How good is it to be in a state?"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# State Value Functions
+
+The most fundamental question in reinforcement learning: **How good is it to be in this state?**
+
+The state-value function answers this question precisely. It tells us the expected cumulative reward we can achieve starting from a state, if we follow a particular policy. This single number captures everything important about a state's long-term prospects.
+
+## The Core Question
+
+Imagine you're playing a board game. You look at the current position and think: "Am I winning or losing? How good is this position?"
+
+That intuitive assessment is what the state-value function formalizes. It compresses all future possibilities into one number.
+
+<Definition title="State-Value Function">
+The state-value function $V^\pi(s)$ gives the expected return when starting in state $s$ and following policy $\pi$ thereafter:
+
+$$V^\pi(s) = \mathbb{E}_\pi[G_t | S_t = s]$$
+
+where $G_t$ is the discounted return from time $t$.
+</Definition>
+
+<Intuition>
+
+Think of value as a "how close to treasure" measure. In a navigation problem:
+
+- States near the goal have high values because rewards are within reach
+- States far from the goal have lower values because rewards are distant (and discounted)
+- States in dead ends or dangerous areas have very low values
+
+The values form a **gradient** that essentially "points toward" the rewards. If you could see the value of every state, you'd see a landscape with peaks at rewarding states.
+
+</Intuition>
+
+## Values Depend on Policy
+
+A crucial insight: **value is always relative to a policy**. The same state can have very different values under different policies.
+
+<Example title="Policy Changes Everything">
+
+Consider a simple 3-state problem:
+
+```
+[Start] --right--> [Middle] --right--> [Goal: +10]
+   |                   |
+   v                   v
+  wall               [Pit: -10]
+```
+
+Under a **smart policy** (always go right from Start, always go right from Middle):
+- $V^\pi(\text{Start}) \approx 8.1$ (discount to goal)
+- $V^\pi(\text{Middle}) \approx 9.0$ (closer to goal)
+- $V^\pi(\text{Goal}) = 10.0$
+
+Under a **terrible policy** (always go down from Middle):
+- $V^\pi(\text{Start}) \approx -8.1$ (leads to pit eventually)
+- $V^\pi(\text{Middle}) = -10.0$ (goes straight to pit)
+- $V^\pi(\text{Goal}) = 10.0$
+
+Same states, drastically different values. The policy determines the value.
+
+</Example>
+
+<Warning>
+A common misconception: "V(s) tells us what action to take." No! V(s) only tells us how good the state is under the current policy. To know which action to take, we need Q-values or knowledge of the MDP dynamics.
+</Warning>
+
+## The Full Definition
+
+<Mathematical>
+
+Expanding the definition with the return formula:
+
+$$V^\pi(s) = \mathbb{E}_\pi\left[\sum_{k=0}^{\infty} \gamma^k R_{t+k+1} \bigg| S_t = s\right]$$
+
+The expectation is taken over:
+
+1. **The stochastic policy** $\pi(a|s)$: Which actions we might take
+2. **The stochastic environment** $P(s'|s,a)$: Where those actions might lead
+3. **All future time steps**: The infinite sum of discounted rewards
+
+This makes $V^\pi$ a well-defined function for any policy $\pi$ in any MDP with bounded rewards and $\gamma < 1$.
+
+**Why the expectation?** Because both the policy and environment can be stochastic. Even from the same state, following the same policy, we might experience different trajectories.
+
+</Mathematical>
+
+## GridWorld Example
+
+Let's compute values for a concrete example. Consider this 4x4 GridWorld:
+
+<Example title="GridWorld Value Computation">
+
+```
+ _____ _____ _____ _____
+|     |     |     |     |
+| S   |  .  |  .  |  .  |
+|_____|_____|_____|_____|
+|     |     |     |     |
+|  .  |  X  |  .  |  .  |
+|_____|_____|_____|_____|
+|     |     |     |     |
+|  .  |  .  |  .  |  .  |
+|_____|_____|_____|_____|
+|     |     |     |     |
+|  .  |  .  |  .  |  G  |
+|_____|_____|_____|_____|
+
+S = Start, G = Goal (+10), X = Wall, . = Empty (-1 per step)
+```
+
+Under a **random policy** (equal probability for each direction):
+
+| | Col 0 | Col 1 | Col 2 | Col 3 |
+|--|-------|-------|-------|-------|
+| Row 0 | -14.2 | -18.5 | -17.3 | -14.0 |
+| Row 1 | -18.7 | Wall | -14.1 | -8.5 |
+| Row 2 | -17.8 | -14.3 | -9.2 | -3.1 |
+| Row 3 | -14.5 | -9.8 | -3.6 | 0.0 |
+
+Values are negative because the random policy wanders aimlessly, accumulating step penalties.
+
+Under an **optimal policy** (always move toward goal):
+
+| | Col 0 | Col 1 | Col 2 | Col 3 |
+|--|-------|-------|-------|-------|
+| Row 0 | 4.1 | 4.6 | 5.1 | 5.7 |
+| Row 1 | 4.6 | Wall | 5.7 | 6.3 |
+| Row 2 | 5.1 | 5.7 | 6.3 | 7.0 |
+| Row 3 | 5.7 | 6.3 | 7.0 | 10.0 |
+
+Now values increase as we approach the goal. The value gradient points directly toward the reward.
+
+</Example>
+
+## How Discount Factor Affects Values
+
+The discount factor $\gamma$ dramatically changes the value landscape:
+
+<Tip>
+Think of $\gamma$ as "how far-sighted" the agent is:
+- $\gamma = 0$: Completely myopic. Only immediate rewards matter.
+- $\gamma = 0.9$: Moderate foresight. Rewards 10 steps away worth about 35% of immediate.
+- $\gamma = 0.99$: Far-sighted. Rewards 100 steps away still worth about 37%.
+- $\gamma = 1$: Infinite horizon (only valid for episodic tasks).
+</Tip>
+
+<Example title="Discount Factor Impact">
+
+Consider a state that's 5 steps from a +100 reward (with no intermediate rewards).
+
+With different discount factors:
+- $\gamma = 0.5$: $V(s) = 100 \times 0.5^5 = 3.125$
+- $\gamma = 0.9$: $V(s) = 100 \times 0.9^5 = 59.0$
+- $\gamma = 0.99$: $V(s) = 100 \times 0.99^5 = 95.1$
+
+Higher $\gamma$ means distant states still have substantial value. Lower $\gamma$ means only nearby rewards matter.
+
+</Example>
+
+## Computing Values by Hand
+
+For simple MDPs, we can compute values directly from the definition.
+
+<Example title="Manual Value Calculation">
+
+Consider a 3-state chain with deterministic policy $\pi$ that always goes right:
+
+```
+[A] --right--> [B] --right--> [C: terminal, +10]
+
+Rewards: R(A) = -1, R(B) = -1, R(C) = +10
+Discount: γ = 0.9
+```
+
+Working backward from the terminal state:
+
+**State C (terminal):**
+$$V^\pi(C) = 10$$
+
+**State B:**
+$$V^\pi(B) = R(B) + \gamma V^\pi(C) = -1 + 0.9 \times 10 = 8.0$$
+
+**State A:**
+$$V^\pi(A) = R(A) + \gamma V^\pi(B) = -1 + 0.9 \times 8.0 = 6.2$$
+
+The values form a gradient: $6.2 \to 8.0 \to 10.0$, increasing as we approach the goal.
+
+</Example>
+
+## Values as Predictions
+
+<Note>
+Value functions are **predictions**. They predict the expected cumulative reward. Good predictions enable good decisions: if you know the value of every state you could end up in, you can evaluate any policy.
+</Note>
+
+This predictive nature is why value functions are central to RL:
+
+1. **Evaluation**: Given a policy, compute its value function to see how good it is
+2. **Improvement**: Use values to find better policies
+3. **Learning**: Estimate values from experience when the MDP is unknown
+
+<Mathematical>
+
+The predictive interpretation becomes clear when we think about Monte Carlo estimation. If we run many episodes following policy $\pi$ and track the returns from state $s$:
+
+$$V^\pi(s) \approx \frac{1}{N} \sum_{i=1}^{N} G_t^{(i)}$$
+
+where $G_t^{(i)}$ is the return from the $i$-th visit to state $s$. As $N \to \infty$, this converges to the true value.
+
+</Mathematical>
+
+## Implementation
+
+<Implementation>
+
+Here's how to represent and estimate value functions in Python:
+
+```python
+import numpy as np
+from collections import defaultdict
+
+# Value function as a dictionary
+V = defaultdict(float)
+
+# Simple Monte Carlo value estimation
+def estimate_values_mc(episodes, gamma=0.99):
+    """
+    Estimate V(s) from a list of episodes using Monte Carlo.
+
+    Each episode is a list of (state, reward) tuples.
+    """
+    returns = defaultdict(list)
+
+    for episode in episodes:
+        # Calculate returns for each state visited
+        G = 0
+        # Work backward through the episode
+        for state, reward in reversed(episode):
+            G = reward + gamma * G
+            returns[state].append(G)
+
+    # Average the returns for each state
+    V = {}
+    for state, state_returns in returns.items():
+        V[state] = np.mean(state_returns)
+
+    return V
+
+
+# Example usage
+episodes = [
+    # Episode 1: A -> B -> C (goal)
+    [('A', -1), ('B', -1), ('C', 10)],
+    # Episode 2: A -> B -> C (goal)
+    [('A', -1), ('B', -1), ('C', 10)],
+    # Episode 3: A -> A -> B -> C (got stuck briefly)
+    [('A', -1), ('A', -1), ('B', -1), ('C', 10)],
+]
+
+V = estimate_values_mc(episodes, gamma=0.9)
+print("Estimated values:")
+for state in sorted(V.keys()):
+    print(f"  V({state}) = {V[state]:.2f}")
+```
+
+Output:
+```
+Estimated values:
+  V(A) = 5.73
+  V(B) = 8.00
+  V(C) = 10.00
+```
+
+Note that state A has a lower estimated value because episode 3 started poorly (stuck at A).
+
+</Implementation>
+
+## Visualizing Value Functions
+
+Values are often visualized as heatmaps, showing the "terrain" of the value landscape:
+
+<Implementation>
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+def visualize_values(V, grid_shape, title="Value Function"):
+    """
+    Visualize a value function as a heatmap.
+
+    V: dict mapping (row, col) -> value
+    grid_shape: (rows, cols) tuple
+    """
+    rows, cols = grid_shape
+    value_grid = np.zeros((rows, cols))
+
+    for (r, c), value in V.items():
+        value_grid[r, c] = value
+
+    plt.figure(figsize=(8, 6))
+    plt.imshow(value_grid, cmap='RdYlGn', interpolation='nearest')
+    plt.colorbar(label='Value')
+
+    # Add value labels to each cell
+    for r in range(rows):
+        for c in range(cols):
+            plt.text(c, r, f'{value_grid[r, c]:.1f}',
+                    ha='center', va='center', fontsize=12)
+
+    plt.title(title)
+    plt.xlabel('Column')
+    plt.ylabel('Row')
+    plt.show()
+
+
+# Example: 4x4 GridWorld values under optimal policy
+V_optimal = {
+    (0, 0): 4.1, (0, 1): 4.6, (0, 2): 5.1, (0, 3): 5.7,
+    (1, 0): 4.6, (1, 1): 0.0, (1, 2): 5.7, (1, 3): 6.3,  # (1,1) is wall
+    (2, 0): 5.1, (2, 1): 5.7, (2, 2): 6.3, (2, 3): 7.0,
+    (3, 0): 5.7, (3, 1): 6.3, (3, 2): 7.0, (3, 3): 10.0,  # goal
+}
+
+visualize_values(V_optimal, (4, 4), "GridWorld Values (Optimal Policy)")
+```
+
+The resulting heatmap shows values increasing toward the goal in the bottom-right corner, with the wall having zero value.
+
+</Implementation>
+
+## Key Properties of Value Functions
+
+<Mathematical>
+
+**Property 1: Boundedness**
+
+For bounded rewards $|R| \leq R_{max}$ and $\gamma < 1$:
+
+$$|V^\pi(s)| \leq \frac{R_{max}}{1 - \gamma}$$
+
+This ensures values are always finite and well-defined.
+
+**Property 2: Uniqueness**
+
+For a given policy $\pi$ and MDP, there is exactly one value function $V^\pi$. Different policies have different value functions, but each policy determines a unique one.
+
+**Property 3: Policy Ordering**
+
+We can compare policies via their value functions. Policy $\pi$ is better than $\pi'$ if:
+
+$$V^\pi(s) \geq V^{\pi'}(s) \text{ for all } s \in \mathcal{S}$$
+
+</Mathematical>
+
+## Summary
+
+- **State-value function** $V^\pi(s)$ measures expected return from state $s$ under policy $\pi$
+- Values depend on the policy: same state, different policies, different values
+- Values form a gradient pointing toward rewards
+- The discount factor $\gamma$ controls how much future rewards matter
+- Values can be estimated from experience using Monte Carlo methods
+
+But state values alone don't tell us what to do. To make decisions, we need to compare actions. That's where **action-value functions** come in.

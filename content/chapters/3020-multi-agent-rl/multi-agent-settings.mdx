@@ -1,0 +1,434 @@
+---
+title: "Multi-Agent Settings"
+slug: "multi-agent-settings"
+section: "Advanced Topics"
+description: "Cooperation, competition, and mixed motives"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Multi-Agent Settings
+
+When we move from single-agent to multi-agent environments, the problem changes fundamentally. The environment is no longer stationary—it includes other agents who are also learning and adapting. Let's formalize these settings and understand their key differences.
+
+## From Single to Multiple Agents
+
+<Definition title="Multi-Agent System">
+A system where multiple decision-making agents interact in a shared environment. Each agent observes the world, takes actions, and receives rewards, but the outcomes depend on the joint actions of all agents.
+</Definition>
+
+<Intuition>
+
+Imagine learning to drive. If you were the only car on the road, you'd just optimize your route—pure single-agent RL. But with other drivers, you need to:
+
+- **Predict** what others will do
+- **Adapt** to their changing behavior
+- **Sometimes coordinate** (at intersections)
+- **Sometimes compete** (for parking spots)
+
+Multi-agent RL is driving with traffic. The "optimal" action depends not just on the road, but on everyone else's decisions.
+
+</Intuition>
+
+## The Markov Game Formulation
+
+Single-agent RL uses Markov Decision Processes (MDPs). Multi-agent RL uses **Markov Games** (also called Stochastic Games), which extend MDPs to multiple agents.
+
+<Mathematical>
+
+A Markov Game is defined by:
+
+- $N$ agents, indexed by $i \in \{1, ..., N\}$
+- State space $\mathcal{S}$
+- Action spaces $\mathcal{A}_1, ..., \mathcal{A}_N$ (one per agent)
+- Transition function $P(s' | s, a_1, ..., a_N)$
+- Reward functions $R_i(s, a_1, ..., a_N)$ for each agent $i$
+- Discount factor $\gamma$
+
+Key difference from MDPs: transitions and rewards depend on **joint actions** $(a_1, ..., a_N)$, not just a single agent's action.
+
+Each agent seeks to maximize its own expected return:
+
+$$J_i = \mathbb{E}\left[ \sum_{t=0}^{\infty} \gamma^t R_i(s_t, a_1^t, ..., a_N^t) \right]$$
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class MarkovGame:
+    """
+    Abstract base class for Markov Games.
+
+    A Markov Game extends an MDP to multiple agents.
+    """
+
+    def __init__(self, n_agents):
+        self.n_agents = n_agents
+
+    def reset(self):
+        """Reset environment, return initial observations for each agent."""
+        raise NotImplementedError
+
+    def step(self, actions):
+        """
+        Execute joint action.
+
+        Args:
+            actions: List of actions, one per agent
+
+        Returns:
+            observations: List of observations, one per agent
+            rewards: List of rewards, one per agent
+            done: Whether episode is finished
+            info: Additional information
+        """
+        raise NotImplementedError
+
+    def get_observation(self, agent_id, state):
+        """Get agent-specific observation from global state."""
+        raise NotImplementedError
+
+
+class SimpleGridGame(MarkovGame):
+    """
+    Simple two-agent grid game.
+
+    Agents can cooperate to reach shared goals or compete for resources.
+    """
+
+    def __init__(self, grid_size=5, mode='cooperative'):
+        super().__init__(n_agents=2)
+        self.grid_size = grid_size
+        self.mode = mode  # 'cooperative', 'competitive', or 'mixed'
+
+        # Actions: up, down, left, right, stay
+        self.n_actions = 5
+        self.action_to_delta = {
+            0: (-1, 0),  # up
+            1: (1, 0),   # down
+            2: (0, -1),  # left
+            3: (0, 1),   # right
+            4: (0, 0)    # stay
+        }
+
+    def reset(self):
+        """Reset to initial positions."""
+        self.agent_positions = [
+            [0, 0],                              # Agent 0 starts top-left
+            [self.grid_size-1, self.grid_size-1] # Agent 1 starts bottom-right
+        ]
+        self.goal_position = [self.grid_size//2, self.grid_size//2]  # Center
+        return self._get_observations()
+
+    def step(self, actions):
+        """Execute joint action."""
+        # Move agents
+        for i, action in enumerate(actions):
+            delta = self.action_to_delta[action]
+            new_pos = [
+                max(0, min(self.grid_size-1, self.agent_positions[i][0] + delta[0])),
+                max(0, min(self.grid_size-1, self.agent_positions[i][1] + delta[1]))
+            ]
+            self.agent_positions[i] = new_pos
+
+        # Compute rewards based on mode
+        rewards = self._compute_rewards()
+
+        # Check if done
+        done = self._check_done()
+
+        return self._get_observations(), rewards, done, {}
+
+    def _compute_rewards(self):
+        """Compute rewards based on game mode."""
+        dist_to_goal = [
+            abs(pos[0] - self.goal_position[0]) + abs(pos[1] - self.goal_position[1])
+            for pos in self.agent_positions
+        ]
+
+        at_goal = [d == 0 for d in dist_to_goal]
+
+        if self.mode == 'cooperative':
+            # Both agents get reward when BOTH reach the goal
+            if all(at_goal):
+                return [10.0, 10.0]
+            return [-0.1, -0.1]  # Small step penalty
+
+        elif self.mode == 'competitive':
+            # Zero-sum: first to reach goal wins
+            if at_goal[0] and not at_goal[1]:
+                return [10.0, -10.0]
+            elif at_goal[1] and not at_goal[0]:
+                return [-10.0, 10.0]
+            elif all(at_goal):
+                return [0.0, 0.0]  # Tie
+            return [0.0, 0.0]
+
+        else:  # mixed
+            # Individual reward for reaching goal, bonus for both
+            rewards = []
+            for i, (d, ag) in enumerate(zip(dist_to_goal, at_goal)):
+                r = -0.1  # Step penalty
+                if ag:
+                    r += 5.0  # Individual goal reward
+                rewards.append(r)
+            if all(at_goal):
+                rewards = [r + 5.0 for r in rewards]  # Coordination bonus
+            return rewards
+
+    def _check_done(self):
+        """Check if episode should end."""
+        dist_to_goal = [
+            abs(pos[0] - self.goal_position[0]) + abs(pos[1] - self.goal_position[1])
+            for pos in self.agent_positions
+        ]
+        if self.mode == 'cooperative':
+            return all(d == 0 for d in dist_to_goal)
+        else:
+            return any(d == 0 for d in dist_to_goal)
+
+    def _get_observations(self):
+        """Get observations for each agent."""
+        return [
+            {
+                'own_position': self.agent_positions[i].copy(),
+                'other_position': self.agent_positions[1-i].copy(),
+                'goal_position': self.goal_position.copy()
+            }
+            for i in range(self.n_agents)
+        ]
+```
+
+</Implementation>
+
+## Three Types of Settings
+
+<div className="grid md:grid-cols-3 gap-4 my-6">
+  <div className="bg-emerald-900/20 border border-emerald-700/50 rounded-lg p-4">
+    <div className="text-emerald-400 font-bold mb-2">Cooperative</div>
+    <div className="text-slate-300 text-sm mb-2">
+      Agents share a common goal. All agents receive the same (or highly correlated) reward.
+    </div>
+    <div className="text-slate-400 text-xs">
+      Examples: Robot teams, multi-agent assembly, cooperative games
+    </div>
+  </div>
+  <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-4">
+    <div className="text-red-400 font-bold mb-2">Competitive</div>
+    <div className="text-slate-300 text-sm mb-2">
+      Zero-sum: one agent's gain is another's loss. Rewards sum to zero.
+    </div>
+    <div className="text-slate-400 text-xs">
+      Examples: Chess, Go, poker, adversarial games
+    </div>
+  </div>
+  <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-4">
+    <div className="text-amber-400 font-bold mb-2">Mixed-Motive</div>
+    <div className="text-slate-300 text-sm mb-2">
+      Agents have different goals that partially align and partially conflict.
+    </div>
+    <div className="text-slate-400 text-xs">
+      Examples: Traffic, markets, social dilemmas, negotiation
+    </div>
+  </div>
+</div>
+
+### Cooperative Settings
+
+<Intuition>
+
+In cooperative games, agents work together toward a shared objective. Think of a team of robots in a warehouse: they all want to fulfill orders efficiently, and one robot's success helps the team.
+
+The main challenge isn't strategic conflict—it's **coordination**. How do agents learn to work together effectively? How do they divide labor? How do they communicate?
+
+</Intuition>
+
+<Mathematical>
+
+In fully cooperative games, all agents share a single reward function:
+
+$$R_1(s, a_1, ..., a_N) = R_2(s, a_1, ..., a_N) = ... = R_N(s, a_1, ..., a_N) = R(s, a_1, ..., a_N)$$
+
+This makes the problem conceptually simpler (no strategic conflict), but coordination remains challenging:
+- **Credit assignment**: When the team succeeds, which agent's actions were responsible?
+- **Coordination**: How do agents learn complementary roles?
+- **Communication**: Should agents share information? How?
+
+</Mathematical>
+
+<Example title="Cooperative Multi-Agent Tasks">
+
+**Multi-Agent Particle Environment**: Agents must cooperate to cover landmarks, communicate to coordinate, or protect teammates from adversaries.
+
+**StarCraft Micromanagement**: A team of units must coordinate attacks, focus fire, and retreat strategically to defeat enemy units.
+
+**Hanabi**: A cooperative card game where players can't see their own hands—they must give each other hints and infer information from others' actions.
+
+</Example>
+
+### Competitive Settings
+
+<Intuition>
+
+In competitive (zero-sum) games, what one agent wins, another loses. Chess is the classic example: there's exactly one winner and one loser.
+
+The main challenge is **strategic depth**. Agents must anticipate opponents' responses, consider what opponents think they'll do, and find strategies robust to counter-strategies.
+
+</Intuition>
+
+<Mathematical>
+
+In two-player zero-sum games:
+
+$$R_1(s, a_1, a_2) = -R_2(s, a_1, a_2)$$
+
+The rewards perfectly oppose. This structure enables powerful results from game theory, including the minimax theorem: there exists an optimal strategy that neither player can improve by unilateral deviation.
+
+The **Nash equilibrium** in zero-sum games has both players maximizing their worst-case outcome:
+
+$$\pi_1^* = \arg\max_{\pi_1} \min_{\pi_2} V_1(\pi_1, \pi_2)$$
+$$\pi_2^* = \arg\max_{\pi_2} \min_{\pi_1} V_2(\pi_1, \pi_2)$$
+
+</Mathematical>
+
+<Example title="Competitive Multi-Agent Success Stories">
+
+**AlphaGo/AlphaZero**: Achieved superhuman performance in Go, chess, and shogi through self-play—competing against copies of itself.
+
+**AlphaStar**: Reached Grandmaster level in StarCraft II, a complex real-time strategy game with incomplete information.
+
+**Poker AI**: Libratus and Pluribus achieved superhuman performance in no-limit Texas hold'em, handling imperfect information and bluffing.
+
+</Example>
+
+### Mixed-Motive Settings
+
+<Intuition>
+
+Most real-world multi-agent problems are neither purely cooperative nor purely competitive. Traffic is a perfect example: everyone wants to get to their destination quickly, but a crash hurts everyone. There's partial alignment (avoid collisions) and partial conflict (get there first).
+
+These settings are the most challenging because there's no simple objective like "help the team" or "beat the opponent."
+
+</Intuition>
+
+<Mathematical>
+
+In mixed-motive games, agent rewards are neither identical nor opposite:
+
+$$R_i \neq R_j \text{ and } R_i \neq -R_j \text{ in general}$$
+
+Classic examples from game theory:
+
+**Prisoner's Dilemma**: Individual incentives push toward defection, but mutual cooperation is better for everyone.
+
+**Chicken/Hawk-Dove**: Two drivers heading toward each other. Swerving is safe but losing. Neither swerving is catastrophic. Asymmetric equilibria exist where one swerves and one doesn't.
+
+**Coordination Games**: Multiple equilibria exist, and agents must somehow agree on which one to reach.
+
+</Mathematical>
+
+<Warning title="The Social Dilemma Problem">
+
+In many mixed-motive settings, individually rational behavior leads to collectively poor outcomes. If each agent optimizes selfishly, everyone might end up worse off than if they had cooperated.
+
+This is why mixed-motive MARL is so challenging: you need mechanisms (communication, contracts, reputation, shared norms) to enable cooperation even when individual incentives push against it.
+
+</Warning>
+
+## Partial Observability
+
+In many multi-agent settings, agents don't observe the full state—they have **partial observability**.
+
+<Definition title="Partially Observable Markov Game">
+
+An extension of Markov Games where each agent $i$ receives an observation $o_i = O_i(s)$ that depends on the state but may not fully reveal it. Agent $i$'s policy is $\pi_i(a_i | o_i)$ rather than $\pi_i(a_i | s)$.
+
+</Definition>
+
+<Intuition>
+
+In a real poker game, you can't see your opponents' cards. In traffic, you can't see around buildings. In a warehouse, robots only have local sensors.
+
+Partial observability makes multi-agent problems much harder:
+- Agents must **infer** hidden information from observations
+- They may need to **communicate** to share what they know
+- They must reason about **what others know** based on what others can see
+
+</Intuition>
+
+## The Dec-POMDP: Cooperative Case
+
+<Mathematical>
+
+For fully cooperative games with partial observability, the formal framework is the **Decentralized Partially Observable MDP (Dec-POMDP)**:
+
+- $N$ agents
+- States $\mathcal{S}$, joint actions $\mathcal{A} = \mathcal{A}_1 \times ... \times \mathcal{A}_N$
+- Observations $\mathcal{O} = \mathcal{O}_1 \times ... \times \mathcal{O}_N$
+- Observation function $O(o_1, ..., o_N | s, a_1, ..., a_N)$
+- Transition $P(s' | s, a_1, ..., a_N)$
+- Shared reward $R(s, a_1, ..., a_N)$
+
+The optimal solution to a Dec-POMDP is NEXP-complete—computationally harder than single-agent POMDPs, which are already very hard.
+
+</Mathematical>
+
+<Note title="Why Dec-POMDPs Are Hard">
+
+In a Dec-POMDP, the optimal policy depends on the entire history of observations, which grows exponentially. Even worse, the optimal action for one agent depends on what other agents have seen and done—but each agent doesn't observe the others' observations.
+
+This is why practical Dec-POMDP solutions use approximations, heuristics, or learning-based approaches rather than exact solutions.
+
+</Note>
+
+## Key Challenges in Multi-Agent RL
+
+<div className="my-6 space-y-3">
+  <div className="flex items-start gap-3 bg-slate-800/40 rounded-lg p-4">
+    <div className="text-blue-400 font-bold text-lg">1.</div>
+    <div>
+      <div className="text-blue-300 font-medium">Non-Stationarity</div>
+      <div className="text-slate-400 text-sm">From any single agent's perspective, the environment (which includes other learning agents) is constantly changing.</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-3 bg-slate-800/40 rounded-lg p-4">
+    <div className="text-blue-400 font-bold text-lg">2.</div>
+    <div>
+      <div className="text-blue-300 font-medium">Credit Assignment</div>
+      <div className="text-slate-400 text-sm">When a team succeeds or fails, how do you determine which agent's actions were responsible?</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-3 bg-slate-800/40 rounded-lg p-4">
+    <div className="text-blue-400 font-bold text-lg">3.</div>
+    <div>
+      <div className="text-blue-300 font-medium">Scalability</div>
+      <div className="text-slate-400 text-sm">Joint action spaces grow exponentially with the number of agents. With 10 agents and 5 actions each, there are $5^{10} = 9.7M$ joint actions.</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-3 bg-slate-800/40 rounded-lg p-4">
+    <div className="text-blue-400 font-bold text-lg">4.</div>
+    <div>
+      <div className="text-blue-300 font-medium">Equilibrium Selection</div>
+      <div className="text-slate-400 text-sm">Many games have multiple equilibria. Which one will learning converge to? Can agents coordinate on the best one?</div>
+    </div>
+  </div>
+</div>
+
+## Summary
+
+Multi-agent settings add strategic complexity beyond single-agent RL:
+
+- **Markov Games** extend MDPs to multiple interacting agents
+- **Cooperative** settings require coordination and credit assignment
+- **Competitive** settings require strategic reasoning and robustness
+- **Mixed-motive** settings combine both challenges
+- **Partial observability** makes everything harder
+
+In the next section, we'll see how the simplest approach—independent learning—attempts to handle these challenges, and why it often falls short.

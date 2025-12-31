@@ -1,0 +1,95 @@
+---
+title: "Function Approximation"
+slug: "function-approximation"
+section: "Deep Reinforcement Learning"
+description: "Scaling RL to large state spaces with learned representations"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "q-learning"
+    title: "Q-Learning"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Function Approximation in Reinforcement Learning
+
+<ChapterObjectives>
+- Explain why tabular methods fail in large or continuous state spaces
+- Describe the function approximation approach to RL
+- Implement linear function approximation for value estimation
+- Understand the deadly triad and its implications
+- Explain how neural networks enable deep RL
+</ChapterObjectives>
+
+Our Q-learning agent mastered a 4x4 grid. But what about a robot navigating a room? With continuous position (x, y) and orientation, there are infinite states. We can't have a table entry for every possible configuration.
+
+We need a way to **generalize**.
+
+## Why Function Approximation?
+
+In tabular RL, we stored a value for every state (or state-action pair). This works for small, discrete problems. But real-world problems often have:
+
+- **Continuous states**: Position, velocity, angles
+- **High-dimensional observations**: Images with millions of pixels
+- **Combinatorially large spaces**: Chess has more positions than atoms in the universe
+
+Function approximation lets us represent value functions compactly and generalize across similar states.
+
+## Chapter Overview
+
+This chapter bridges tabular RL and deep RL, introducing the core ideas that make modern RL algorithms work:
+
+<div className="grid md:grid-cols-3 gap-4 my-6">
+  <a href="/chapters/function-approximation/why-tables-fail" className="block p-4 bg-gradient-to-br from-red-900/30 to-red-800/10 rounded-lg border border-red-700/50 hover:border-red-500/50 transition-colors">
+    <h3 className="font-semibold text-red-400">Why Tables Fail</h3>
+    <p className="text-slate-400 text-sm mt-1">The curse of dimensionality in RL</p>
+  </a>
+  <a href="/chapters/function-approximation/linear-approximation" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">Linear Approximation</h3>
+    <p className="text-slate-400 text-sm mt-1">Features, weights, and gradient descent</p>
+  </a>
+  <a href="/chapters/function-approximation/neural-networks" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">Neural Networks</h3>
+    <p className="text-slate-400 text-sm mt-1">Deep learning meets reinforcement learning</p>
+  </a>
+</div>
+
+## The Core Idea
+
+<Definition title="Function Approximation">
+Instead of storing $Q(s,a)$ for every state-action pair, we learn parameters $\mathbf{w}$ such that $\hat{Q}(s,a;\mathbf{w}) \approx Q^*(s,a)$. Similar states automatically get similar values.
+</Definition>
+
+The key insight is that we can use any function approximator (linear models, neural networks, decision trees) to represent our value function. The choice of approximator determines:
+
+- What patterns can be captured
+- How efficiently we learn
+- Whether training is stable
+
+## Prerequisites
+
+This chapter assumes familiarity with:
+- [Q-Learning](/chapters/q-learning) for the core algorithm we're extending
+- Basic calculus (gradients and optimization)
+- (Recommended) [Bellman Equations](/chapters/bellman-equations) for the theoretical foundation
+
+## Key Questions We'll Answer
+
+- Why can't we just discretize continuous states?
+- How do we update parameters instead of table entries?
+- What is the "deadly triad" and why should we care?
+- How do neural networks unlock deep RL?
+
+---
+
+<KeyTakeaways>
+- **Generalization** is the key benefit: learn from some states, apply to similar ones
+- **Linear approximation** with features is simple but powerful
+- The **deadly triad** (function approximation + bootstrapping + off-policy) can cause divergence
+- **Neural networks** can learn their own features, enabling end-to-end learning
+</KeyTakeaways>
+
+<NextChapter slug="dqn" title="Deep Q-Networks" />

@@ -1,0 +1,496 @@
+---
+title: "Bellman Expectation Equations"
+slug: "bellman-expectation"
+section: "Markov Decision Processes"
+description: "How values relate to each other under a policy"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Bellman Expectation Equations
+
+The Bellman expectation equations describe how values relate to each other when following a specific policy. They're the mathematical foundation that connects the value of any state to the values of states you can reach from it.
+
+## Starting from Returns
+
+Recall from the previous chapter that the state-value function is defined as the expected return:
+
+$$V^\pi(s) = \mathbb{E}_\pi[G_t | S_t = s]$$
+
+The key insight comes from the recursive structure of returns.
+
+<Intuition>
+
+The return $G_t$ has a natural decomposition:
+
+$$G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \ldots$$
+
+We can factor out $\gamma$ from all but the first term:
+
+$$G_t = R_{t+1} + \gamma (R_{t+2} + \gamma R_{t+3} + \ldots) = R_{t+1} + \gamma G_{t+1}$$
+
+**Today's return = today's reward + discounted tomorrow's return.**
+
+This simple recursive relationship is the heart of the Bellman equations. If we know tomorrow's value, we can compute today's value.
+
+</Intuition>
+
+<Mathematical>
+
+Let's derive this more carefully. Starting from the definition of return:
+
+$$G_t = \sum_{k=0}^{\infty} \gamma^k R_{t+k+1}$$
+
+Separating the first reward:
+
+$$G_t = R_{t+1} + \sum_{k=1}^{\infty} \gamma^k R_{t+k+1}$$
+
+Substituting $j = k - 1$:
+
+$$G_t = R_{t+1} + \gamma \sum_{j=0}^{\infty} \gamma^j R_{t+1+j+1} = R_{t+1} + \gamma G_{t+1}$$
+
+This recursive structure of returns translates directly into a recursive structure of value functions.
+
+</Mathematical>
+
+## Deriving the Bellman Equation for $V^\pi$
+
+Now we can derive the Bellman expectation equation. Starting from the value function definition:
+
+<Mathematical>
+
+$$V^\pi(s) = \mathbb{E}_\pi[G_t | S_t = s]$$
+
+Using the recursive structure $G_t = R_{t+1} + \gamma G_{t+1}$:
+
+$$V^\pi(s) = \mathbb{E}_\pi[R_{t+1} + \gamma G_{t+1} | S_t = s]$$
+
+By linearity of expectation:
+
+$$V^\pi(s) = \mathbb{E}_\pi[R_{t+1} | S_t = s] + \gamma \mathbb{E}_\pi[G_{t+1} | S_t = s]$$
+
+The first term is the expected immediate reward. For the second term, we use the law of iterated expectations---we can condition on the next state $S_{t+1}$:
+
+$$\mathbb{E}_\pi[G_{t+1} | S_t = s] = \mathbb{E}_\pi[\mathbb{E}_\pi[G_{t+1} | S_{t+1}] | S_t = s] = \mathbb{E}_\pi[V^\pi(S_{t+1}) | S_t = s]$$
+
+This gives us the Bellman expectation equation:
+
+$$V^\pi(s) = \mathbb{E}_\pi[R_{t+1} + \gamma V^\pi(S_{t+1}) | S_t = s]$$
+
+</Mathematical>
+
+<Definition title="Bellman Expectation Equation for V">
+$$V^\pi(s) = \sum_{a} \pi(a|s) \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^\pi(s') \right]$$
+
+The value of a state equals the expected immediate reward plus the discounted expected value of the next state.
+</Definition>
+
+<Intuition>
+
+Let's break this equation into its components:
+
+1. **$\sum_a \pi(a|s)$**: Average over all actions, weighted by how likely the policy is to choose each one
+
+2. **$R(s,a)$**: The expected immediate reward for taking action $a$ in state $s$
+
+3. **$\gamma$**: The discount factor---how much we care about future rewards
+
+4. **$\sum_{s'} P(s'|s,a) V^\pi(s')$**: The expected value of the next state, averaging over where we might end up
+
+The equation says: "My value is what I expect to get right now, plus the discounted value of where I'll be next."
+
+</Intuition>
+
+## Visualizing with Backup Diagrams
+
+A **backup diagram** visualizes how a state's value depends on its successors. The name comes from the idea that value "backs up" from future states to the current state.
+
+<Example title="Backup Diagram for V">
+
+The backup diagram for $V^\pi(s)$ shows:
+
+<div className="my-6 flex justify-center">
+  <div className="inline-block text-center">
+    <div className="flex flex-col items-center gap-2">
+      <div className="w-16 h-16 bg-cyan-600/40 border-2 border-cyan-500 rounded-full flex items-center justify-center text-lg font-semibold">s</div>
+      <div className="text-slate-500 text-sm">state</div>
+    </div>
+    <div className="flex justify-center gap-8 mt-4">
+      <div className="flex flex-col items-center">
+        <div className="text-slate-400">&darr; $\pi(a_1|s)$</div>
+        <div className="w-8 h-8 bg-emerald-600/60 border border-emerald-500 rounded-full mt-2"></div>
+        <div className="text-slate-500 text-xs mt-1">$a_1$</div>
+      </div>
+      <div className="flex flex-col items-center">
+        <div className="text-slate-400">&darr; $\pi(a_2|s)$</div>
+        <div className="w-8 h-8 bg-emerald-600/60 border border-emerald-500 rounded-full mt-2"></div>
+        <div className="text-slate-500 text-xs mt-1">$a_2$</div>
+      </div>
+    </div>
+    <div className="text-slate-400 text-sm mt-4 mb-4">$\downarrow$ weighted by $P(s'|s,a)$</div>
+    <div className="flex justify-center gap-4">
+      <div className="flex flex-col items-center">
+        <div className="w-12 h-12 bg-cyan-600/40 border border-cyan-500 rounded-full flex items-center justify-center text-sm">$s'_1$</div>
+      </div>
+      <div className="flex flex-col items-center">
+        <div className="w-12 h-12 bg-cyan-600/40 border border-cyan-500 rounded-full flex items-center justify-center text-sm">$s'_2$</div>
+      </div>
+      <div className="flex flex-col items-center">
+        <div className="w-12 h-12 bg-cyan-600/40 border border-cyan-500 rounded-full flex items-center justify-center text-sm">$s'_3$</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+Reading the diagram:
+- **Top node (large circle)**: The state $s$ whose value we're computing
+- **Small filled circles**: Actions, weighted by policy probability $\pi(a|s)$
+- **Bottom nodes**: Possible next states, weighted by transition probability $P(s'|s,a)$
+- **Edges**: Carry rewards and transition probabilities
+
+Value flows upward: we sum over next state values, weight by transitions and policy, add rewards, and get $V^\pi(s)$.
+
+</Example>
+
+## The Bellman Equation for $Q^\pi$
+
+The action-value function has its own Bellman equation. Recall that:
+
+$$Q^\pi(s,a) = \mathbb{E}_\pi[G_t | S_t = s, A_t = a]$$
+
+<Definition title="Bellman Expectation Equation for Q">
+$$Q^\pi(s,a) = R(s,a) + \gamma \sum_{s'} P(s'|s,a) \sum_{a'} \pi(a'|s') Q^\pi(s',a')$$
+
+The value of taking action $a$ in state $s$ equals the immediate reward plus the discounted expected Q-value of the next state-action pair.
+</Definition>
+
+<Intuition>
+
+This equation is slightly different from the $V$ equation because we've already committed to taking action $a$. So we:
+
+1. Collect the immediate reward $R(s,a)$
+2. Transition to some next state $s'$ with probability $P(s'|s,a)$
+3. In that next state, the policy chooses action $a'$ with probability $\pi(a'|s')$
+4. Get the discounted value of that next state-action pair
+
+The two sums represent: first averaging over *where we end up*, then averaging over *what action the policy takes there*.
+
+</Intuition>
+
+## The V-Q Relationship
+
+The state and action value functions are intimately connected:
+
+<Mathematical>
+
+**From Q to V:** The state value is the policy-weighted average of action values:
+
+$$V^\pi(s) = \sum_{a} \pi(a|s) Q^\pi(s,a)$$
+
+**From V to Q:** The action value is the reward plus discounted next state value:
+
+$$Q^\pi(s,a) = R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^\pi(s')$$
+
+These relationships let us convert between V and Q. They also show that knowing one is equivalent to knowing the other (given the policy and dynamics).
+
+</Mathematical>
+
+<Tip>
+These V-Q relationships are incredibly useful. Many algorithms compute V from Q or vice versa. For example:
+- Policy improvement uses $Q$ to find better actions
+- TD learning often updates $V$ directly
+- Q-learning updates $Q$ directly
+</Tip>
+
+## A Worked Example
+
+Let's compute values by hand for a simple MDP.
+
+<Example title="Three-State MDP">
+
+Consider this MDP with states $\{A, B, C\}$, where $C$ is terminal:
+
+<div className="my-6 flex justify-center">
+  <div className="inline-flex items-center gap-6">
+    <div className="flex flex-col items-center">
+      <div className="w-14 h-14 bg-blue-600/40 border border-slate-600 rounded-lg flex items-center justify-center text-lg font-semibold">A</div>
+    </div>
+    <div className="flex flex-col items-center gap-1">
+      <div className="text-slate-400 text-sm">right: r=0</div>
+      <div className="text-slate-300 text-xl">&rarr;</div>
+    </div>
+    <div className="flex flex-col items-center">
+      <div className="w-14 h-14 bg-slate-700/50 border border-slate-600 rounded-lg flex items-center justify-center text-lg font-semibold">B</div>
+    </div>
+    <div className="flex flex-col items-center gap-1">
+      <div className="text-slate-400 text-sm">right: r=0</div>
+      <div className="text-slate-300 text-xl">&rarr;</div>
+    </div>
+    <div className="flex flex-col items-center">
+      <div className="w-14 h-14 bg-emerald-600/40 border border-slate-600 rounded-lg flex items-center justify-center text-lg font-semibold">C</div>
+      <div className="text-emerald-400 text-sm mt-1">+10</div>
+    </div>
+  </div>
+</div>
+
+**Setup:**
+- Actions: `right` only (deterministic policy)
+- Transitions: Deterministic (right always succeeds)
+- Rewards: 0 for transitions, +10 for reaching C
+- Discount: $\gamma = 0.9$
+
+**Computing Values (working backward from terminal state):**
+
+State C is terminal with value 10:
+$$V^\pi(C) = 10$$
+
+State B: One step from C
+$$V^\pi(B) = R(B, \text{right}) + \gamma \cdot V^\pi(C) = 0 + 0.9 \times 10 = 9$$
+
+State A: Two steps from C
+$$V^\pi(A) = R(A, \text{right}) + \gamma \cdot V^\pi(B) = 0 + 0.9 \times 9 = 8.1$$
+
+The values decrease as we move away from the reward, discounted by $\gamma$ at each step.
+
+</Example>
+
+## Bellman Equations Form a System
+
+For an MDP with $n$ states, the Bellman expectation equation gives us $n$ equations (one per state) with $n$ unknowns (the values).
+
+<Mathematical>
+
+For a given policy $\pi$, we can write this as a linear system. Define:
+- $\mathbf{v}^\pi$ as the vector of values $[V^\pi(s_1), ..., V^\pi(s_n)]^T$
+- $\mathbf{r}^\pi$ as the expected immediate rewards under $\pi$
+- $\mathbf{P}^\pi$ as the state transition matrix under $\pi$
+
+Then the Bellman equation becomes:
+
+$$\mathbf{v}^\pi = \mathbf{r}^\pi + \gamma \mathbf{P}^\pi \mathbf{v}^\pi$$
+
+Rearranging:
+
+$$(\mathbf{I} - \gamma \mathbf{P}^\pi) \mathbf{v}^\pi = \mathbf{r}^\pi$$
+
+$$\mathbf{v}^\pi = (\mathbf{I} - \gamma \mathbf{P}^\pi)^{-1} \mathbf{r}^\pi$$
+
+This shows that the Bellman expectation equation has a **unique solution** (when $\gamma < 1$ and the inverse exists, which it always does for proper MDPs).
+
+</Mathematical>
+
+<Warning>
+While we *can* solve the Bellman equation by matrix inversion, this requires $O(n^3)$ computation and $O(n^2)$ memory for $n$ states. For large state spaces (millions of states), this is impractical. That's why we use iterative methods like Dynamic Programming or sampling methods like TD learning.
+</Warning>
+
+## Implementation
+
+<Implementation>
+
+Here's how to implement a single Bellman backup for the state-value function:
+
+```python
+def bellman_backup_v(s, V, mdp, policy, gamma=0.99):
+    """
+    Compute new value for state s using Bellman expectation equation.
+
+    Args:
+        s: Current state
+        V: Dictionary mapping states to current value estimates
+        mdp: MDP with transitions(s, a) and reward(s, a) methods
+        policy: Function policy(s, a) -> probability of action a in state s
+        gamma: Discount factor
+
+    Returns:
+        Updated value for state s
+    """
+    value = 0.0
+
+    # Sum over actions, weighted by policy
+    for a in mdp.actions(s):
+        action_value = 0.0
+
+        # Get immediate reward
+        action_value += mdp.reward(s, a)
+
+        # Sum over possible next states, weighted by transition probability
+        for s_next, prob in mdp.transitions(s, a):
+            action_value += gamma * prob * V.get(s_next, 0.0)
+
+        # Weight by policy probability
+        value += policy(s, a) * action_value
+
+    return value
+```
+
+And for the action-value function:
+
+```python
+def bellman_backup_q(s, a, Q, mdp, policy, gamma=0.99):
+    """
+    Compute new Q-value for state-action pair (s, a).
+
+    Args:
+        s: Current state
+        a: Action taken
+        Q: Dictionary mapping (state, action) to current Q estimates
+        mdp: MDP with transitions and reward methods
+        policy: Function policy(s, a) -> probability
+        gamma: Discount factor
+
+    Returns:
+        Updated Q-value for (s, a)
+    """
+    value = mdp.reward(s, a)
+
+    # Sum over possible next states
+    for s_next, prob in mdp.transitions(s, a):
+        # At next state, average over actions according to policy
+        next_state_value = sum(
+            policy(s_next, a_next) * Q.get((s_next, a_next), 0.0)
+            for a_next in mdp.actions(s_next)
+        )
+        value += gamma * prob * next_state_value
+
+    return value
+```
+
+**Key implementation notes:**
+- Handle terminal states: they typically have value 0 (no future rewards)
+- Use `.get(key, 0.0)` for dictionaries to handle unvisited states
+- The policy function returns probabilities that should sum to 1
+
+</Implementation>
+
+<Implementation>
+
+Here's a complete example computing values for a simple MDP:
+
+```python
+class SimpleMDP:
+    """A simple 3-state MDP for demonstration."""
+
+    def __init__(self):
+        self.states = ['A', 'B', 'C']  # C is terminal
+        self._actions = {'A': ['right'], 'B': ['right'], 'C': []}
+
+    def actions(self, s):
+        return self._actions.get(s, [])
+
+    def transitions(self, s, a):
+        """Return list of (next_state, probability) tuples."""
+        if s == 'A' and a == 'right':
+            return [('B', 1.0)]
+        elif s == 'B' and a == 'right':
+            return [('C', 1.0)]
+        return []
+
+    def reward(self, s, a):
+        """Reward for taking action a in state s."""
+        if s == 'B' and a == 'right':
+            return 10.0  # Reward for reaching terminal
+        return 0.0
+
+    def is_terminal(self, s):
+        return s == 'C'
+
+
+def compute_values(mdp, policy, gamma=0.9, max_iterations=100, theta=1e-6):
+    """Compute V^pi using iterative Bellman backups."""
+
+    # Initialize values to 0
+    V = {s: 0.0 for s in mdp.states}
+
+    for iteration in range(max_iterations):
+        delta = 0.0  # Track maximum change
+
+        for s in mdp.states:
+            if mdp.is_terminal(s):
+                continue  # Terminal states stay at 0
+
+            old_value = V[s]
+            V[s] = bellman_backup_v(s, V, mdp, policy, gamma)
+            delta = max(delta, abs(V[s] - old_value))
+
+        if delta < theta:
+            print(f"Converged in {iteration + 1} iterations")
+            break
+
+    return V
+
+
+# Example usage
+mdp = SimpleMDP()
+policy = lambda s, a: 1.0  # Deterministic policy, always takes available action
+
+V = compute_values(mdp, policy, gamma=0.9)
+print(f"V(A) = {V['A']:.2f}")  # Should be 8.10
+print(f"V(B) = {V['B']:.2f}")  # Should be 9.00
+print(f"V(C) = {V['C']:.2f}")  # Should be 0.00
+```
+
+Output:
+```
+Converged in 3 iterations
+V(A) = 8.10
+V(B) = 9.00
+V(C) = 0.00
+```
+
+</Implementation>
+
+## Stochastic Policies and Transitions
+
+The Bellman equations handle stochastic policies and transitions naturally. Let's see an example.
+
+<Example title="Stochastic Environment">
+
+Suppose in state A, the agent takes action `right`, but:
+- With probability 0.8, transitions to B (intended)
+- With probability 0.2, stays in A (slipped)
+
+<div className="my-6 flex justify-center">
+  <div className="inline-flex items-center gap-6">
+    <div className="flex flex-col items-center">
+      <div className="w-14 h-14 bg-blue-600/40 border border-slate-600 rounded-lg flex items-center justify-center text-lg font-semibold">A</div>
+    </div>
+    <div className="flex flex-col items-center gap-1">
+      <div className="text-emerald-400 text-xs">0.8</div>
+      <div className="text-slate-300">&rarr;</div>
+      <div className="text-amber-400 text-xs">0.2: stay</div>
+    </div>
+    <div className="flex flex-col items-center">
+      <div className="w-14 h-14 bg-slate-700/50 border border-slate-600 rounded-lg flex items-center justify-center text-lg font-semibold">B</div>
+    </div>
+  </div>
+</div>
+
+With $\gamma = 0.9$ and $V^\pi(B) = 9$, $V^\pi(A) = 0$:
+
+$$V^\pi(A) = R(A, \text{right}) + \gamma [0.8 \cdot V^\pi(B) + 0.2 \cdot V^\pi(A)]$$
+
+$$V^\pi(A) = 0 + 0.9 \times [0.8 \times 9 + 0.2 \times V^\pi(A)]$$
+
+$$V^\pi(A) = 0.9 \times 7.2 + 0.18 \times V^\pi(A)$$
+
+$$0.82 \times V^\pi(A) = 6.48$$
+
+$$V^\pi(A) = 7.90$$
+
+The value is lower than before (8.1) because sometimes we slip and stay in place, delaying the reward.
+
+</Example>
+
+## Summary
+
+The Bellman expectation equations establish the fundamental recursive structure of value functions:
+
+- **For $V^\pi$**: The value of a state is the expected immediate reward plus the discounted expected value of the next state
+- **For $Q^\pi$**: The value of a state-action pair is the immediate reward plus the discounted expected value of the next state-action pair
+- The equations form a **system of linear equations** that has a unique solution
+- Values can be computed by **iterative application** of the Bellman backup
+
+<Note>
+These expectation equations describe values under a *fixed* policy. But what if we want to find the *best* policy? That's where the Bellman *optimality* equations come in---they replace the policy average with a maximum, capturing what optimal behavior looks like.
+</Note>

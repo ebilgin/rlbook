@@ -1,0 +1,386 @@
+---
+title: "TD(0) Prediction"
+slug: "td-zero"
+section: "Temporal Difference Learning"
+description: "The simplest TD method for value estimation"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# TD(0) Prediction
+
+Now that we understand the TD idea, let's turn it into a concrete algorithm. **TD(0)** is the simplest form of TD learning—it looks just one step ahead and bootstraps from the very next state. The "(0)" refers to the fact that we use zero steps of actual returns before bootstrapping (unlike TD(n) which uses n steps).
+
+## The TD(0) Algorithm
+
+<Intuition>
+
+TD(0) is remarkably simple. For each transition the agent experiences:
+
+1. Observe the current state $S_t$
+2. Take an action according to the policy, receive reward $R_{t+1}$, arrive in state $S_{t+1}$
+3. Update $V(S_t)$ by nudging it toward $R_{t+1} + \gamma V(S_{t+1})$
+4. Repeat
+
+That's it. We never wait for an episode to end. We never need to know how the environment works. We just learn from each transition as it happens.
+
+</Intuition>
+
+<Definition title="TD(0)">
+The simplest TD prediction method. It updates the value of the current state based on the immediate reward and the estimated value of the next state, using only a single step of actual experience before bootstrapping.
+</Definition>
+
+<Mathematical>
+
+The TD(0) update rule:
+
+$$V(S_t) \leftarrow V(S_t) + \alpha \left[ R_{t+1} + \gamma V(S_{t+1}) - V(S_t) \right]$$
+
+Let's break down each component:
+
+- $V(S_t)$: Our current estimate of the state's value
+- $\alpha$: Learning rate (step size), typically between 0.01 and 0.5
+- $R_{t+1}$: The immediate reward we just received
+- $\gamma$: Discount factor, typically 0.9 to 0.99
+- $V(S_{t+1})$: Our estimate of the next state's value
+- $R_{t+1} + \gamma V(S_{t+1})$: The **TD target** — our revised estimate of what $V(S_t)$ should be
+- $R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$: The **TD error** $\delta_t$ — how much we should adjust
+
+The update moves $V(S_t)$ a fraction $\alpha$ of the way toward the TD target.
+
+</Mathematical>
+
+## Pseudocode for TD(0) Prediction
+
+Here's the complete algorithm for estimating $V^\pi$ for a given policy $\pi$:
+
+```
+Algorithm: TD(0) for Estimating V^π
+─────────────────────────────────────
+Input: policy π to evaluate
+Parameters: step size α ∈ (0, 1], discount γ
+
+Initialize V(s) arbitrarily for all s ∈ S
+Initialize V(terminal) = 0
+
+Loop for each episode:
+    Initialize S (first state of episode)
+    Loop for each step of episode:
+        A ← action given by π for S
+        Take action A, observe R, S'
+        V(S) ← V(S) + α[R + γV(S') - V(S)]
+        S ← S'
+    until S is terminal
+```
+
+<Note>
+Unlike Monte Carlo, we update after every single step. We don't need to store the episode or wait for it to end.
+</Note>
+
+## A Worked Example: Random Walk
+
+The classic example for TD(0) is the **Random Walk** problem from Sutton and Barto.
+
+<Example>
+**The Random Walk**
+
+Consider a chain of 5 states: A, B, C, D, E, with terminal states at both ends.
+
+```
+[Left Terminal] ← A ← B ← C → D → E → [Right Terminal]
+```
+
+- Starting from any state, the agent moves left or right with equal probability (50/50)
+- Reaching the left terminal gives reward 0
+- Reaching the right terminal gives reward +1
+- All other transitions give reward 0
+
+**Question**: What is the true value of state C under the random policy?
+
+By symmetry and calculation, the true values are:
+- $V(A) = 1/6$, $V(B) = 2/6$, $V(C) = 3/6 = 0.5$, $V(D) = 4/6$, $V(E) = 5/6$
+
+State C is in the middle, and on average, you'll reach the right terminal (reward +1) half the time, giving $V(C) = 0.5$.
+</Example>
+
+Let's trace through some TD(0) updates:
+
+<Example>
+**TD(0) Updates on Random Walk**
+
+Suppose our initial estimates are all $V(s) = 0.5$, and $\alpha = 0.1$, $\gamma = 1.0$.
+
+**Episode 1**: Start in C, move right to D, move right to E, move right to Terminal (reward +1).
+
+- At C: Observed transition C → D with $R = 0$
+  - TD target: $0 + 1.0 \times 0.5 = 0.5$
+  - TD error: $0.5 - 0.5 = 0$
+  - Update: $V(C) \leftarrow 0.5 + 0.1 \times 0 = 0.5$ (no change)
+
+- At D: Observed transition D → E with $R = 0$
+  - TD target: $0 + 1.0 \times 0.5 = 0.5$
+  - TD error: $0.5 - 0.5 = 0$
+  - Update: $V(D) \leftarrow 0.5$ (no change)
+
+- At E: Observed transition E → Terminal with $R = 1$
+  - TD target: $1 + 1.0 \times 0 = 1.0$ (terminal has value 0)
+  - TD error: $1.0 - 0.5 = 0.5$
+  - Update: $V(E) \leftarrow 0.5 + 0.1 \times 0.5 = 0.55$
+
+Now $V(E) = 0.55$. In the next episode, this higher value will propagate backward to D, then to C, and so on. This is how TD learning spreads information.
+</Example>
+
+## The Learning Rate α
+
+The learning rate $\alpha$ controls how much we update on each step:
+
+- **$\alpha$ too small**: Learning is very slow. We need many samples to move the estimate significantly.
+- **$\alpha$ too large**: Learning is fast but unstable. Estimates oscillate wildly.
+- **$\alpha$ just right**: We converge to good estimates in reasonable time.
+
+<Tip>
+A common heuristic: start with $\alpha = 0.1$ or $\alpha = 0.05$. If learning is unstable, reduce it. If learning is too slow, increase it. For convergence guarantees, $\alpha$ should decay over time (but constant $\alpha$ often works well in practice).
+</Tip>
+
+<Mathematical>
+
+For TD(0) to converge to the true value function $V^\pi$, we need:
+
+1. All states are visited infinitely often
+2. The step sizes satisfy: $\sum_{t=1}^{\infty} \alpha_t = \infty$ and $\sum_{t=1}^{\infty} \alpha_t^2 < \infty$
+
+These are the standard stochastic approximation conditions. A common choice is $\alpha_t = 1/t$ or $\alpha_t = 1/N(s)$ where $N(s)$ is the number of visits to state $s$.
+
+In practice, a constant $\alpha$ (like 0.1) often works well, especially in non-stationary environments where older experience may not be relevant.
+
+</Mathematical>
+
+## TD Error as a Prediction Error Signal
+
+<Intuition>
+
+The TD error $\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$ has a beautiful interpretation:
+
+It measures the **prediction error** at each step. We predicted the current state was worth $V(S_t)$. After seeing what actually happened (reward $R_{t+1}$ and landing in $S_{t+1}$), we now think it should be worth $R_{t+1} + \gamma V(S_{t+1})$.
+
+The TD error is the gap between these two assessments. If our value function is perfect, the TD error averages to zero. If not, the TD error tells us exactly how to fix it.
+
+</Intuition>
+
+Here's why the TD error is so important:
+
+1. **It guides learning**: Positive TD error → increase the value estimate. Negative → decrease it.
+2. **It indicates surprise**: Large TD error means something unexpected happened.
+3. **It measures progress**: As learning proceeds, TD errors should get smaller on average.
+4. **It connects to neuroscience**: The TD error resembles dopamine signals in the brain (more on this in future chapters).
+
+<Implementation>
+
+Here's a complete TD(0) implementation:
+
+```python
+import numpy as np
+from collections import defaultdict
+
+class TD0Predictor:
+    """TD(0) for estimating V^π."""
+
+    def __init__(self, alpha=0.1, gamma=0.99):
+        self.alpha = alpha
+        self.gamma = gamma
+        self.V = defaultdict(float)  # Value estimates, default to 0
+
+    def update(self, state, reward, next_state, done):
+        """
+        Perform a single TD(0) update.
+
+        Args:
+            state: Current state
+            reward: Reward received
+            next_state: Next state
+            done: Whether next_state is terminal
+
+        Returns:
+            td_error: The TD error for this transition
+        """
+        # Compute TD target
+        if done:
+            td_target = reward  # Terminal state has no future value
+        else:
+            td_target = reward + self.gamma * self.V[next_state]
+
+        # Compute TD error
+        td_error = td_target - self.V[state]
+
+        # Update value estimate
+        self.V[state] += self.alpha * td_error
+
+        return td_error
+
+    def evaluate_policy(self, env, policy, num_episodes=1000):
+        """
+        Evaluate a policy using TD(0).
+
+        Args:
+            env: Environment with reset() and step() methods
+            policy: Function mapping state to action
+            num_episodes: Number of episodes to run
+
+        Returns:
+            V: Estimated value function
+            td_errors: List of TD errors (for monitoring)
+        """
+        td_errors = []
+
+        for episode in range(num_episodes):
+            state = env.reset()
+            done = False
+            episode_errors = []
+
+            while not done:
+                action = policy(state)
+                next_state, reward, done, _ = env.step(action)
+
+                td_error = self.update(state, reward, next_state, done)
+                episode_errors.append(td_error)
+
+                state = next_state
+
+            td_errors.append(np.mean(np.abs(episode_errors)))
+
+        return dict(self.V), td_errors
+```
+
+Let's use this to evaluate a random policy on a simple environment:
+
+```python
+# Example: Random Walk environment
+class RandomWalk:
+    """5-state random walk from Sutton & Barto."""
+
+    def __init__(self):
+        self.states = ['A', 'B', 'C', 'D', 'E']
+        self.state = 'C'  # Start in the middle
+
+    def reset(self):
+        self.state = 'C'
+        return self.state
+
+    def step(self, action):
+        # action is ignored - movement is random
+        idx = self.states.index(self.state)
+
+        if np.random.random() < 0.5:
+            idx -= 1  # Move left
+        else:
+            idx += 1  # Move right
+
+        if idx < 0:
+            return 'terminal_left', 0, True, {}
+        elif idx > 4:
+            return 'terminal_right', 1, True, {}
+        else:
+            self.state = self.states[idx]
+            return self.state, 0, False, {}
+
+# Evaluate
+env = RandomWalk()
+predictor = TD0Predictor(alpha=0.1, gamma=1.0)
+random_policy = lambda s: None  # Action doesn't matter
+
+V, errors = predictor.evaluate_policy(env, random_policy, num_episodes=1000)
+
+# True values for comparison
+true_V = {'A': 1/6, 'B': 2/6, 'C': 3/6, 'D': 4/6, 'E': 5/6}
+
+print("Estimated values vs True values:")
+for state in ['A', 'B', 'C', 'D', 'E']:
+    print(f"  {state}: {V.get(state, 0):.3f} (true: {true_V[state]:.3f})")
+```
+
+</Implementation>
+
+## Handling Terminal States
+
+<Warning>
+A common bug in TD implementations is handling terminal states incorrectly. When the episode ends, there is no next state to bootstrap from. The TD target should just be the reward, not $r + \gamma V(s')$.
+
+Always check: `if done: td_target = reward else: td_target = reward + gamma * V[next_state]`
+</Warning>
+
+## Why "TD(0)"?
+
+<Intuition>
+
+The "0" in TD(0) refers to the number of actual reward steps we use before bootstrapping.
+
+- **TD(0)**: Bootstrap immediately, using $R_{t+1} + \gamma V(S_{t+1})$
+- **TD(1)**: Use one step of actual reward, then bootstrap: $R_{t+1} + \gamma R_{t+2} + \gamma^2 V(S_{t+2})$
+- **TD(n)**: Use n steps of actual rewards before bootstrapping
+
+TD(0) is the extreme of "bootstrap as soon as possible." At the other extreme, TD(∞) = Monte Carlo (wait for all rewards, no bootstrapping).
+
+The TD(λ) algorithm interpolates between these extremes using eligibility traces—but that's a topic for another day. For now, TD(0) gives us the core intuition.
+
+</Intuition>
+
+## Convergence Properties
+
+<Mathematical>
+
+TD(0) is guaranteed to converge to the true value function $V^\pi$ under these conditions:
+
+1. **Tabular representation**: Each state has its own independent estimate
+2. **Sufficient exploration**: Every state is visited infinitely often (in the limit)
+3. **Appropriate step sizes**: Learning rate decays appropriately (or is small enough)
+4. **Fixed policy**: We're evaluating a single, unchanging policy
+
+The convergence is to the same fixed point as Monte Carlo—the true value function $V^\pi$. But the path to get there is different:
+
+- MC converges by averaging full returns (unbiased but noisy)
+- TD converges by averaging single-step estimates (biased but less noisy)
+
+In practice, TD often converges faster because each update uses less noisy information.
+
+</Mathematical>
+
+## Monitoring Learning Progress
+
+You can track learning progress by monitoring the TD error over time:
+
+<Implementation>
+
+```python
+import matplotlib.pyplot as plt
+
+def plot_td_learning(td_errors, window=50):
+    """Plot TD error over episodes."""
+    # Smooth with moving average
+    smoothed = np.convolve(td_errors, np.ones(window)/window, mode='valid')
+
+    plt.figure(figsize=(10, 4))
+    plt.plot(smoothed)
+    plt.xlabel('Episode')
+    plt.ylabel('Mean Absolute TD Error')
+    plt.title('TD(0) Learning Progress')
+    plt.grid(True, alpha=0.3)
+    plt.show()
+```
+
+A decreasing TD error curve indicates that learning is progressing. If it plateaus high, you may need more exploration or a different learning rate.
+
+</Implementation>
+
+## Summary
+
+TD(0) is the foundation of temporal difference learning:
+
+1. **Simple update**: $V(S_t) \leftarrow V(S_t) + \alpha\left[R_{t+1} + \gamma V(S_{t+1}) - V(S_t)\right]$
+2. **Online learning**: Update after every transition, no need to wait
+3. **TD error**: Measures prediction quality, guides learning
+4. **Convergence**: Guaranteed to find $V^\pi$ under standard conditions
+
+TD(0) is for **prediction**—evaluating a fixed policy. But we usually want **control**—finding the best policy. That's where SARSA and Q-learning come in.
+
+In the next section, we'll compare TD to Monte Carlo methods more carefully, examining their respective strengths and weaknesses.

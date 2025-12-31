@@ -1,0 +1,123 @@
+---
+title: "Multi-Agent RL"
+slug: "multi-agent-rl"
+section: "Advanced Topics"
+description: "When multiple agents learn and interact together"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "q-learning"
+    title: "Q-Learning"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Multi-Agent Reinforcement Learning
+
+<ChapterObjectives>
+- Explain challenges unique to multi-agent settings
+- Distinguish cooperative, competitive, and mixed settings
+- Describe independent learning and its limitations
+- Explain centralized training with decentralized execution (CTDE)
+- Implement simple multi-agent algorithms
+- Understand game-theoretic concepts like Nash equilibrium and self-play
+</ChapterObjectives>
+
+So far, our agent has been alone in its environment. But most interesting problems involve multiple decision-makers: autonomous vehicles sharing roads, robots cooperating in a warehouse, or AIs competing in games. When multiple agents learn simultaneously, everything changes.
+
+<Intuition>
+
+Imagine playing chess. You're not just optimizing against a static puzzle—you're facing an opponent who adapts to your strategies. Every time you find a clever tactic, they might find a counter. The "optimal" move depends on what your opponent will do, which depends on what they think you'll do, which depends on...
+
+This recursive reasoning is the essence of multi-agent RL. The environment includes other thinking, learning entities. And that changes everything.
+
+</Intuition>
+
+## Chapter Overview
+
+<div className="my-8">
+  <div className="text-slate-400 text-sm mb-4">In this chapter:</div>
+
+  <div className="space-y-3">
+    <a href="/chapters/multi-agent-rl/multi-agent-settings" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-cyan-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-cyan-400 font-bold text-lg">Multi-Agent Settings</div>
+      <div className="text-slate-400 text-sm mt-1">Cooperative, competitive, and mixed-motive games, plus the Markov game formulation</div>
+    </a>
+
+    <a href="/chapters/multi-agent-rl/independent-learning" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-violet-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-violet-400 font-bold text-lg">Independent Learning</div>
+      <div className="text-slate-400 text-sm mt-1">The simple approach where each agent learns alone, and why it often struggles</div>
+    </a>
+
+    <a href="/chapters/multi-agent-rl/centralized-training" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-amber-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-amber-400 font-bold text-lg">Centralized Training, Decentralized Execution</div>
+      <div className="text-slate-400 text-sm mt-1">The dominant paradigm: share information during training, act independently at test time</div>
+    </a>
+  </div>
+</div>
+
+## The Big Picture
+
+<Definition title="Multi-Agent RL">
+Reinforcement learning with multiple agents that interact in a shared environment. Each agent's optimal behavior depends on the behaviors of other agents, creating complex strategic dynamics that go beyond single-agent optimization.
+</Definition>
+
+In multi-agent RL, each agent faces a moving target: other agents are learning too, changing the environment dynamics. Simple independent learning often fails because the environment appears non-stationary. The solution: train agents together (centralized) but deploy them independently (decentralized).
+
+<Intuition>
+
+Consider three types of multi-agent scenarios:
+
+**Cooperative**: A team of robots assembling a car. They share a goal and succeed or fail together. Communication and coordination are key.
+
+**Competitive**: Two players in a zero-sum game like chess. One's gain is the other's loss. Strategy and adaptation are key.
+
+**Mixed**: Traffic at an intersection. Everyone wants to get through quickly, but crashes hurt everyone. Some coordination emerges, but incentives aren't fully aligned.
+
+Each type brings different challenges and requires different approaches.
+
+</Intuition>
+
+## Why Multi-Agent RL Matters
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="bg-emerald-900/20 border border-emerald-700/50 rounded-lg p-4">
+    <div className="text-emerald-400 font-bold mb-2">Real-World Multi-Agent Systems</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>Autonomous vehicle fleets</li>
+      <li>Warehouse robotics teams</li>
+      <li>Smart grid coordination</li>
+      <li>Trading agents in markets</li>
+    </ul>
+  </div>
+  <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+    <div className="text-blue-400 font-bold mb-2">Notable Achievements</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>OpenAI Five: Dota 2 world champions</li>
+      <li>AlphaStar: Grandmaster-level StarCraft II</li>
+      <li>Multi-agent hide and seek emergence</li>
+      <li>Cooperative manipulation tasks</li>
+    </ul>
+  </div>
+</div>
+
+<Tip title="Start Here">
+
+New to multi-agent RL? Begin with [Multi-Agent Settings](/chapters/multi-agent-rl/multi-agent-settings) to understand the different types of multi-agent problems, then continue through the sections in order.
+
+</Tip>
+
+---
+
+<KeyTakeaways>
+- Multi-agent RL involves multiple learning agents interacting in a shared environment
+- Settings can be cooperative, competitive, or mixed-motive
+- Independent learning faces non-stationarity as other agents change their behavior
+- Centralized training with decentralized execution (CTDE) is the dominant paradigm
+- Self-play creates a curriculum of increasingly strong opponents
+- Emergent behaviors in multi-agent systems can be surprising and powerful
+</KeyTakeaways>
+
+<NextChapter slug="offline-rl" title="Offline RL" />

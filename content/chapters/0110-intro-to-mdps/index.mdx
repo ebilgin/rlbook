@@ -1,0 +1,97 @@
+---
+title: "Introduction to MDPs"
+slug: "intro-to-mdps"
+section: "Markov Decision Processes"
+description: "The mathematical framework that formalizes sequential decision-making"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "getting-started"
+    title: "Getting Started"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Introduction to Markov Decision Processes
+
+<ChapterObjectives>
+- Understand why bandits are insufficient for sequential decision problems
+- Define all components of an MDP: states, actions, transitions, rewards, discount
+- Explain the Markov property and why it's so powerful
+- Construct simple MDPs from problem descriptions
+</ChapterObjectives>
+
+In bandits, every pull of the lever was independent—your choice didn't change the world. But what if your actions have lasting consequences? What if where you go affects where you can go next?
+
+Welcome to **Markov Decision Processes** (MDPs), the mathematical language of sequential decision-making.
+
+## Why MDPs?
+
+Consider teaching a robot to navigate a building. The robot's current position determines which positions it can move to next. A bandit framework fails here because:
+
+- Actions change the **state** (robot's position)
+- Future rewards depend on the **sequence** of actions
+- There's no concept of "independent trials"
+
+MDPs add what bandits lack: **state** and **state transitions**. They provide a formal framework for problems where decisions cascade through time.
+
+## Chapter Overview
+
+This chapter introduces the MDP framework—the mathematical foundation for nearly all of reinforcement learning. We'll cover:
+
+<div className="grid md:grid-cols-3 gap-4 my-6">
+  <a href="/chapters/intro-to-mdps/from-bandits-to-mdps" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">From Bandits to MDPs</h3>
+    <p className="text-slate-400 text-sm mt-1">Why bandits aren't enough: when actions have lasting consequences</p>
+  </a>
+  <a href="/chapters/intro-to-mdps/mdp-components" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">The MDP Components</h3>
+    <p className="text-slate-400 text-sm mt-1">States, actions, transitions, rewards, and the discount factor</p>
+  </a>
+  <a href="/chapters/intro-to-mdps/markov-property" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">The Markov Property</h3>
+    <p className="text-slate-400 text-sm mt-1">The key assumption that makes RL tractable</p>
+  </a>
+</div>
+
+## The Big Picture
+
+An MDP describes a world where an agent:
+
+1. **Observes** its current state
+2. **Takes** an action
+3. **Transitions** to a new state (possibly randomly)
+4. **Receives** a reward
+
+The goal is to find a **policy**—a way of choosing actions—that maximizes long-term cumulative reward.
+
+<Definition title="Markov Decision Process">
+A formal framework for sequential decision-making where outcomes depend on both the current state and chosen action. The "Markov" property means the future depends only on the present state, not on how you got there.
+</Definition>
+
+## Prerequisites
+
+This chapter assumes you're comfortable with:
+- The agent-environment interaction from [The RL Framework](/chapters/rl-framework)
+- Basic probability notation
+- The exploration-exploitation tradeoff from [bandits](/chapters/rl-framework/exploration-exploitation)
+
+## Key Questions We'll Answer
+
+- What exactly is a "state" and how do we represent it?
+- How do we describe uncertain transitions mathematically?
+- Why is the discount factor necessary for some problems?
+- What does "Markov" really mean, and why does it matter?
+
+---
+
+<KeyTakeaways>
+- MDPs extend bandits by adding **states** and **transitions**
+- The framework consists of five components: $\mathcal{S}, \mathcal{A}, P, R, \gamma$
+- The **Markov property** says the present contains all relevant history
+- Designing good states is as important as choosing good algorithms
+</KeyTakeaways>
+
+<NextChapter slug="value-functions" title="Value Functions" />

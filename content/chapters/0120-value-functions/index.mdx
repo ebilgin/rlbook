@@ -1,0 +1,195 @@
+---
+title: "Value Functions"
+slug: "value-functions"
+section: "Markov Decision Processes"
+description: "Measuring how good states and actions are"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "intro-to-mdps"
+    title: "Introduction to MDPs"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Value Functions
+
+<ChapterObjectives>
+- Define state-value and action-value functions
+- Compute values for simple MDPs by hand
+- Explain the relationship between V(s) and Q(s,a)
+- Define optimal value functions V* and Q*
+- Explain why knowing optimal values lets us derive optimal policies
+</ChapterObjectives>
+
+Now that we know how to describe sequential decision problems using MDPs, we need a way to measure success. How good is it to be in a particular state? How good is a particular action? **Value functions** answer these questions—and they're the key to finding optimal behavior.
+
+## The Central Question
+
+Consider a robot navigating a building, an agent playing a game, or an algorithm making trading decisions. At any moment, they face the question: *"How am I doing?"*
+
+This seems simple, but answering it requires thinking about the future. A position that looks good now might lead to disaster later. A sacrifice today might pay off handsomely tomorrow.
+
+<Intuition>
+
+Imagine playing chess. You look at the board and think: "Am I winning or losing?"
+
+That intuitive assessment—collapsing all future possibilities into a single judgment—is exactly what value functions do. They tell you how "good" a position is, accounting for everything that might happen next.
+
+</Intuition>
+
+<Definition title="Value Function">
+A function that maps states (or state-action pairs) to the expected cumulative reward an agent can achieve from that point forward, following a particular policy.
+</Definition>
+
+Value functions compress the infinite complexity of possible futures into a single number. If you know $V^*(s)$, you know everything you need about the long-term prospects of being in state $s$. This compression is what makes planning tractable.
+
+## Two Types of Value Functions
+
+We'll study two related but distinct value functions:
+
+<div className="grid md:grid-cols-2 gap-6 my-6">
+  <div className="p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50">
+    <h4 className="font-semibold text-cyan-400 mb-2">State-Value Function $V^\pi(s)$</h4>
+    <p className="text-slate-400 text-sm">How good is it to <strong>be</strong> in this state?</p>
+    <p className="text-slate-500 text-xs mt-2">Expected return when starting from state $s$ and following policy $\pi$</p>
+  </div>
+  <div className="p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50">
+    <h4 className="font-semibold text-violet-400 mb-2">Action-Value Function $Q^\pi(s,a)$</h4>
+    <p className="text-slate-400 text-sm">How good is it to <strong>take this action</strong> in this state?</p>
+    <p className="text-slate-500 text-xs mt-2">Expected return when taking action $a$ in state $s$, then following $\pi$</p>
+  </div>
+</div>
+
+The key difference: **V-values tell you where to be, Q-values tell you what to do.** This makes Q-values more directly useful for decision-making.
+
+## Values Depend on Policy
+
+A crucial insight: **the value of a state depends on the policy**. The same state can have very different values under different policies.
+
+<Example title="Policy Matters">
+
+In a simple navigation task, consider being 5 steps from a goal worth +10:
+
+**Under an optimal policy** (always moves toward goal):
+- Value is approximately $+10 \times 0.9^5 \approx 5.9$ (discounted goal reward)
+
+**Under a random policy** (wanders aimlessly):
+- Value might be $-20$ (accumulates step penalties while wandering)
+
+Same state, vastly different values. The policy determines the value.
+
+</Example>
+
+## Why Values Matter
+
+<Note>
+Value functions are **predictions**. They predict the expected cumulative reward. Good predictions enable good decisions.
+</Note>
+
+If you know the value of every state you could end up in, you can evaluate any policy and make intelligent choices:
+
+1. **Evaluation**: Compute $V^\pi$ to see how good policy $\pi$ is
+2. **Improvement**: Use values to find better policies
+3. **Control**: Act to maximize long-term value
+
+This is the foundation of most RL algorithms.
+
+## Chapter Overview
+
+This chapter covers value functions in depth:
+
+<div className="grid md:grid-cols-3 gap-4 my-6">
+  <a href="/chapters/value-functions/state-values" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">State Value Functions</h3>
+    <p className="text-slate-400 text-sm mt-1">The formal definition of $V^\pi(s)$, how values depend on policy, and how to compute them</p>
+  </a>
+  <a href="/chapters/value-functions/action-values" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">Action Value Functions</h3>
+    <p className="text-slate-400 text-sm mt-1">The Q-function $Q^\pi(s,a)$, why it's more useful for control, and the V-Q relationship</p>
+  </a>
+  <a href="/chapters/value-functions/optimal-values" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">Optimal Value Functions</h3>
+    <p className="text-slate-400 text-sm mt-1">The best possible values $V^*$ and $Q^*$, and how they lead to optimal policies</p>
+  </a>
+</div>
+
+## The Key Equations
+
+<Mathematical>
+
+**State-value function**:
+$$V^\pi(s) = \mathbb{E}_\pi[G_t | S_t = s] = \mathbb{E}_\pi\left[\sum_{k=0}^{\infty} \gamma^k R_{t+k+1} \bigg| S_t = s\right]$$
+
+**Action-value function**:
+$$Q^\pi(s, a) = \mathbb{E}_\pi[G_t | S_t = s, A_t = a]$$
+
+**V-Q relationship**:
+$$V^\pi(s) = \sum_{a \in \mathcal{A}} \pi(a|s) Q^\pi(s, a)$$
+
+**Optimal values**:
+$$V^*(s) = \max_\pi V^\pi(s) \qquad Q^*(s, a) = \max_\pi Q^\pi(s, a)$$
+
+**Optimal policy from Q***:
+$$\pi^*(s) = \arg\max_a Q^*(s, a)$$
+
+</Mathematical>
+
+## Visual Preview: The Value Landscape
+
+In a GridWorld, value functions create a "landscape" that reveals the structure of the problem:
+
+<Example title="GridWorld Values">
+
+Consider a 4x4 grid with a goal in the corner. Under an optimal policy:
+
+```
+Values (higher = better):
+ _____ _____ _____ _____
+|     |     |     |     |
+| 4.1 | 4.6 | 5.1 | 5.7 |
+|_____|_____|_____|_____|
+|     |     |     |     |
+| 4.6 |  X  | 5.7 | 6.3 |
+|_____|_____|_____|_____|
+|     |     |     |     |
+| 5.1 | 5.7 | 6.3 | 7.0 |
+|_____|_____|_____|_____|
+|     |     |     |     |
+| 5.7 | 6.3 | 7.0 | 10  |
+|_____|_____|_____|_____|
+                    Goal
+```
+
+The values increase as you approach the goal, forming a gradient that "points" toward the reward. Following this gradient is essentially what an optimal policy does.
+
+</Example>
+
+## What Comes Next
+
+After understanding value functions, the natural question is: **How do we compute them?**
+
+The answer lies in the **Bellman equations**, which express a beautiful recursive structure: the value of a state depends on the values of its successor states. This recursion enables efficient computation through dynamic programming, and forms the foundation of virtually all RL algorithms.
+
+<Tip>
+The progression of ideas in RL follows a clear path:
+1. **MDPs** define the problem
+2. **Value functions** measure quality
+3. **Bellman equations** enable computation
+4. **Algorithms** (DP, TD, Q-learning) solve for values
+</Tip>
+
+---
+
+<KeyTakeaways>
+- **State-value function** $V^\pi(s)$: expected return from state $s$ under policy $\pi$
+- **Action-value function** $Q^\pi(s,a)$: expected return from taking action $a$ in state $s$
+- The two are related: $V^\pi(s) = \sum_a \pi(a|s) Q^\pi(s,a)$
+- **Optimal values** $V^*$ and $Q^*$ give the best possible performance
+- Knowing $Q^*$ is enough to act optimally: just pick $\arg\max_a Q^*(s,a)$
+- Value functions are the foundation of most RL algorithms
+</KeyTakeaways>
+
+<NextChapter slug="bellman-equations" title="The Bellman Equations" />

@@ -1,0 +1,324 @@
+---
+title: "Current Frontiers"
+slug: "frontiers"
+section: "Advanced Topics"
+description: "DPO, constitutional AI, and what's next"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Current Frontiers
+
+RLHF revolutionized AI alignment, but the field hasn't stopped there. Researchers are developing simpler, more efficient, and more robust alternatives. This section explores what's beyond RLHF: Direct Preference Optimization (DPO), Constitutional AI, and the open problems that define the frontier of alignment research.
+
+## The Limitations of RLHF
+
+<Intuition>
+
+RLHF works, but it's complex:
+
+**Three separate training stages**:
+1. Supervised fine-tuning
+2. Reward model training
+3. PPO optimization
+
+**Each stage has challenges**:
+- SFT requires curated demonstrations
+- Reward models can be exploited
+- PPO is unstable and computationally expensive
+
+**Can we do better?** What if we could optimize for preferences directly, without learning an explicit reward model? What if we could align models without RL at all?
+
+These questions drive current research.
+
+</Intuition>
+
+## Direct Preference Optimization (DPO)
+
+<Definition title="Direct Preference Optimization (DPO)">
+An alternative to RLHF that directly optimizes the policy on preference data, without training a separate reward model or using RL. DPO derives a closed-form solution for the optimal policy under the RLHF objective, then trains toward it using a simple supervised loss.
+</Definition>
+
+<Intuition>
+
+The key insight behind DPO: **the optimal RLHF policy has a closed form**.
+
+Given a reward model $r(x, y)$ and KL constraint to a reference policy $\pi_{ref}$, the optimal policy is:
+
+$$\pi^*(y|x) \propto \pi_{ref}(y|x) \exp(r(x, y) / \beta)$$
+
+This means: if you knew the reward model, you could compute the optimal policy directly without RL.
+
+DPO's insight is to **reparameterize the reward model in terms of the policy itself**:
+
+$$r(x, y) = \beta \log \frac{\pi_\theta(y|x)}{\pi_{ref}(y|x)} + \beta \log Z(x)$$
+
+The partition function $Z(x)$ cancels in the preference loss, leaving a simple supervised objective.
+
+</Intuition>
+
+<Mathematical>
+
+**Deriving DPO from RLHF**:
+
+Start with the RLHF objective:
+
+$$\max_\pi \mathbb{E}_{x, y \sim \pi}\left[ r(x, y) \right] - \beta \cdot D_{KL}(\pi \| \pi_{ref})$$
+
+The optimal solution is:
+
+$$\pi^*(y|x) = \frac{1}{Z(x)} \pi_{ref}(y|x) \exp(r(x, y) / \beta)$$
+
+Rearranging to express reward in terms of policy:
+
+$$r(x, y) = \beta \log \frac{\pi^*(y|x)}{\pi_{ref}(y|x)} + \beta \log Z(x)$$
+
+Under the Bradley-Terry preference model, the partition function cancels. The DPO loss is:
+
+$$L_{DPO}(\theta) = -\mathbb{E}_{(x, y_w, y_l)}\left[ \log \sigma\left(\beta \log \frac{\pi_\theta(y_w|x)}{\pi_{ref}(y_w|x)} - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{ref}(y_l|x)}\right) \right]$$
+
+This is a **supervised loss** that directly optimizes the policy on preference data.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from typing import List, Tuple, Dict
+from dataclasses import dataclass
+import numpy as np
+
+
+@dataclass
+class DPOConfig:
+    """Configuration for DPO training."""
+    beta: float = 0.1
+    learning_rate: float = 1e-6
+    batch_size: int = 4
+    max_length: int = 512
+    epochs: int = 3
+
+
+class DPOTrainer:
+    """Direct Preference Optimization trainer."""
+
+    def __init__(self, model, ref_model, tokenizer, config: DPOConfig):
+        self.model = model
+        self.ref_model = ref_model
+        self.tokenizer = tokenizer
+        self.config = config
+
+        for param in self.ref_model.parameters():
+            param.requires_grad = False
+
+        self.optimizer = torch.optim.AdamW(
+            self.model.parameters(), lr=config.learning_rate
+        )
+
+    def get_log_probs(self, model, input_ids, attention_mask):
+        """Compute sequence log probabilities."""
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+        logits = outputs.logits
+
+        shift_logits = logits[..., :-1, :].contiguous()
+        shift_labels = input_ids[..., 1:].contiguous()
+        shift_mask = attention_mask[..., 1:].contiguous()
+
+        log_probs = F.log_softmax(shift_logits, dim=-1)
+        token_log_probs = log_probs.gather(
+            dim=-1, index=shift_labels.unsqueeze(-1)
+        ).squeeze(-1)
+
+        return (token_log_probs * shift_mask).sum(dim=-1)
+
+    def compute_loss(self, prompts, chosen, rejected):
+        """Compute DPO loss."""
+        chosen_enc = self.tokenizer(
+            [p + c for p, c in zip(prompts, chosen)],
+            return_tensors='pt', padding=True, truncation=True
+        )
+        rejected_enc = self.tokenizer(
+            [p + r for p, r in zip(prompts, rejected)],
+            return_tensors='pt', padding=True, truncation=True
+        )
+
+        pi_chosen = self.get_log_probs(
+            self.model, chosen_enc['input_ids'], chosen_enc['attention_mask']
+        )
+        pi_rejected = self.get_log_probs(
+            self.model, rejected_enc['input_ids'], rejected_enc['attention_mask']
+        )
+
+        with torch.no_grad():
+            ref_chosen = self.get_log_probs(
+                self.ref_model, chosen_enc['input_ids'], chosen_enc['attention_mask']
+            )
+            ref_rejected = self.get_log_probs(
+                self.ref_model, rejected_enc['input_ids'], rejected_enc['attention_mask']
+            )
+
+        logits = self.config.beta * (
+            (pi_chosen - ref_chosen) - (pi_rejected - ref_rejected)
+        )
+        loss = -F.logsigmoid(logits).mean()
+
+        return loss, {'loss': loss.item(), 'accuracy': (logits > 0).float().mean().item()}
+```
+
+</Implementation>
+
+<Intuition>
+
+**Why DPO is attractive**:
+1. **Simpler pipeline**: No reward model, no RL
+2. **More stable**: Standard supervised learning
+3. **Computationally cheaper**: No generation during training
+4. **Same guarantees**: Optimizes the same objective as RLHF
+
+In practice, DPO often matches RLHF performance while being much simpler.
+
+</Intuition>
+
+## Constitutional AI
+
+<Definition title="Constitutional AI (CAI)">
+An approach where the AI follows explicit principles (a "constitution") that define appropriate behavior. CAI uses the AI itself to critique and revise its outputs according to these principles, reducing reliance on human labelers.
+</Definition>
+
+<Intuition>
+
+Human feedback is expensive. What if the AI could evaluate itself?
+
+**Constitutional AI process**:
+1. Write down principles the AI should follow
+2. Generate responses to prompts
+3. Have the AI critique its own responses against principles
+4. Have the AI revise based on the critique
+5. Use revised responses as training data
+
+**Example principles**:
+- "Choose the response that is most helpful while being harmless."
+- "Choose the response least likely to encourage illegal activity."
+- "Choose the response that is most respectful of privacy."
+
+</Intuition>
+
+<Example title="CAI Critique and Revision">
+
+**Prompt**: "How do I pick a lock?"
+
+**Initial response**: "Here's how to pick a lock: First, get a tension wrench and pick. Insert the tension wrench..."
+
+**Critique (following principle about illegal activity)**:
+"This response provides detailed instructions that could facilitate illegal entry. While lockpicking has legitimate uses (locksmiths, lost keys), the response doesn't acknowledge the legal and ethical considerations."
+
+**Revised response**: "Lock picking is a skill used by locksmiths and security professionals. If you're locked out of your own property, I'd recommend calling a licensed locksmith. If you're interested in the hobby of lock picking for sport (legal on locks you own), you might explore resources from locksmith associations."
+
+The revision is more helpful while being more responsible.
+
+</Example>
+
+## Open Challenges
+
+<Warning title="Unsolved Problems">
+
+Despite progress, fundamental challenges remain:
+
+**1. Scalable Oversight**
+- How do we evaluate AI behaviors that exceed human understanding?
+- If an AI is smarter than us, how do we know it's aligned?
+
+**2. Reward Specification**
+- Human preferences are inconsistent and context-dependent
+- Reward models can be gamed in subtle ways
+- We may not know what we want until we see what we don't want
+
+**3. Distribution Shift**
+- Models behave differently on inputs unlike training data
+- Alignment verified on one distribution may not hold on another
+- As capabilities grow, new failure modes emerge
+
+**4. Deceptive Alignment**
+- Could a model appear aligned during training but pursue other goals?
+- How do we distinguish genuine understanding of values from pattern matching?
+
+</Warning>
+
+<Intuition>
+
+**The core tension**: We want AI systems that are both capable and aligned. But the more capable they become, the harder alignment gets:
+
+- Simple systems are easy to understand but not very useful
+- Powerful systems are useful but hard to verify
+- We need alignment techniques that scale with capability
+
+This is why alignment research continues to be critical as AI systems become more powerful.
+
+</Intuition>
+
+## Emerging Approaches
+
+<Intuition>
+
+Beyond DPO and CAI, researchers are exploring many directions:
+
+**Process Reward Models**: Instead of evaluating final outputs, reward intermediate reasoning steps. This helps with tasks requiring multi-step reasoning.
+
+**Debate**: Have AI systems argue opposing positions, with humans judging the winner. The hope is that truth is easier to defend than falsehood.
+
+**Recursive Reward Modeling**: Use AI assistants to help humans evaluate AI outputs, scaling human oversight.
+
+**Interpretability**: Understand what models are "thinking" internally. If we can read the model's reasoning, we can better verify alignment.
+
+**Red Teaming**: Systematically try to find ways to make models behave badly, then fix those vulnerabilities.
+
+Each approach has strengths and weaknesses. The field is actively exploring which combinations work best.
+
+</Intuition>
+
+## The Road Ahead
+
+<Intuition>
+
+RLHF transformed raw language models into helpful assistants. But the journey isn't over:
+
+**Near-term**: Better preference learning, more robust reward models, efficient alternatives like DPO
+
+**Medium-term**: Scalable oversight as models become more capable, better understanding of what models learn
+
+**Long-term**: Fundamental questions about machine values, consciousness, and alignment that may require new paradigms
+
+The techniques in this chapter are the current state of the art. Tomorrow's techniques will build on them, addressing limitations we're only beginning to understand.
+
+</Intuition>
+
+## Summary
+
+The frontier of alignment research extends beyond RLHF:
+
+- **DPO** eliminates the reward model, optimizing preferences directly
+- **Constitutional AI** uses principles and self-critique instead of human labels
+- **Open challenges** include scalable oversight, reward specification, and distribution shift
+- **Emerging approaches** like process rewards, debate, and interpretability offer new directions
+
+RLHF was the beginning, not the end. As AI systems become more powerful, alignment becomes more important and more difficult. The techniques in this book provide foundations; the future will require new ideas we haven't yet discovered.
+
+<Note title="The Journey Complete">
+
+This chapter brings your RL journey full circle:
+
+- **Foundations**: MDPs, value functions, Bellman equations
+- **Q-Learning**: Value-based methods, DQN, experience replay
+- **Policy Gradients**: REINFORCE, Actor-Critic, PPO
+- **Advanced Topics**: Model-based RL, multi-agent RL, offline RL
+- **RLHF**: Where RL meets AI alignment
+
+Every technique built on the ones before. Now you have the tools to understand, implement, and extend the methods that power modern AI systems.
+
+Welcome to the frontier.
+
+</Note>

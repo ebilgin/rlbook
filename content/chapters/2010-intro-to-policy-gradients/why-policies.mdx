@@ -1,0 +1,270 @@
+---
+title: "Why Learn Policies Directly?"
+slug: "why-policies"
+section: "Policy Gradient Methods"
+description: "Advantages over value-based methods"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Why Learn Policies Directly?
+
+In Q-learning and other value-based methods, we learned a value function $Q(s, a)$ and then derived a policy from it by picking the action with highest value. This works brilliantly for many problems. But what if we could skip the middleman and learn the policy directly?
+
+## The Value-Based Paradigm
+
+<Intuition>
+
+Value-based methods follow a two-step process:
+
+1. **Learn values**: Compute $Q(s, a)$ for every state-action pair
+2. **Derive policy**: Pick the action with highest Q-value: $\pi(s) = \arg\max_a Q(s, a)$
+
+This approach has a fundamental asymmetry: we care about the policy (what to do), but we learn something else (how good things are). Sometimes it makes more sense to learn what we actually want.
+
+Think about how you learned to catch a ball. You didn't compute the expected future "catching value" of every possible hand position. You developed a direct intuition - a policy - that maps what you see to how you move your hands.
+
+</Intuition>
+
+<Mathematical>
+
+In value-based RL, the policy is implicitly defined by the value function:
+
+$$\pi(s) = \arg\max_{a \in \mathcal{A}} Q(s, a)$$
+
+This requires:
+- Computing or storing $Q(s, a)$ for all actions
+- Finding the maximum over all actions at decision time
+- A discrete action space (or expensive continuous optimization)
+
+</Mathematical>
+
+## The Continuous Action Problem
+
+The most compelling reason for policy-based methods is handling **continuous actions**.
+
+<Intuition>
+
+Imagine you're controlling a robot arm. Each joint can be at any angle - not just "up" or "down," but any value between 0 and 360 degrees. With 6 joints, you have a 6-dimensional continuous action space.
+
+With Q-learning, to select an action you'd need to solve:
+
+$$a^* = \arg\max_{a \in \mathbb{R}^6} Q(s, a)$$
+
+This is a 6-dimensional optimization problem that must be solved at every single timestep. Not practical!
+
+Policy-based methods sidestep this entirely. Instead of learning $Q(s, a)$ and searching for the best action, we learn a policy that directly outputs actions. For continuous control, this might be a Gaussian distribution:
+
+$$\pi_\theta(a|s) = \mathcal{N}(\mu_\theta(s), \sigma_\theta(s)^2)$$
+
+To act, we just sample from this distribution. No optimization required.
+
+</Intuition>
+
+<Mathematical>
+
+For continuous action spaces $\mathcal{A} \subseteq \mathbb{R}^n$, the argmax operation becomes an optimization problem:
+
+$$a^* = \arg\max_{a \in \mathcal{A}} Q(s, a)$$
+
+Common workarounds for value-based methods:
+- **Discretization**: Convert continuous space to discrete bins (exponential in dimensions)
+- **Sampling**: Sample random actions and pick the best (approximate, slow)
+- **Learned optimization**: Train a separate network to output $\arg\max_a Q(s,a)$ (this is essentially actor-critic)
+
+Policy-based methods avoid all of this by parameterizing the policy directly. A Gaussian policy is:
+
+$$\pi_\theta(a|s) = \frac{1}{(2\pi)^{n/2}|\Sigma_\theta(s)|^{1/2}} \exp\left(-\frac{1}{2}(a - \mu_\theta(s))^\top \Sigma_\theta(s)^{-1}(a - \mu_\theta(s))\right)$$
+
+Sampling is trivial: $a = \mu_\theta(s) + \Sigma_\theta(s)^{1/2} \epsilon$ where $\epsilon \sim \mathcal{N}(0, I)$.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import numpy as np
+
+class GaussianPolicy(nn.Module):
+    """
+    Gaussian policy for continuous actions.
+
+    Outputs mean and log_std of a Gaussian distribution.
+    Sampling is done via the reparameterization trick.
+    """
+
+    def __init__(self, state_dim, action_dim, hidden_dim=64):
+        super().__init__()
+
+        # Shared feature layers
+        self.features = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Tanh(),
+        )
+
+        # Mean head
+        self.mean_head = nn.Linear(hidden_dim, action_dim)
+
+        # Log std (learnable parameter, shared across states)
+        self.log_std = nn.Parameter(torch.zeros(action_dim))
+
+    def forward(self, state):
+        """Return mean and std of action distribution."""
+        features = self.features(state)
+        mean = self.mean_head(features)
+        std = torch.exp(self.log_std)
+        return mean, std
+
+    def sample(self, state):
+        """Sample action using reparameterization trick."""
+        mean, std = self.forward(state)
+        # Reparameterization: a = mean + std * noise
+        noise = torch.randn_like(mean)
+        action = mean + std * noise
+        return action
+
+    def log_prob(self, state, action):
+        """Compute log probability of action."""
+        mean, std = self.forward(state)
+        # Gaussian log probability
+        var = std ** 2
+        log_prob = -0.5 * (((action - mean) ** 2) / var + torch.log(var) + np.log(2 * np.pi))
+        return log_prob.sum(dim=-1)  # Sum over action dimensions
+
+
+# Example usage
+policy = GaussianPolicy(state_dim=4, action_dim=2)
+state = torch.randn(1, 4)  # Batch of 1 state
+
+# Get distribution parameters
+mean, std = policy(state)
+print(f"Mean action: {mean.detach().numpy()}")
+print(f"Std: {std.detach().numpy()}")
+
+# Sample an action
+action = policy.sample(state)
+print(f"Sampled action: {action.detach().numpy()}")
+```
+
+</Implementation>
+
+## Beyond Continuous Actions
+
+Even for discrete action spaces, policy-based methods offer advantages.
+
+### Stochastic Policies Can Be Optimal
+
+<Intuition>
+
+In some problems, the best strategy is inherently random. Consider rock-paper-scissors:
+
+- If you always play rock, your opponent exploits you by always playing paper
+- If you play each option with probability 1/3, no opponent can exploit you
+
+This is a **mixed strategy** - a stochastic policy. Value-based methods with argmax can only represent deterministic policies. Policy gradient methods naturally represent probability distributions.
+
+</Intuition>
+
+<Example>
+
+**The Aliased GridWorld**
+
+Imagine a GridWorld where two different states look identical to the agent (same observation). In one state, going left is optimal; in the other, going right is optimal.
+
+A deterministic policy must choose one direction - and will be wrong half the time. A stochastic policy that goes left with 50% probability does better on average.
+
+This is called **perceptual aliasing**, and it arises whenever the agent doesn't have full state information.
+
+</Example>
+
+### Smoother Optimization
+
+<Intuition>
+
+Q-learning's argmax creates sharp discontinuities. Imagine two actions have Q-values of 10.0 and 10.1:
+
+- Q-learning: Always picks action 2 (probability 1.0)
+- Small change in Q-values: If they flip to 10.1 and 10.0, behavior completely reverses
+
+Policy gradients change probabilities smoothly:
+- Instead of 0% vs 100%, you might have 45% vs 55%
+- Small parameter changes cause small behavior changes
+
+This smooth optimization landscape often makes learning more stable.
+
+</Intuition>
+
+### Simpler Decision-Making
+
+<Intuition>
+
+With Q-learning, to act you must:
+1. Compute $Q(s, a)$ for every action
+2. Find the maximum
+3. Break ties somehow
+
+With a policy network, you:
+1. Forward pass the state
+2. Sample from the output distribution
+
+For large action spaces, the policy approach is more efficient. You don't need to evaluate all actions to know which one to take.
+
+</Intuition>
+
+## Comparing the Approaches
+
+| Aspect | Value-Based | Policy-Based |
+|--------|-------------|--------------|
+| **What we learn** | $Q(s, a)$ values | $\pi_\theta(a\|s)$ directly |
+| **How we act** | $\arg\max_a Q(s, a)$ | Sample from $\pi_\theta$ |
+| **Continuous actions** | Requires optimization | Natural |
+| **Stochastic policies** | Via exploration only | First-class |
+| **Sample efficiency** | Often better | Often worse |
+| **Stability** | Can be unstable | Smoother gradients |
+
+<Warning>
+
+Policy-based methods aren't always better. They typically have:
+- **Higher variance**: Gradient estimates are noisy
+- **Lower sample efficiency**: On-policy learning wastes data
+- **Local optima risk**: May converge to suboptimal policies
+
+The best modern algorithms often combine both approaches - we'll see this with actor-critic methods.
+
+</Warning>
+
+## When to Use Policy-Based Methods
+
+<Tip>
+
+Choose policy-based methods when:
+- Actions are continuous (robotics, control)
+- Stochastic policies are valuable (partial observability, games)
+- You want stable, smooth optimization
+- The action space is large
+
+Choose value-based methods when:
+- Actions are discrete and few
+- Sample efficiency matters (off-policy methods like DQN)
+- You need good exploration (optimistic initialization, UCB)
+
+Choose both (actor-critic) when:
+- You want the best of both worlds
+- Stability and efficiency both matter
+- You're working on a modern deep RL problem
+
+</Tip>
+
+## Summary
+
+Policy-based methods represent a fundamental shift in how we think about RL:
+
+- **Instead of**: Learn values, derive policy
+- **We**: Learn the policy directly
+
+This shift opens up continuous action spaces, enables stochastic policies, and often provides smoother optimization. The key challenge - which we'll address in coming sections - is computing the gradient of expected return.

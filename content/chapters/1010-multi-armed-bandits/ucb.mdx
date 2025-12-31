@@ -1,0 +1,432 @@
+---
+title: "Upper Confidence Bound"
+slug: "ucb"
+section: "Bandit Problems"
+description: "Optimism in the face of uncertainty"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Upper Confidence Bound (UCB)
+
+Epsilon-greedy explores by occasionally trying random arms. But this is *undirected* exploration—it doesn't care whether an arm is well-understood or completely unknown. Could we do better by exploring where uncertainty is highest?
+
+This is the key insight behind **Upper Confidence Bound (UCB)**: explore optimistically. When you're uncertain about an arm, assume it might be great and try it.
+
+## The Core Idea: Optimism in the Face of Uncertainty
+
+<Definition title="Optimism in the Face of Uncertainty">
+When uncertain about an action's value, assume it's at the upper end of what's plausible. This naturally encourages trying actions whose values are poorly estimated.
+</Definition>
+
+<Intuition>
+
+Imagine you're choosing between two restaurants:
+- **Restaurant A**: You've been 100 times. Average rating: 4.0 stars. You're confident it's around 4.0.
+- **Restaurant B**: You've been once. That visit was 3.5 stars. But with only one data point, the true rating could be anywhere from 2.0 to 5.0.
+
+Epsilon-greedy would pick A most of the time (it has a higher average) and occasionally try B randomly.
+
+UCB thinks differently: "Restaurant B might be a hidden gem! The single bad experience could have been an unlucky night. Since I'm so uncertain, let me assume it could be as good as 5.0 and try it again."
+
+This is **optimism in the face of uncertainty**. By assuming uncertain options might be great, we naturally gravitate toward learning more about them.
+
+</Intuition>
+
+## The UCB1 Algorithm
+
+<Intuition>
+
+UCB adds an **exploration bonus** to each arm's value estimate. The bonus is larger for arms we haven't tried much:
+
+$$\text{UCB value} = \text{estimated value} + \text{exploration bonus}$$
+
+We then pick the arm with the highest UCB value. This elegantly balances:
+- **Exploitation**: Arms with high estimated values score well
+- **Exploration**: Arms with few samples get a large bonus
+
+</Intuition>
+
+<Mathematical>
+
+The UCB1 action selection rule is:
+
+$$A_t = \arg\max_a \left[ Q_t(a) + c\sqrt{\frac{\ln t}{N_t(a)}} \right]$$
+
+where:
+- $Q_t(a)$ is the sample average reward for arm $a$
+- $N_t(a)$ is the number of times arm $a$ has been pulled
+- $t$ is the current time step
+- $c > 0$ is an exploration parameter (often $c = \sqrt{2}$ or $c = 2$)
+
+The exploration bonus $c\sqrt{\frac{\ln t}{N_t(a)}}$ has two key properties:
+1. It **decreases** as $N_t(a)$ increases (we've learned about this arm)
+2. It **increases slowly** with $t$ (we should keep exploring a bit as time goes on)
+
+</Mathematical>
+
+<Example title="UCB in Action">
+
+Suppose we have 3 arms at time $t = 100$:
+
+- **Arm 1**: $Q = 0.7$, pulled $N = 40$ times
+- **Arm 2**: $Q = 0.8$, pulled $N = 50$ times
+- **Arm 3**: $Q = 0.4$, pulled $N = 10$ times
+
+With $c = 2$, the UCB values are:
+
+- Arm 1: $0.7 + 2\sqrt{\frac{\ln 100}{40}} = 0.7 + 2 \times 0.34 = 1.38$
+- Arm 2: $0.8 + 2\sqrt{\frac{\ln 100}{50}} = 0.8 + 2 \times 0.30 = 1.40$
+- Arm 3: $0.4 + 2\sqrt{\frac{\ln 100}{10}} = 0.4 + 2 \times 0.68 = 1.76$
+
+UCB selects **Arm 3**! Even though it has the lowest estimated value, its exploration bonus (due to few samples) makes it the most attractive option.
+
+After trying Arm 3 more times, its bonus will shrink and the best arm will emerge.
+
+</Example>
+
+## Why UCB Works
+
+<Intuition>
+
+Think of the UCB value as an optimistic upper bound on what the arm's true value might be. With high probability, the true value is below this bound.
+
+If an arm has been tried many times, we have a good estimate—the bound is tight. If an arm hasn't been tried much, the bound is loose—we're uncertain, so we give it the benefit of the doubt.
+
+By always picking the arm with the highest upper bound, we:
+1. Pick truly good arms (high estimate)
+2. Try uncertain arms (large bonus)
+3. Automatically reduce exploration as we learn (bonus shrinks)
+
+</Intuition>
+
+<Mathematical>
+
+The exploration bonus comes from **concentration inequalities**. Specifically, the Hoeffding bound tells us that for bounded rewards:
+
+$$P\left( Q_t(a) - \mu_a \geq \sqrt{\frac{2\ln(1/\delta)}{N_t(a)}} \right) \leq \delta$$
+
+By setting $\delta = 1/t^{2c^2}$ and solving, we get the UCB exploration term. This means:
+
+$$P\left( \mu_a \leq Q_t(a) + c\sqrt{\frac{\ln t}{N_t(a)}} \right) \geq 1 - \frac{1}{t^{2c^2}}$$
+
+In words: with high probability, the true value is below our UCB value. The arm with the highest UCB is the one that could plausibly be the best.
+
+</Mathematical>
+
+## The Exploration Bonus Dynamics
+
+<Intuition>
+
+Let's visualize how the exploration bonus behaves:
+
+At time $t = 1000$ with $c = 2$:
+
+- Pulled 1 time: bonus = $2\sqrt{\frac{\ln 1000}{1}} = 5.25$
+- Pulled 10 times: bonus = $2\sqrt{\frac{\ln 1000}{10}} = 1.66$
+- Pulled 100 times: bonus = $2\sqrt{\frac{\ln 1000}{100}} = 0.53$
+- Pulled 500 times: bonus = $2\sqrt{\frac{\ln 1000}{500}} = 0.23$
+
+The bonus drops quickly with more samples. An arm with only 1 pull gets 22x more bonus than one with 500 pulls!
+
+</Intuition>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class UCB:
+    """Upper Confidence Bound bandit algorithm."""
+
+    def __init__(self, n_arms, c=2.0):
+        """
+        Initialize UCB agent.
+
+        Args:
+            n_arms: Number of arms
+            c: Exploration parameter (higher = more exploration)
+        """
+        self.n_arms = n_arms
+        self.c = c
+        self.Q = np.zeros(n_arms)  # Value estimates
+        self.N = np.zeros(n_arms)  # Pull counts
+        self.t = 0                 # Total steps
+
+    def select_action(self):
+        """Select arm using UCB1 rule."""
+        self.t += 1
+
+        # First, ensure each arm is tried at least once
+        for arm in range(self.n_arms):
+            if self.N[arm] == 0:
+                return arm
+
+        # Compute UCB values for all arms
+        exploration_bonus = self.c * np.sqrt(np.log(self.t) / self.N)
+        ucb_values = self.Q + exploration_bonus
+
+        # Select arm with highest UCB value
+        return np.argmax(ucb_values)
+
+    def update(self, action, reward):
+        """Update value estimate for the selected arm."""
+        self.N[action] += 1
+        # Incremental update for sample average
+        self.Q[action] += (reward - self.Q[action]) / self.N[action]
+
+    def get_ucb_values(self):
+        """Return current UCB values for visualization."""
+        if self.t == 0 or np.any(self.N == 0):
+            return None
+        exploration_bonus = self.c * np.sqrt(np.log(self.t) / self.N)
+        return self.Q + exploration_bonus
+
+
+# Example usage
+def run_ucb_demo():
+    np.random.seed(42)
+
+    # Create a 5-armed bandit
+    true_means = [0.2, 0.4, 0.6, 0.8, 0.5]
+    n_arms = len(true_means)
+
+    agent = UCB(n_arms, c=2.0)
+
+    for step in range(200):
+        action = agent.select_action()
+        reward = np.random.normal(true_means[action], 0.5)
+        agent.update(action, reward)
+
+    print("Final value estimates:")
+    for arm in range(n_arms):
+        print(f"  Arm {arm}: Q={agent.Q[arm]:.3f}, "
+              f"true={true_means[arm]:.3f}, "
+              f"pulls={int(agent.N[arm])}")
+
+    print(f"\nBest arm found: {np.argmax(agent.Q)} (true best: 3)")
+
+
+run_ucb_demo()
+```
+
+</Implementation>
+
+## Choosing the Exploration Parameter c
+
+<Tip>
+**Guidelines for Setting c**
+
+- $c = 2$: Common default, works well for rewards in $[0, 1]$
+- $c = \sqrt{2} \approx 1.41$: Theoretically derived from Hoeffding bound
+- Larger $c$: More exploration, better if arms are hard to distinguish
+- Smaller $c$: Less exploration, better if you're confident about arm rankings
+
+If rewards are scaled differently (e.g., $[0, 100]$), scale $c$ accordingly or normalize your rewards.
+</Tip>
+
+<Warning>
+**UCB and Reward Scaling**
+
+UCB's exploration bonus doesn't automatically adapt to the scale of rewards. If your rewards are in $[-100, 100]$ instead of $[0, 1]$, the default $c = 2$ might over-explore.
+
+Common fixes:
+1. Normalize rewards to $[0, 1]$
+2. Scale $c$ proportionally to the reward range
+3. Use UCB variants that estimate the reward scale
+</Warning>
+
+## UCB vs Epsilon-Greedy
+
+<Intuition>
+
+The key difference is **directed vs undirected exploration**:
+
+**Epsilon-greedy** explores randomly:
+- Sometimes tries bad arms even when we know they're bad
+- Exploration doesn't adapt to what we've learned
+- Simple to tune (just one parameter)
+
+**UCB** explores intelligently:
+- Focuses exploration on uncertain arms
+- Automatically reduces exploration as estimates improve
+- Never wastes time on arms we're confident are bad
+
+</Intuition>
+
+<Example title="Side-by-Side Comparison">
+
+Consider a 10-armed bandit after 1000 steps. One arm is clearly best (mean 0.9), others are mediocre (mean around 0.5).
+
+**Epsilon-greedy** ($\varepsilon = 0.1$):
+- Pulls the best arm about 820 times
+- Distributes ~180 pulls uniformly across all 10 arms
+- Wastes ~20 pulls on each bad arm, even though we know they're bad
+
+**UCB** ($c = 2$):
+- Pulls the best arm about 850 times
+- Pulls uncertain arms a few times each to confirm they're bad
+- Stops exploring bad arms once confident
+- Concentrates remaining exploration on arms that might rival the best
+
+UCB is more sample-efficient because it doesn't waste exploration on arms that are clearly suboptimal.
+
+</Example>
+
+## Regret Analysis
+
+<Mathematical>
+
+UCB achieves **logarithmic regret**—the best possible for this problem.
+
+The expected regret after $T$ steps is bounded by:
+
+$$\mathbb{E}[\text{Regret}(T)] \leq O\left(\sum_{a: \mu_a < \mu^*} \frac{\ln T}{\Delta_a}\right)$$
+
+where $\Delta_a = \mu^* - \mu_a$ is the gap between arm $a$ and the optimal arm.
+
+Key insights:
+1. Regret grows as $\ln T$ (sublinear in time)
+2. Arms with larger gaps contribute less (we identify them quickly)
+3. Arms with small gaps are harder to distinguish and contribute more
+
+Compare to epsilon-greedy, which achieves $O(T)$ regret if $\varepsilon$ is fixed (linear growth forever).
+
+</Mathematical>
+
+<Note>
+**Why Logarithmic Regret is Optimal**
+
+Lai and Robbins (1985) proved that no algorithm can achieve better than $O(\ln T)$ regret in the worst case for multi-armed bandits. UCB achieves this optimal rate, making it asymptotically the best we can do!
+
+The intuition: even with perfect exploration, you need at least $\Omega(\ln T)$ samples to distinguish between arms with similar means.
+</Note>
+
+## UCB Variants
+
+<Implementation>
+
+Several UCB variants exist for different settings:
+
+```python
+import numpy as np
+
+class UCB1Tuned:
+    """
+    UCB1-Tuned: Incorporates variance estimates for tighter bounds.
+
+    Uses the observed variance to potentially explore less when
+    an arm's rewards are consistent.
+    """
+
+    def __init__(self, n_arms, c=2.0):
+        self.n_arms = n_arms
+        self.c = c
+        self.Q = np.zeros(n_arms)
+        self.Q_sq = np.zeros(n_arms)  # For variance computation
+        self.N = np.zeros(n_arms)
+        self.t = 0
+
+    def select_action(self):
+        self.t += 1
+
+        for arm in range(self.n_arms):
+            if self.N[arm] == 0:
+                return arm
+
+        # Compute variance estimate for each arm
+        variance = self.Q_sq - self.Q ** 2
+        variance = np.maximum(variance, 0)  # Handle numerical issues
+
+        # UCB1-Tuned exploration term
+        ln_t = np.log(self.t)
+        V = variance + np.sqrt(2 * ln_t / self.N)
+        exploration = self.c * np.sqrt(ln_t / self.N * np.minimum(0.25, V))
+
+        ucb_values = self.Q + exploration
+        return np.argmax(ucb_values)
+
+    def update(self, action, reward):
+        self.N[action] += 1
+        n = self.N[action]
+        # Update mean
+        self.Q[action] += (reward - self.Q[action]) / n
+        # Update mean of squares (for variance)
+        self.Q_sq[action] += (reward ** 2 - self.Q_sq[action]) / n
+
+
+class UCBBayesian:
+    """
+    Bayesian UCB: Uses posterior distribution for uncertainty.
+
+    Assumes Gaussian rewards with known variance. Uses the
+    posterior mean and standard deviation.
+    """
+
+    def __init__(self, n_arms, c=2.0, prior_mean=0.0, prior_var=1.0, noise_var=1.0):
+        self.n_arms = n_arms
+        self.c = c
+        self.noise_var = noise_var
+
+        # Prior: mean and precision (inverse variance)
+        self.mean = np.full(n_arms, prior_mean)
+        self.precision = np.full(n_arms, 1.0 / prior_var)
+        self.t = 0
+
+    def select_action(self):
+        self.t += 1
+
+        # Posterior standard deviation
+        posterior_std = 1.0 / np.sqrt(self.precision)
+
+        # UCB value
+        ucb_values = self.mean + self.c * posterior_std
+        return np.argmax(ucb_values)
+
+    def update(self, action, reward):
+        # Bayesian update for Gaussian posterior
+        noise_precision = 1.0 / self.noise_var
+        new_precision = self.precision[action] + noise_precision
+        new_mean = (self.precision[action] * self.mean[action] +
+                    noise_precision * reward) / new_precision
+
+        self.precision[action] = new_precision
+        self.mean[action] = new_mean
+```
+
+</Implementation>
+
+## When to Use UCB
+
+<Tip>
+**UCB is Great When:**
+
+- You need sample-efficient exploration
+- The problem is stationary (arm values don't change)
+- You want theoretical guarantees on performance
+- Arms are reasonably distinguishable
+
+**Consider Alternatives When:**
+
+- The problem is non-stationary (use sliding window UCB)
+- You have prior knowledge about arms (use Thompson Sampling)
+- You need very simple implementation (use epsilon-greedy)
+- Rewards are highly variable and you want variance-aware exploration
+</Tip>
+
+## Summary
+
+UCB provides principled, directed exploration through optimism:
+
+1. **Core principle**: "Be optimistic about uncertain options"
+2. **UCB1 formula**: $Q(a) + c\sqrt{\frac{\ln t}{N(a)}}$
+3. **Exploration bonus** shrinks as we learn about each arm
+4. **Achieves optimal** $O(\ln T)$ regret
+5. **More sample-efficient** than epsilon-greedy
+
+In the next section, we'll see Thompson Sampling—another approach to principled exploration that takes a Bayesian perspective.
+
+<Note>
+UCB extends naturally to contextual bandits (as LinUCB) and reinforcement learning (as UCB-based exploration bonuses in Q-learning). The principle of "optimism in the face of uncertainty" appears throughout RL research.
+</Note>

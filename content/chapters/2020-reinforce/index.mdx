@@ -1,0 +1,96 @@
+---
+title: "REINFORCE"
+slug: "reinforce"
+section: "Policy Gradient Methods"
+description: "The foundational policy gradient algorithm"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "intro-to-policy-gradients"
+    title: "Introduction to Policy Gradients"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# REINFORCE and the Policy Gradient Theorem
+
+<ChapterObjectives>
+- State and explain the Policy Gradient Theorem
+- Implement the REINFORCE algorithm from scratch
+- Understand the log-derivative trick and why we use log probabilities
+- Identify and explain the variance problem in REINFORCE
+- Implement baselines to reduce gradient variance
+</ChapterObjectives>
+
+We want to improve our policy by gradient ascent. But there's a problem: the gradient of expected return involves the environment dynamics, which we don't know. The Policy Gradient Theorem provides an elegant solution - we can compute the gradient using only samples from our policy.
+
+## Why REINFORCE?
+
+In value-based methods like Q-learning, we learned a value function and derived a policy from it. REINFORCE takes a fundamentally different approach: **optimize the policy directly**.
+
+The key insight is that we can compute policy gradients without knowing how the environment works. We just need to:
+1. Sample trajectories from our current policy
+2. Compute returns for those trajectories
+3. Update the policy to make high-return actions more likely
+
+## Chapter Overview
+
+This chapter derives the Policy Gradient Theorem and introduces REINFORCE, the simplest policy gradient algorithm. We'll also tackle its main weakness - high variance - and introduce baselines as a solution.
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <a href="/chapters/reinforce/policy-gradient-theorem" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">The Policy Gradient Theorem</h3>
+    <p className="text-slate-400 text-sm mt-1">The mathematical foundation for computing policy gradients</p>
+  </a>
+  <a href="/chapters/reinforce/reinforce-algorithm" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">The REINFORCE Algorithm</h3>
+    <p className="text-slate-400 text-sm mt-1">Monte Carlo policy gradients in action</p>
+  </a>
+  <a href="/chapters/reinforce/variance-problem" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">The Variance Problem</h3>
+    <p className="text-slate-400 text-sm mt-1">Why REINFORCE gradients are noisy and unstable</p>
+  </a>
+  <a href="/chapters/reinforce/baselines" className="block p-4 bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 rounded-lg border border-emerald-700/50 hover:border-emerald-500/50 transition-colors">
+    <h3 className="font-semibold text-emerald-400">Baselines</h3>
+    <p className="text-slate-400 text-sm mt-1">Reducing variance without introducing bias</p>
+  </a>
+</div>
+
+## The Big Picture
+
+REINFORCE follows a simple recipe:
+
+1. **Collect** a complete episode using the current policy
+2. **Compute** the return (cumulative reward) from each timestep
+3. **Update** the policy to increase the probability of actions that led to high returns
+
+<Definition title="Policy Gradient">
+The gradient of the expected return with respect to the policy parameters. It tells us how to adjust the policy to increase expected reward.
+</Definition>
+
+The Policy Gradient Theorem shows us that this gradient has a beautiful form:
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t|s_t) \cdot G_t \right]$$
+
+High-return actions get reinforced; low-return actions get suppressed. That's the essence of REINFORCE.
+
+## Prerequisites
+
+This chapter assumes familiarity with:
+- The policy gradient objective from [Introduction to Policy Gradients](/chapters/intro-to-policy-gradients)
+- Stochastic policies and probability distributions over actions
+- Basic calculus (gradients, chain rule)
+
+---
+
+<KeyTakeaways>
+- The **Policy Gradient Theorem** enables gradient computation without knowing environment dynamics
+- The **log-derivative trick** converts the gradient into a weighted sum of log-probabilities
+- REINFORCE updates: $\theta \leftarrow \theta + \alpha \sum_t \nabla_\theta \log \pi_\theta(a_t|s_t) \cdot G_t$
+- High variance is REINFORCE's main weakness - it requires complete episodes and noisy return estimates
+- **Baselines** reduce variance without changing the expected gradient
+</KeyTakeaways>
+
+<NextChapter slug="actor-critic" title="Actor-Critic Methods" />

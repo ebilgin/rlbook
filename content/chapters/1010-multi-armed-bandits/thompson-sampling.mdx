@@ -1,0 +1,495 @@
+---
+title: "Thompson Sampling"
+slug: "thompson-sampling"
+section: "Bandit Problems"
+description: "The Bayesian approach to exploration"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Thompson Sampling
+
+UCB explores by being optimistic—always assuming uncertain arms might be great. Thompson Sampling takes a different, more elegant approach: it explores by *being uncertain*.
+
+Rather than computing upper bounds, Thompson Sampling maintains a probability distribution over each arm's true value and samples from these beliefs. When you're uncertain, your samples vary widely, naturally leading to exploration. When you're confident, your samples concentrate, leading to exploitation.
+
+## The Bayesian Perspective
+
+<Definition title="Thompson Sampling">
+Maintain a posterior distribution over each arm's reward. At each step, sample a value from each distribution and play the arm with the highest sample.
+</Definition>
+
+<Intuition>
+
+Imagine you believe each arm has some true success probability, but you don't know what it is. For each arm, you have a "belief distribution" representing how likely different values are.
+
+Thompson Sampling works like this:
+1. For each arm, **draw a random sample** from your belief about its value
+2. Play the arm with the **highest sample**
+3. **Update your belief** based on the outcome
+
+The magic: when you're uncertain about an arm, your samples are spread out—sometimes high, sometimes low. This means you'll sometimes sample a high value even for an arm with a low average, causing you to try it. As you learn, your beliefs tighten, and samples become more consistent.
+
+</Intuition>
+
+## Beta Distributions for Bernoulli Bandits
+
+The cleanest case is when rewards are binary (0 or 1), like click/no-click or success/failure.
+
+<Mathematical>
+
+For Bernoulli bandits, we maintain a **Beta distribution** for each arm's success probability:
+
+$$\theta_a \sim \text{Beta}(\alpha_a, \beta_a)$$
+
+The Beta distribution has these properties:
+- Defined on $[0, 1]$ (perfect for probabilities)
+- Mean: $\frac{\alpha}{\alpha + \beta}$
+- Variance: $\frac{\alpha\beta}{(\alpha+\beta)^2(\alpha+\beta+1)}$
+- Higher $\alpha + \beta$ means lower variance (more confident)
+
+**Prior**: Start with $\alpha_a = 1, \beta_a = 1$ (uniform distribution over $[0,1]$)
+
+**Posterior Update** after observing reward $r_t \in \{0, 1\}$:
+- If $r_t = 1$ (success): $\alpha_a \leftarrow \alpha_a + 1$
+- If $r_t = 0$ (failure): $\beta_a \leftarrow \beta_a + 1$
+
+This is the **conjugate prior** for Bernoulli likelihood—the posterior is also Beta.
+
+</Mathematical>
+
+<Example title="Beta Distribution Evolution">
+
+Consider arm with true success probability 0.7. Starting from Beta(1, 1):
+
+After 0 observations: Beta(1, 1) - uniform, anything is possible
+
+After 10 observations (7 successes, 3 failures): Beta(8, 4)
+- Mean: 0.67
+- 95% credible interval: roughly [0.38, 0.89]
+
+After 100 observations (70 successes, 30 failures): Beta(71, 31)
+- Mean: 0.70
+- 95% credible interval: roughly [0.60, 0.78]
+
+The distribution **sharpens** around the true value as we collect more data.
+
+</Example>
+
+## The Thompson Sampling Algorithm
+
+<Intuition>
+
+At each step:
+1. For each arm $a$, sample $\tilde{\theta}_a \sim \text{Beta}(\alpha_a, \beta_a)$
+2. Select the arm with the highest sample: $A_t = \arg\max_a \tilde{\theta}_a$
+3. Observe reward $r_t$
+4. Update: if $r_t = 1$, increment $\alpha_{A_t}$; otherwise increment $\beta_{A_t}$
+
+The beauty is in how sampling naturally balances exploration and exploitation:
+- **Uncertain arms** (wide distribution) → samples vary a lot → sometimes high → sometimes selected
+- **Confident good arms** (narrow distribution, high mean) → samples consistently high → often selected
+- **Confident bad arms** (narrow distribution, low mean) → samples consistently low → rarely selected
+
+</Intuition>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class ThompsonSampling:
+    """
+    Thompson Sampling for Bernoulli bandits.
+
+    Maintains Beta distribution posteriors for each arm's
+    success probability.
+    """
+
+    def __init__(self, n_arms):
+        self.n_arms = n_arms
+        # Beta(1, 1) prior = uniform distribution
+        self.alpha = np.ones(n_arms)  # Successes + 1
+        self.beta = np.ones(n_arms)   # Failures + 1
+
+    def select_action(self):
+        """Sample from each posterior and pick the highest."""
+        samples = np.random.beta(self.alpha, self.beta)
+        return np.argmax(samples)
+
+    def update(self, action, reward):
+        """Update the posterior for the selected arm."""
+        if reward > 0:
+            self.alpha[action] += 1
+        else:
+            self.beta[action] += 1
+
+    def get_expected_values(self):
+        """Return the posterior mean for each arm."""
+        return self.alpha / (self.alpha + self.beta)
+
+    def get_confidence(self):
+        """Return a measure of confidence (total observations + prior)."""
+        return self.alpha + self.beta - 2  # Subtract prior
+
+
+# Example usage
+def run_thompson_demo():
+    np.random.seed(42)
+
+    # True success probabilities (arm 2 is best)
+    true_probs = [0.3, 0.5, 0.7, 0.2]
+    n_arms = len(true_probs)
+
+    agent = ThompsonSampling(n_arms)
+
+    for step in range(500):
+        action = agent.select_action()
+        # Bernoulli reward
+        reward = 1.0 if np.random.random() < true_probs[action] else 0.0
+        agent.update(action, reward)
+
+    print("Final posterior parameters:")
+    for arm in range(n_arms):
+        print(f"  Arm {arm}: alpha={agent.alpha[arm]:.0f}, "
+              f"beta={agent.beta[arm]:.0f}, "
+              f"mean={agent.get_expected_values()[arm]:.3f}, "
+              f"true={true_probs[arm]}")
+
+    print(f"\nArm pulls: {agent.alpha + agent.beta - 2}")
+
+
+run_thompson_demo()
+```
+
+</Implementation>
+
+## Visualizing the Magic
+
+<Intuition>
+
+Let's trace through Thompson Sampling on a simple example to see how it naturally explores.
+
+**Setup**: 2 arms with true probabilities $p_1 = 0.3$ (worse) and $p_2 = 0.7$ (better).
+
+**Step 1**: Both arms have Beta(1,1). Draw samples:
+- Arm 1: sample = 0.62
+- Arm 2: sample = 0.41
+- Pick Arm 1 (higher sample)
+- Observe failure (unlucky) → Arm 1 becomes Beta(1, 2)
+
+**Step 2**: Draw samples:
+- Arm 1: Beta(1, 2), sample = 0.28
+- Arm 2: Beta(1, 1), sample = 0.75
+- Pick Arm 2 (higher sample)
+- Observe success → Arm 2 becomes Beta(2, 1)
+
+**Step 3**: Draw samples:
+- Arm 1: Beta(1, 2), sample = 0.35
+- Arm 2: Beta(2, 1), sample = 0.81
+- Pick Arm 2 again
+- ...
+
+As we continue:
+- Arm 2's distribution concentrates around 0.7
+- Arm 1's distribution concentrates around 0.3
+- Samples from Arm 2 are almost always higher
+- We mostly exploit Arm 2, occasionally trying Arm 1 due to sampling variance
+
+</Intuition>
+
+<Example title="Sample Comparison">
+
+After 50 pulls, suppose we have:
+- Arm 1: Beta(8, 17) - 7 successes, 16 failures
+- Arm 2: Beta(21, 10) - 20 successes, 9 failures
+
+If we draw 1000 sample pairs:
+- Arm 1 wins (higher sample): about 50 times (5%)
+- Arm 2 wins (higher sample): about 950 times (95%)
+
+Thompson Sampling naturally converges to exploiting the best arm while maintaining a small probability of exploration.
+
+</Example>
+
+## Thompson Sampling for Gaussian Rewards
+
+When rewards are continuous (not just 0/1), we can use a Normal-Inverse-Gamma prior.
+
+<Mathematical>
+
+For Gaussian rewards with unknown mean $\mu$ and known variance $\sigma^2$:
+
+**Prior**: $\mu_a \sim \mathcal{N}(\mu_0, \sigma_0^2)$
+
+**Posterior** after $n$ observations with sample mean $\bar{x}$:
+
+$$\mu_a | \text{data} \sim \mathcal{N}\left(\frac{\sigma^2 \mu_0 + n \sigma_0^2 \bar{x}}{\sigma^2 + n \sigma_0^2}, \frac{\sigma^2 \sigma_0^2}{\sigma^2 + n \sigma_0^2}\right)$$
+
+Thompson Sampling: sample from each arm's posterior, pick the highest sample.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class ThompsonSamplingGaussian:
+    """
+    Thompson Sampling for Gaussian bandits with known variance.
+
+    Uses Normal prior on the mean, which gives Normal posterior.
+    """
+
+    def __init__(self, n_arms, prior_mean=0.0, prior_var=1.0, reward_var=1.0):
+        self.n_arms = n_arms
+        self.reward_var = reward_var
+
+        # Prior parameters for each arm
+        self.prior_mean = prior_mean
+        self.prior_var = prior_var
+
+        # Posterior parameters (mean and precision = 1/variance)
+        self.post_mean = np.full(n_arms, prior_mean)
+        self.post_precision = np.full(n_arms, 1.0 / prior_var)
+
+    def select_action(self):
+        """Sample from each posterior and pick the highest."""
+        post_var = 1.0 / self.post_precision
+        samples = np.random.normal(self.post_mean, np.sqrt(post_var))
+        return np.argmax(samples)
+
+    def update(self, action, reward):
+        """Bayesian update for Gaussian posterior."""
+        reward_precision = 1.0 / self.reward_var
+
+        # Update precision (inverse variance adds)
+        new_precision = self.post_precision[action] + reward_precision
+
+        # Update mean
+        new_mean = (self.post_precision[action] * self.post_mean[action] +
+                    reward_precision * reward) / new_precision
+
+        self.post_precision[action] = new_precision
+        self.post_mean[action] = new_mean
+
+    def get_posterior_stats(self):
+        """Return posterior mean and standard deviation for each arm."""
+        post_std = 1.0 / np.sqrt(self.post_precision)
+        return self.post_mean, post_std
+
+
+# Example usage
+def run_gaussian_thompson():
+    np.random.seed(42)
+
+    # True means
+    true_means = [0.0, 0.5, 1.0, 0.3]
+    n_arms = len(true_means)
+    reward_var = 1.0
+
+    agent = ThompsonSamplingGaussian(n_arms, reward_var=reward_var)
+
+    for step in range(300):
+        action = agent.select_action()
+        reward = np.random.normal(true_means[action], np.sqrt(reward_var))
+        agent.update(action, reward)
+
+    means, stds = agent.get_posterior_stats()
+    print("Final posterior estimates:")
+    for arm in range(n_arms):
+        print(f"  Arm {arm}: mean={means[arm]:.3f} +/- {stds[arm]:.3f}, "
+              f"true={true_means[arm]}")
+
+
+run_gaussian_thompson()
+```
+
+</Implementation>
+
+## Why Thompson Sampling Works So Well
+
+<Intuition>
+
+Thompson Sampling has some remarkable properties:
+
+1. **Probability matching**: The probability of selecting an arm is proportional to the probability that it's actually optimal. This is a natural way to allocate exploration.
+
+2. **Automatically adapts**: No tuning parameters (beyond the prior). The posterior uncertainty naturally determines exploration.
+
+3. **Information-directed**: Unlike UCB which is optimistic about all uncertain arms equally, Thompson Sampling focuses on arms that might plausibly be optimal.
+
+4. **Handles correlations**: When arms have related rewards, Bayesian reasoning can share information.
+
+</Intuition>
+
+<Mathematical>
+
+Thompson Sampling achieves the optimal $O(\ln T)$ regret bound, matching UCB asymptotically. But in practice, it often performs better, especially when:
+
+1. **There are many arms**: Thompson Sampling scales better because it naturally ignores arms with very low probability of being optimal.
+
+2. **Arms are similar**: Thompson Sampling uses posterior beliefs to focus exploration on the truly competitive arms.
+
+3. **Priors are informative**: If you have good prior knowledge, Thompson Sampling can incorporate it directly.
+
+The regret bound for Thompson Sampling on Bernoulli bandits:
+
+$$\mathbb{E}[\text{Regret}(T)] \leq O\left(\sum_{a: \mu_a < \mu^*} \frac{\ln T}{D_{KL}(\mu_a || \mu^*)}\right)$$
+
+where $D_{KL}$ is the Kullback-Leibler divergence between arm distributions.
+
+</Mathematical>
+
+## Thompson Sampling vs UCB
+
+<Intuition>
+
+Both achieve optimal regret, but they have different characteristics:
+
+**Thompson Sampling** advantages:
+- Often better empirical performance
+- No exploration parameter to tune
+- Naturally Bayesian—can incorporate prior knowledge
+- Handles structured problems (correlations between arms) gracefully
+- Randomized: can help in adversarial settings
+
+**UCB** advantages:
+- Deterministic: easier to analyze and debug
+- Doesn't require specifying a prior
+- Simpler to explain ("optimism in uncertainty")
+- Works with any bounded reward distribution
+
+</Intuition>
+
+<Example title="When Thompson Sampling Shines">
+
+Consider 100 arms where:
+- 95 arms have success probability 0.1
+- 5 arms have success probability 0.5
+
+**UCB** with standard parameters:
+- Must try each arm multiple times to reduce uncertainty
+- Wastes many pulls on the 95 bad arms
+
+**Thompson Sampling**:
+- After a few failures on a bad arm, its posterior concentrates around low values
+- Samples from bad arms are consistently low
+- Quickly focuses on the 5 competitive arms
+
+Thompson Sampling is more aggressive about eliminating clearly inferior arms.
+
+</Example>
+
+## Practical Considerations
+
+<Tip>
+**Choosing Priors**
+
+For Bernoulli bandits:
+- Beta(1, 1) is uninformative (uniform) - good default
+- Beta(0.5, 0.5) (Jeffreys prior) is also popular
+- If you expect arms to be similar, use an empirical Bayes approach
+
+For Gaussian bandits:
+- Set prior mean to your best guess
+- Set prior variance based on how uncertain you are
+- Larger prior variance = more exploration initially
+</Tip>
+
+<Warning>
+**Model Mismatch**
+
+Thompson Sampling assumes rewards follow a particular distribution (Beta for Bernoulli, Normal for Gaussian). If the true reward distribution is very different, performance can suffer.
+
+For example, if rewards are heavy-tailed (occasional large payouts), a Gaussian model might underexplore because it doesn't expect extreme values.
+
+When in doubt:
+- Use robust priors with heavier tails
+- Consider non-parametric Bayesian methods
+- Fall back to UCB which makes weaker assumptions
+</Warning>
+
+<Implementation>
+
+Here's a more robust implementation that handles edge cases:
+
+```python
+import numpy as np
+from scipy import stats
+
+class RobustThompsonSampling:
+    """
+    Thompson Sampling with practical improvements.
+
+    Handles numerical stability and provides diagnostics.
+    """
+
+    def __init__(self, n_arms, prior_alpha=1.0, prior_beta=1.0):
+        self.n_arms = n_arms
+        self.alpha = np.full(n_arms, prior_alpha)
+        self.beta = np.full(n_arms, prior_beta)
+        self.pulls = np.zeros(n_arms, dtype=int)
+        self.history = []
+
+    def select_action(self):
+        """Sample from each posterior and pick the highest."""
+        samples = np.random.beta(self.alpha, self.beta)
+        action = np.argmax(samples)
+        self.history.append({
+            'samples': samples.copy(),
+            'action': action
+        })
+        return action
+
+    def update(self, action, reward):
+        """Update with continuous reward in [0, 1]."""
+        self.pulls[action] += 1
+
+        # Handle continuous rewards by treating as fractional success
+        if reward > 0:
+            self.alpha[action] += reward
+            self.beta[action] += (1 - reward)
+        else:
+            self.beta[action] += 1
+
+    def get_credible_intervals(self, confidence=0.95):
+        """Return credible intervals for each arm."""
+        intervals = []
+        for arm in range(self.n_arms):
+            low = stats.beta.ppf((1-confidence)/2, self.alpha[arm], self.beta[arm])
+            high = stats.beta.ppf((1+confidence)/2, self.alpha[arm], self.beta[arm])
+            intervals.append((low, high))
+        return intervals
+
+    def get_probability_of_optimal(self, n_samples=10000):
+        """Estimate probability each arm is optimal via Monte Carlo."""
+        samples = np.random.beta(
+            self.alpha.reshape(-1, 1),
+            self.beta.reshape(-1, 1),
+            size=(self.n_arms, n_samples)
+        )
+        best = np.argmax(samples, axis=0)
+        probs = np.bincount(best, minlength=self.n_arms) / n_samples
+        return probs
+```
+
+</Implementation>
+
+## Summary
+
+Thompson Sampling provides a Bayesian approach to exploration:
+
+1. **Core idea**: Sample from beliefs, pick the best sample
+2. **Beta distributions** work perfectly for Bernoulli (0/1) rewards
+3. **Exploration emerges naturally** from uncertainty in beliefs
+4. **No exploration parameter** to tune
+5. **Often outperforms UCB** in practice, especially with many arms
+
+<Note>
+Thompson Sampling was invented in 1933 but was largely forgotten until the 2010s when researchers rediscovered its remarkable effectiveness. Today, it's widely used in industry for A/B testing, recommendations, and ad selection.
+</Note>
+
+In the next section, we'll compare all our exploration strategies and provide practical guidance on when to use each.

@@ -1,0 +1,149 @@
+---
+title: "Introduction to TD Learning"
+slug: "intro-to-td"
+section: "Temporal Difference Learning"
+description: "Learning from experience without waiting for the episode to end"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "bellman-equations"
+    title: "The Bellman Equations"
+  - slug: "policy-improvement"
+    title: "Policy Improvement"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Introduction to Temporal Difference Learning
+
+<ChapterObjectives>
+- Explain the TD learning idea: bootstrapping from estimates
+- Implement TD(0) for value prediction
+- Identify the TD error and its role in learning
+- Compare TD learning with Monte Carlo and Dynamic Programming
+- Explain bias-variance tradeoffs in TD vs MC
+</ChapterObjectives>
+
+Monte Carlo methods wait until the end of an episode to learn. Dynamic programming needs a model of the environment. What if we could learn step-by-step, from experience, without a model? That's TD learning—the heart of modern reinforcement learning.
+
+## Why TD Learning Matters
+
+Temporal Difference (TD) learning combines the best of both worlds:
+- Like **Monte Carlo**, it learns from experience (no model needed)
+- Like **Dynamic Programming**, it updates estimates from estimates (bootstrapping), allowing learning before an episode ends
+
+This is the key insight that enables practical reinforcement learning. Nearly every successful RL algorithm—from Q-learning to DQN to PPO—builds on TD ideas.
+
+<Definition title="Temporal Difference Learning">
+A class of RL methods that learn by comparing predictions made at different points in time. The "temporal difference" is the gap between successive predictions—if our value estimates are correct, this difference should be zero on average.
+</Definition>
+
+## The TD Error
+
+The TD error—the difference between what we expected and what we got—becomes our learning signal:
+
+$$\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$$
+
+<Intuition>
+
+Think of the TD error as a "surprise" signal:
+- If $\delta_t > 0$: Things went better than expected. Increase $V(S_t)$.
+- If $\delta_t < 0$: Things went worse than expected. Decrease $V(S_t)$.
+- If $\delta_t = 0$: Our prediction was perfect. No change needed.
+
+This simple idea powers everything from tabular Q-learning to modern deep RL systems.
+
+</Intuition>
+
+## Chapter Overview
+
+This chapter introduces TD learning—the foundation for Q-learning, SARSA, and all of modern deep RL. We'll cover:
+
+<div className="grid md:grid-cols-3 gap-4 my-6">
+  <a href="/chapters/intro-to-td/td-idea" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">The TD Idea</h3>
+    <p className="text-slate-400 text-sm mt-1">Bootstrapping: learning from incomplete returns without waiting for episodes to end</p>
+  </a>
+  <a href="/chapters/intro-to-td/td-zero" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">TD(0) Prediction</h3>
+    <p className="text-slate-400 text-sm mt-1">The simplest TD method for value estimation with worked examples</p>
+  </a>
+  <a href="/chapters/intro-to-td/td-vs-mc" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">TD vs Monte Carlo</h3>
+    <p className="text-slate-400 text-sm mt-1">Bias, variance, and when to use each approach</p>
+  </a>
+</div>
+
+## TD at a Glance
+
+<Mathematical>
+
+The core TD(0) update rule:
+
+$$V(S_t) \leftarrow V(S_t) + \alpha \left[ R_{t+1} + \gamma V(S_{t+1}) - V(S_t) \right]$$
+
+Where:
+- $V(S_t)$ is our current estimate of the state's value
+- $\alpha$ is the learning rate
+- $R_{t+1} + \gamma V(S_{t+1})$ is the **TD target**
+- $R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$ is the **TD error** $\delta_t$
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def td_update(V, state, reward, next_state, alpha=0.1, gamma=0.99, done=False):
+    """Single TD(0) update."""
+    if done:
+        td_target = reward
+    else:
+        td_target = reward + gamma * V[next_state]
+
+    td_error = td_target - V[state]
+    V[state] += alpha * td_error
+    return td_error
+```
+
+</Implementation>
+
+## Prerequisites
+
+This chapter assumes you're comfortable with:
+- [The Bellman Equations](/chapters/bellman-equations) — TD targets are sample-based Bellman updates
+- [Policy Evaluation](/chapters/policy-evaluation) — We're solving the same problem, but without a model
+
+## Key Questions We'll Answer
+
+- How can we learn from incomplete episodes?
+- What is bootstrapping and why does it introduce bias?
+- How does the TD error act as a "surprise" signal?
+- When should you use TD over Monte Carlo?
+- How does information propagate through TD updates?
+
+## The Big Picture
+
+TD learning represents a fundamental shift in how we think about learning from experience:
+
+| Approach | Needs Model? | Needs Complete Episodes? | Updates When? |
+|----------|--------------|-------------------------|---------------|
+| Dynamic Programming | Yes | No | After computing all states |
+| Monte Carlo | No | Yes | End of episode |
+| **TD Learning** | No | No | Every step |
+
+TD's ability to learn incrementally, without a model, from incomplete episodes makes it the practical workhorse of reinforcement learning.
+
+---
+
+<KeyTakeaways>
+- TD learning updates estimates using other estimates (**bootstrapping**)
+- The **TD error** $\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$ measures "surprise"
+- TD has lower variance than MC but introduces bias
+- TD can learn online, during an episode, without waiting for termination
+- TD works for continuing (non-episodic) tasks where MC cannot
+- The bias-variance tradeoff often favors TD in practice
+</KeyTakeaways>
+
+<NextChapter slug="sarsa" title="SARSA" />

@@ -1,0 +1,155 @@
+---
+title: "Policy Improvement"
+slug: "policy-improvement"
+section: "Dynamic Programming"
+description: "Finding better policies through value functions"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "policy-evaluation"
+    title: "Policy Evaluation"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Policy Improvement
+
+<ChapterObjectives>
+- Explain the policy improvement theorem and why it guarantees progress
+- Implement policy iteration from scratch
+- Implement value iteration from scratch
+- Compare policy iteration and value iteration on the same MDP
+- Solve simple MDPs to find optimal policies using DP methods
+</ChapterObjectives>
+
+We can now evaluate any policy, computing $V^\pi$ for any choice of $\pi$. But our goal is not just to evaluate policies. We want to find the **best** policy.
+
+The remarkable insight of this chapter is that once we have $V^\pi$, we can construct a better policy. And by alternating between evaluation and improvement, we can climb all the way to the optimum.
+
+## The Core Insight
+
+<Definition title="Policy Improvement">
+The process of constructing a new policy that is at least as good as the current policy, by acting greedily with respect to the current value function.
+</Definition>
+
+<Intuition>
+
+Suppose you know $V^\pi(s)$ for all states. From any state $s$, you can ask: "What if I took a different action just once, then followed $\pi$ afterward? Would I do better?"
+
+The greedy action is the one that maximizes this one-step lookahead. The policy improvement theorem tells us something magical: if we switch to always taking the greedy action, we are guaranteed to do at least as well as before, and usually better.
+
+</Intuition>
+
+This leads to two powerful algorithms:
+
+- **Policy Iteration**: Alternate between full policy evaluation and greedy improvement
+- **Value Iteration**: Combine evaluation and improvement into a single operation
+
+Both converge to the optimal policy $\pi^*$ and optimal value function $V^*$.
+
+## Chapter Overview
+
+<div className="grid md:grid-cols-3 gap-4 my-6">
+  <a href="/chapters/policy-improvement/improvement-theorem" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">The Policy Improvement Theorem</h3>
+    <p className="text-slate-400 text-sm mt-1">The theoretical foundation: why greedy improvement always works</p>
+  </a>
+  <a href="/chapters/policy-improvement/policy-iteration" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">Policy Iteration</h3>
+    <p className="text-slate-400 text-sm mt-1">Alternating evaluation and improvement until convergence</p>
+  </a>
+  <a href="/chapters/policy-improvement/value-iteration" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">Value Iteration</h3>
+    <p className="text-slate-400 text-sm mt-1">Finding optimal values directly with a single update rule</p>
+  </a>
+</div>
+
+## Two Paths to the Same Destination
+
+<div className="grid md:grid-cols-2 gap-6 my-6">
+  <div className="p-4 bg-gradient-to-br from-cyan-900/20 to-cyan-800/10 rounded-lg border border-cyan-700/50">
+    <h4 className="font-semibold text-cyan-400 mb-2">Policy Iteration</h4>
+    <ol className="text-slate-400 text-sm space-y-1 list-decimal list-inside">
+      <li>Evaluate current policy completely ($V^\pi$)</li>
+      <li>Improve: make policy greedy w.r.t. $V^\pi$</li>
+      <li>Repeat until policy stops changing</li>
+    </ol>
+    <p className="text-slate-500 text-sm mt-3 italic">Typically converges in very few policy iterations, but each iteration requires full evaluation.</p>
+  </div>
+  <div className="p-4 bg-gradient-to-br from-amber-900/20 to-amber-800/10 rounded-lg border border-amber-700/50">
+    <h4 className="font-semibold text-amber-400 mb-2">Value Iteration</h4>
+    <ol className="text-slate-400 text-sm space-y-1 list-decimal list-inside">
+      <li>Apply Bellman optimality backup to all states</li>
+      <li>Repeat until values converge</li>
+      <li>Extract greedy policy at the end</li>
+    </ol>
+    <p className="text-slate-500 text-sm mt-3 italic">Simpler per-iteration, but may require many more iterations to converge.</p>
+  </div>
+</div>
+
+<Note>
+Both algorithms find the **same** optimal policy. They differ in how they organize computation. The best choice depends on the problem structure and computational constraints.
+</Note>
+
+## The Greedy Policy
+
+The key operation in both algorithms is constructing a **greedy policy** from a value function.
+
+<Mathematical>
+
+Given a value function $V$, the greedy policy selects:
+
+$$\pi'(s) = \arg\max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V(s') \right]$$
+
+This picks the action that maximizes expected immediate reward plus discounted future value.
+
+</Mathematical>
+
+<Intuition>
+
+The greedy policy answers: "Looking one step ahead and using my current value estimates for what comes after, which action looks best?"
+
+It is called "greedy" because it always takes what looks best right now. Surprisingly, this myopic approach leads to globally optimal behavior when combined with accurate value estimates.
+
+</Intuition>
+
+## Why This Matters
+
+Dynamic Programming gives us **exact solutions** to MDPs. When we have access to the complete model (all transitions and rewards), DP finds the true optimal policy.
+
+But DP has limitations:
+
+<Warning>
+**DP requires the full model.** In most real-world problems, we do not know $P(s'|s,a)$ precisely. We might have a simulator, or we might only have real experience.
+
+**DP requires enumeration.** We must loop over all states and all actions. This becomes impractical when the state space is large (millions of states) or continuous.
+
+These limitations motivate **reinforcement learning**: methods that learn from samples without requiring the full model, and that can use function approximation to handle large state spaces.
+</Warning>
+
+Despite these limitations, DP is essential:
+
+1. It provides the **theoretical foundation** for understanding RL
+2. Many RL algorithms are **approximate versions** of DP methods
+3. For small MDPs, DP gives the **ground truth** to compare against
+
+## Key Questions We Will Answer
+
+- Why does greedy improvement never make things worse?
+- How many policy iterations are typically needed?
+- When should you use policy iteration vs. value iteration?
+- What is the relationship between these algorithms and Q-learning?
+
+---
+
+<KeyTakeaways>
+- The **policy improvement theorem** guarantees that greedy policies are never worse
+- **Policy iteration** alternates: evaluate $\rightarrow$ improve $\rightarrow$ evaluate $\rightarrow$ ...
+- **Value iteration** applies the Bellman optimality backup directly to find $V^*$
+- Both converge to the optimal policy for finite MDPs
+- DP is foundational but requires knowing the full model
+</KeyTakeaways>
+
+<NextChapter slug="multi-armed-bandits" title="Multi-Armed Bandits" />

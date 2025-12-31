@@ -1,0 +1,121 @@
+---
+title: "Policy Evaluation"
+slug: "policy-evaluation"
+section: "Dynamic Programming"
+description: "Computing the value of a policy when you know the model"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "intro-to-mdps"
+    title: "Introduction to MDPs"
+  - slug: "value-functions"
+    title: "Value Functions"
+  - slug: "bellman-equations"
+    title: "The Bellman Equations"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Policy Evaluation
+
+<ChapterObjectives>
+- Implement iterative policy evaluation from scratch
+- Explain why policy evaluation is guaranteed to converge
+- Choose appropriate stopping criteria for practical applications
+- Trace through policy evaluation on a simple MDP step by step
+- Understand the computational requirements and trade-offs
+</ChapterObjectives>
+
+We have the Bellman equations. We know that the value function $V^\pi$ must satisfy them. But how do we actually *compute* $V^\pi$ for a given policy?
+
+The answer is surprisingly elegant: **just keep applying the Bellman equation until the values stop changing.**
+
+## The Big Idea
+
+<Definition title="Policy Evaluation">
+The task of computing the state-value function $V^\pi$ for a given policy $\pi$. Also called "prediction" because we are predicting the expected return from each state under that policy.
+</Definition>
+
+<Intuition>
+
+Imagine you want to know how valuable each state is, but you have no idea where to start. So you guess: set all values to zero. Now ask yourself, "If my values were correct, what would the Bellman equation tell me?" The Bellman equation combines immediate rewards with future values to give you a new, better estimate.
+
+Repeat this process. Each round, your estimates become more accurate. Eventually, they stop changing because you have found the values that *exactly* satisfy the Bellman equation. Those are the true values under policy $\pi$.
+
+</Intuition>
+
+This process is called **iterative policy evaluation**, and it is our first Dynamic Programming algorithm.
+
+## What is Dynamic Programming?
+
+<Note>
+**Dynamic Programming (DP)** refers to a collection of algorithms that compute optimal policies given a perfect model of the environment. The term comes from Richard Bellman, who developed these techniques in the 1950s.
+
+The "dynamic" refers to the sequential, multi-stage nature of the decision problem. The "programming" means optimization in the mathematical sense, not computer programming.
+</Note>
+
+DP methods work by using the Bellman equations to iteratively improve value estimates. They are foundational because:
+
+1. **They are exact**: When we know the MDP, DP finds the true values
+2. **They are foundational**: TD learning, Q-learning, and other RL methods are approximations of DP ideas
+3. **They build intuition**: Seeing DP work clearly prepares you for more complex methods
+
+<Warning>
+DP requires knowing the full MDP, meaning all transition probabilities $P(s'|s,a)$ and rewards $R(s,a)$. In most real-world problems, we do not have this luxury. That is where reinforcement learning comes in: learning from experience when the model is unknown.
+
+But before we can run, we must walk. Understanding DP is essential for understanding everything that follows.
+</Warning>
+
+## Chapter Overview
+
+This chapter covers the mechanics of computing $V^\pi$:
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <a href="/chapters/policy-evaluation/iterative-evaluation" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">Iterative Policy Evaluation</h3>
+    <p className="text-slate-400 text-sm mt-1">The algorithm: initialize, sweep, repeat until convergence</p>
+  </a>
+  <a href="/chapters/policy-evaluation/convergence" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">Convergence and Stopping</h3>
+    <p className="text-slate-400 text-sm mt-1">Why it converges, when to stop, and computational costs</p>
+  </a>
+</div>
+
+## A Preview: The Update Rule
+
+The heart of policy evaluation is the **Bellman expectation backup**:
+
+<Mathematical>
+
+$$V_{k+1}(s) = \sum_a \pi(a|s) \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V_k(s') \right]$$
+
+This equation says: the new value estimate for state $s$ equals the expected immediate reward plus the discounted value of where we end up, averaged over the actions we might take under policy $\pi$.
+
+</Mathematical>
+
+We apply this update to every state, creating a "sweep" through the state space. After enough sweeps, the values converge to $V^\pi$.
+
+## Key Questions We Will Answer
+
+- How does the iterative algorithm work, step by step?
+- Why is convergence guaranteed? What property ensures we reach the right answer?
+- How do we choose when to stop? What is a good threshold?
+- What is the computational cost, and how does it scale with the MDP size?
+
+## The Path Ahead
+
+Once we can evaluate any policy, the natural next question is: **How do we find a better policy?** That is the subject of the next chapter on Policy Improvement, where we will use value functions to construct better and better policies until we reach the optimum.
+
+---
+
+<KeyTakeaways>
+- **Policy evaluation** computes $V^\pi$ for a given policy $\pi$
+- The algorithm: initialize values, apply Bellman updates, repeat until convergence
+- Convergence is guaranteed because the Bellman operator is a contraction
+- Stop when the maximum value change falls below a threshold $\theta$
+- This is the first step toward finding optimal policies
+</KeyTakeaways>
+
+<NextChapter slug="policy-improvement" title="Policy Improvement" />

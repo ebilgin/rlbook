@@ -1,0 +1,467 @@
+---
+title: "Stochastic Policies"
+slug: "stochastic-policies"
+section: "Policy Gradient Methods"
+description: "Probability distributions over actions"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Stochastic Policies
+
+A **stochastic policy** outputs a probability distribution over actions rather than a single action. Instead of "always do X," the policy says "do X with probability 70%, Y with probability 30%."
+
+This is more than just an exploration trick - stochastic policies are fundamental to policy gradient methods and sometimes represent the truly optimal behavior.
+
+## What Is a Stochastic Policy?
+
+<Definition title="Stochastic Policy">
+
+A stochastic policy $\pi(a|s)$ is a mapping from states to probability distributions over actions:
+
+$$\pi: \mathcal{S} \rightarrow \mathcal{P}(\mathcal{A})$$
+
+For each state $s$, $\pi(\cdot|s)$ is a probability distribution satisfying:
+- $\pi(a|s) \geq 0$ for all actions $a$
+- $\sum_{a \in \mathcal{A}} \pi(a|s) = 1$ (discrete) or $\int_{\mathcal{A}} \pi(a|s) da = 1$ (continuous)
+
+</Definition>
+
+<Intuition>
+
+Think of a stochastic policy as a "soft" decision-maker. Rather than committing absolutely to one action, it hedges its bets:
+
+"Based on what I see, I'm pretty confident action A is best (60%), but B might work (30%), and there's a small chance C is actually right (10%)."
+
+This uncertainty can come from:
+- **Exploration**: Trying new things to learn
+- **Genuine uncertainty**: When you're not sure what's best
+- **Optimality**: When randomness is actually the best strategy
+
+</Intuition>
+
+## Softmax Policies for Discrete Actions
+
+The most common way to represent a stochastic policy over discrete actions is the **softmax** function.
+
+<Mathematical>
+
+Given preference values $h(s, a, \theta)$ for each action (also called logits), the softmax policy is:
+
+$$\pi_\theta(a|s) = \frac{\exp(h(s, a, \theta))}{\sum_{a' \in \mathcal{A}} \exp(h(s, a', \theta))}$$
+
+Properties:
+- All probabilities are positive: $\pi_\theta(a|s) > 0$
+- Probabilities sum to 1
+- Higher preference means higher probability
+- Differentiable with respect to $\theta$
+
+Common choices for $h(s, a, \theta)$:
+- **Linear**: $h(s, a, \theta) = \theta_a^\top \phi(s)$ where $\phi(s)$ is a feature vector
+- **Neural network**: $h(s, a, \theta) = f_\theta(s)[a]$ where $f_\theta$ outputs logits for all actions
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+
+class SoftmaxPolicy(nn.Module):
+    """
+    Softmax policy for discrete actions using a neural network.
+
+    Takes states as input, outputs action probabilities.
+    """
+
+    def __init__(self, state_dim, n_actions, hidden_dim=64):
+        super().__init__()
+        self.n_actions = n_actions
+
+        self.network = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, n_actions)  # Outputs logits (preferences)
+        )
+
+    def forward(self, state):
+        """Compute action probabilities."""
+        logits = self.network(state)
+        probs = F.softmax(logits, dim=-1)
+        return probs
+
+    def get_distribution(self, state):
+        """Return a Categorical distribution for sampling."""
+        probs = self.forward(state)
+        return torch.distributions.Categorical(probs)
+
+    def sample(self, state):
+        """Sample an action from the policy."""
+        dist = self.get_distribution(state)
+        action = dist.sample()
+        return action.item()
+
+    def log_prob(self, state, action):
+        """Compute log probability of an action."""
+        dist = self.get_distribution(state)
+        return dist.log_prob(action)
+
+
+# Example: 4-dimensional state, 3 possible actions
+policy = SoftmaxPolicy(state_dim=4, n_actions=3)
+
+# Get probabilities for a state
+state = torch.tensor([[1.0, 0.5, -0.3, 0.8]])
+probs = policy(state)
+print(f"Action probabilities: {probs.detach().numpy()}")
+
+# Sample multiple actions to see the distribution
+actions = [policy.sample(state) for _ in range(1000)]
+print(f"Action counts: {np.bincount(actions, minlength=3)}")
+```
+
+</Implementation>
+
+## The Temperature Parameter
+
+The softmax function has an implicit **temperature** parameter that controls how "peaked" the distribution is.
+
+<Intuition>
+
+Temperature works like this:
+- **High temperature**: More uniform distribution (more exploration)
+- **Low temperature**: More peaked distribution (more exploitation)
+- **Temperature approaches 0**: Becomes deterministic (always picks highest preference)
+- **Temperature approaches infinity**: Becomes uniform random
+
+It's like adjusting how "confident" the policy is in its preferences.
+
+</Intuition>
+
+<Mathematical>
+
+The softmax with explicit temperature $\tau$:
+
+$$\pi_\theta(a|s) = \frac{\exp(h(s, a, \theta) / \tau)}{\sum_{a'} \exp(h(s, a', \theta) / \tau)}$$
+
+As $\tau \to 0$: $\pi_\theta \to \mathbf{1}_{a = \arg\max_{a'} h(s,a',\theta)}$ (deterministic)
+
+As $\tau \to \infty$: $\pi_\theta \to \text{Uniform}(\mathcal{A})$ (random)
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def softmax_with_temperature(logits, temperature=1.0):
+    """
+    Apply softmax with temperature scaling.
+
+    Args:
+        logits: Unnormalized log-probabilities (preferences)
+        temperature: Higher = more uniform, lower = more peaked
+
+    Returns:
+        Probability distribution over actions
+    """
+    scaled_logits = logits / temperature
+    # Subtract max for numerical stability
+    scaled_logits = scaled_logits - scaled_logits.max(dim=-1, keepdim=True)[0]
+    exp_logits = torch.exp(scaled_logits)
+    return exp_logits / exp_logits.sum(dim=-1, keepdim=True)
+
+
+# Demonstrate temperature effects
+logits = torch.tensor([[2.0, 1.0, 0.5]])  # Prefer action 0
+
+print("Temperature effects on action probabilities:")
+for temp in [0.1, 0.5, 1.0, 2.0, 10.0]:
+    probs = softmax_with_temperature(logits, temp)
+    print(f"  T={temp:4.1f}: {probs.numpy().round(3)}")
+
+# Output:
+#   T= 0.1: [[0.999 0.    0.   ]]
+#   T= 0.5: [[0.953 0.043 0.004]]
+#   T= 1.0: [[0.659 0.242 0.099]]
+#   T= 2.0: [[0.466 0.308 0.226]]
+#   T=10.0: [[0.356 0.331 0.313]]
+```
+
+</Implementation>
+
+## Gaussian Policies for Continuous Actions
+
+For continuous action spaces, we typically use **Gaussian (Normal) policies**.
+
+<Mathematical>
+
+A diagonal Gaussian policy outputs a mean and standard deviation for each action dimension:
+
+$$\pi_\theta(a|s) = \mathcal{N}(a; \mu_\theta(s), \sigma_\theta(s)^2)$$
+
+For a single action dimension:
+
+$$\pi_\theta(a|s) = \frac{1}{\sigma_\theta(s)\sqrt{2\pi}} \exp\left(-\frac{(a - \mu_\theta(s))^2}{2\sigma_\theta(s)^2}\right)$$
+
+The log-probability (used in policy gradients) is:
+
+$$\log \pi_\theta(a|s) = -\frac{(a - \mu_\theta(s))^2}{2\sigma_\theta(s)^2} - \log \sigma_\theta(s) - \frac{1}{2}\log(2\pi)$$
+
+</Mathematical>
+
+<Intuition>
+
+A Gaussian policy says: "I think the action should be around $\mu(s)$, but I'm not certain - the action could be anywhere within a few $\sigma(s)$ of that."
+
+- **Mean** $\mu_\theta(s)$: The "intended" action
+- **Standard deviation** $\sigma_\theta(s)$: How much to explore around it
+
+As training progresses, $\sigma$ often decreases - the policy becomes more confident and exploits more.
+
+</Intuition>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import numpy as np
+
+class DiagonalGaussianPolicy(nn.Module):
+    """
+    Gaussian policy with diagonal covariance for continuous actions.
+
+    Common design choices:
+    - Mean is a function of state (neural network)
+    - Log-std can be state-dependent or a learned constant
+    """
+
+    def __init__(self, state_dim, action_dim, hidden_dim=64,
+                 log_std_min=-20, log_std_max=2):
+        super().__init__()
+        self.action_dim = action_dim
+        self.log_std_min = log_std_min
+        self.log_std_max = log_std_max
+
+        # Shared features
+        self.features = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Tanh(),
+        )
+
+        # Mean head
+        self.mean_head = nn.Linear(hidden_dim, action_dim)
+
+        # Log std as a learnable parameter (state-independent)
+        # Alternative: make it state-dependent with another head
+        self.log_std = nn.Parameter(torch.zeros(action_dim))
+
+    def forward(self, state):
+        """Return mean and std of action distribution."""
+        features = self.features(state)
+        mean = self.mean_head(features)
+
+        # Clamp log_std for numerical stability
+        log_std = torch.clamp(self.log_std, self.log_std_min, self.log_std_max)
+        std = torch.exp(log_std)
+
+        return mean, std
+
+    def get_distribution(self, state):
+        """Return a Normal distribution for sampling."""
+        mean, std = self.forward(state)
+        return torch.distributions.Normal(mean, std)
+
+    def sample(self, state, deterministic=False):
+        """
+        Sample action from policy.
+
+        Args:
+            state: Current state
+            deterministic: If True, return mean (no sampling)
+        """
+        mean, std = self.forward(state)
+        if deterministic:
+            return mean
+        else:
+            noise = torch.randn_like(mean)
+            return mean + std * noise
+
+    def log_prob(self, state, action):
+        """Compute log probability of action."""
+        dist = self.get_distribution(state)
+        # Sum log probs across action dimensions
+        return dist.log_prob(action).sum(dim=-1)
+
+
+# Example: Continuous control with 3D state, 2D action
+policy = DiagonalGaussianPolicy(state_dim=3, action_dim=2)
+
+state = torch.tensor([[1.0, -0.5, 0.3]])
+mean, std = policy(state)
+print(f"Mean action: {mean.detach().numpy()}")
+print(f"Standard deviation: {std.detach().numpy()}")
+
+# Sample actions
+actions = torch.stack([policy.sample(state) for _ in range(5)])
+print(f"Sampled actions:\n{actions.detach().numpy()}")
+```
+
+</Implementation>
+
+## Why Stochastic Policies?
+
+### 1. Exploration
+
+<Intuition>
+
+The most obvious reason: stochastic policies naturally explore. Instead of always taking the same action in a state, they occasionally try alternatives.
+
+Unlike epsilon-greedy (which is an ad-hoc addition to deterministic policies), stochasticity is built into the policy itself. And importantly, the *amount* of exploration can be learned - the policy can become more deterministic as it becomes more confident.
+
+</Intuition>
+
+### 2. Policy Gradients Require Them
+
+<Mathematical>
+
+The policy gradient theorem requires computing $\nabla_\theta \log \pi_\theta(a|s)$. For a deterministic policy where $\pi(a|s) \in \{0, 1\}$:
+
+- The gradient is zero almost everywhere (no learning signal)
+- The gradient is undefined at the discontinuity
+
+Stochastic policies have smooth, well-defined gradients everywhere. This is essential for gradient-based optimization.
+
+</Mathematical>
+
+### 3. Genuine Optimality
+
+<Intuition>
+
+Sometimes, randomness is the best strategy:
+
+**Game theory**: In rock-paper-scissors, the Nash equilibrium is playing each option with probability 1/3. Any deterministic strategy can be exploited.
+
+**Partial observability**: When you can't distinguish between states that require different actions, randomizing can be optimal.
+
+**Multi-modal rewards**: If multiple actions are equally good, a stochastic policy can capture this uncertainty.
+
+</Intuition>
+
+<Example>
+
+**The Stochastic Gridworld**
+
+Consider a gridworld where:
+- Two paths lead to the goal with equal expected reward
+- Path A is shorter but riskier (50% chance of penalty)
+- Path B is longer but safe
+
+A deterministic policy must commit to one path. A stochastic policy can mix between them based on the actual risk-reward tradeoff, potentially achieving better expected performance under distribution shift.
+
+</Example>
+
+## Parameterized Policies
+
+<Definition title="Parameterized Policy">
+
+A parameterized policy $\pi_\theta(a|s)$ is a policy whose behavior is determined by a vector of parameters $\theta$. By adjusting $\theta$, we change what actions the policy prefers.
+
+</Definition>
+
+<Mathematical>
+
+The parameters $\theta$ can be:
+- **Linear weights**: $\theta = \{W, b\}$ where $h(s, a) = W_a^\top s + b_a$
+- **Neural network weights**: All weights and biases in a deep network
+- **Any differentiable function parameters**
+
+The key requirement is that $\pi_\theta(a|s)$ must be differentiable with respect to $\theta$. This enables gradient-based learning.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+# Example: Simple linear softmax policy
+
+class LinearSoftmaxPolicy:
+    """
+    Linear softmax policy (no neural network).
+
+    h(s, a) = theta[a] @ s
+    pi(a|s) = softmax(h(s, :))
+    """
+
+    def __init__(self, state_dim, n_actions):
+        self.n_actions = n_actions
+        # One weight vector per action
+        self.theta = np.zeros((n_actions, state_dim))
+
+    def preferences(self, state):
+        """Compute preference for each action: theta @ state."""
+        return self.theta @ state
+
+    def probabilities(self, state):
+        """Convert preferences to probabilities via softmax."""
+        h = self.preferences(state)
+        h = h - np.max(h)  # Numerical stability
+        exp_h = np.exp(h)
+        return exp_h / np.sum(exp_h)
+
+    def sample(self, state):
+        """Sample action from policy."""
+        probs = self.probabilities(state)
+        return np.random.choice(self.n_actions, p=probs)
+
+    def gradient_log_prob(self, state, action):
+        """
+        Compute gradient of log pi(a|s) w.r.t. theta.
+
+        For softmax: grad_theta log pi(a|s) = phi(s,a) - E_pi[phi(s,a')]
+        where phi(s,a) is the feature for (s,a) pair.
+        """
+        probs = self.probabilities(state)
+        grad = np.zeros_like(self.theta)
+
+        # For linear policy: phi(s,a) = s for the a-th row
+        for a in range(self.n_actions):
+            if a == action:
+                grad[a] = state * (1 - probs[a])  # Chosen action
+            else:
+                grad[a] = -state * probs[a]  # Other actions
+
+        return grad
+
+
+# Demonstrate gradient direction
+policy = LinearSoftmaxPolicy(state_dim=3, n_actions=4)
+state = np.array([1.0, 0.5, -0.3])
+action = 2  # Suppose we took action 2
+
+print(f"Current probabilities: {policy.probabilities(state).round(3)}")
+grad = policy.gradient_log_prob(state, action)
+print(f"Gradient shape: {grad.shape}")
+print(f"Gradient for action {action} (should be positive): {grad[action]}")
+```
+
+</Implementation>
+
+## Summary
+
+Stochastic policies are central to policy gradient methods:
+
+- **Representation**: Probability distributions over actions (softmax for discrete, Gaussian for continuous)
+- **Temperature**: Controls exploration vs exploitation
+- **Parameters**: Learnable weights that we optimize via gradients
+- **Advantages**: Natural exploration, smooth gradients, genuine optimality in some settings
+
+The next question is: given a parameterized stochastic policy, what exactly are we trying to optimize? That's the policy objective.

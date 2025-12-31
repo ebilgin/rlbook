@@ -1,0 +1,158 @@
+---
+title: "From Bandits to Sequential Decisions"
+slug: "from-bandits-to-mdps"
+section: "Markov Decision Processes"
+description: "Why we need states: when actions have lasting consequences"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# From Bandits to Sequential Decisions
+
+In the bandit problems we explored earlier, every decision was independent. Pull an arm, get a reward, repeat. Your choice didn't affect what would happen next time.
+
+But most interesting problems aren't like that. Consider:
+
+- **Playing chess**: Your move changes the board, affecting all future possibilities
+- **Treating a patient**: Today's medication affects tomorrow's symptoms
+- **Navigating a city**: Where you go now determines where you can go next
+
+These are **sequential decision problems**. Your actions don't just generate rewards—they change the world.
+
+## What Bandits Miss
+
+<Intuition>
+
+Imagine you're a robot at a T-intersection. You can go left or right.
+
+- Go **left**: You find a +5 reward, but now you're at a dead end
+- Go **right**: You find a +1 reward, but the path continues to a +100 treasure
+
+A bandit would tell you: "Left is better! +5 > +1!"
+
+But that's wrong. Right leads to much greater total reward. The bandit framework fails because it ignores **where your action takes you**.
+
+</Intuition>
+
+The key insight is that in sequential problems:
+
+1. **Actions have lasting consequences** beyond immediate reward
+2. **The situation changes** based on what you do
+3. **Future rewards depend** on your current choice
+
+We need a framework that captures this—and that's the Markov Decision Process.
+
+## The Missing Piece: State
+
+<Definition title="State">
+A complete description of the situation that the agent faces. The state contains all information needed to predict future rewards and transitions.
+</Definition>
+
+States are the key addition that MDPs bring. In bandits, there was implicitly only one state—you were always in the same situation. In MDPs:
+
+- **States** represent where you are
+- **Actions** move you between states
+- **Rewards** depend on states and transitions
+
+<Example title="GridWorld as an MDP">
+
+Consider a 4×4 grid where an agent wants to reach a goal:
+
+<div className="my-6 flex justify-center">
+  <div className="inline-block">
+    <div style={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '2px'}}>
+      <div className="w-12 h-12 bg-blue-600/40 border border-slate-600 rounded flex items-center justify-center text-lg">🤖</div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-slate-700/50 border border-slate-600 rounded flex items-center justify-center"></div><div className="w-12 h-12 bg-emerald-600/40 border border-slate-600 rounded flex items-center justify-center text-lg">🎯</div>
+    </div>
+  </div>
+</div>
+
+- **States**: Each of the 16 cells is a different state
+- **Actions**: Up, Down, Left, Right
+- **Transitions**: Moving in a direction changes which cell you're in
+- **Rewards**: -1 per step (encourages efficiency), +10 for reaching the goal
+
+This is fundamentally different from a bandit. Your "left" action from cell (0,0) does something completely different than "left" from cell (2,1).
+
+</Example>
+
+## Sequential vs Independent Decisions
+
+Let's make the distinction concrete:
+
+<div className="grid md:grid-cols-2 gap-6 my-6">
+  <div className="p-4 bg-gradient-to-br from-slate-800/50 to-slate-700/30 rounded-lg border border-slate-600">
+    <h4 className="font-semibold text-slate-300 mb-3">🎰 Bandit Problems</h4>
+    <ul className="text-slate-400 text-sm space-y-2">
+      <li>Each decision is independent</li>
+      <li>No concept of "state"</li>
+      <li>Action → Reward, that's it</li>
+      <li>Goal: Find the best single action</li>
+    </ul>
+  </div>
+  <div className="p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 ring-2 ring-cyan-500/20">
+    <h4 className="font-semibold text-cyan-400 mb-3">🗺️ Sequential Decisions (MDPs)</h4>
+    <ul className="text-slate-400 text-sm space-y-2">
+      <li>Decisions affect future situations</li>
+      <li>Current state determines options</li>
+      <li>Action → Reward + New State</li>
+      <li>Goal: Find the best sequence of actions</li>
+    </ul>
+  </div>
+</div>
+
+## When Do You Need an MDP?
+
+Ask yourself these questions:
+
+<Tip>
+If you answer "yes" to any of these, you're dealing with a sequential decision problem:
+
+1. Does my action change what happens next?
+2. Do I need to think multiple steps ahead?
+3. Does the best choice now depend on where I'll end up?
+</Tip>
+
+Here are some examples categorized by type:
+
+<div className="my-6 overflow-x-auto">
+
+| Problem | Bandit or MDP? | Why |
+|---------|----------------|-----|
+| Choosing which ad to show | Bandit | Each impression is independent |
+| Playing a video game | **MDP** | Actions change the game state |
+| A/B testing a webpage | Bandit | Users don't return (or we treat each visit independently) |
+| Training a robot arm | **MDP** | Each movement changes position |
+| Recommending a movie | It depends! | Single recommendation = bandit; session = MDP |
+
+</div>
+
+<Mathematical>
+
+Formally, a bandit is actually a special case of an MDP with only one state. If we have state space $\mathcal{S} = \{s_0\}$, then:
+
+- Every action returns you to the same state
+- No sequential structure exists
+- It reduces to: pick the best arm
+
+MDPs generalize this by allowing multiple states and transitions between them.
+
+</Mathematical>
+
+## The Transition to MDPs
+
+What we need is a framework that captures:
+
+- **States**: Different situations the agent can be in
+- **Actions**: Choices available in each state
+- **Transitions**: How actions move you between states
+- **Rewards**: Feedback for each transition
+- **Time**: Discounting to handle infinite horizons
+
+This is exactly what Markov Decision Processes provide.
+
+<Note>
+The name "Markov Decision Process" comes from Andrey Markov, who studied stochastic processes with the "memoryless" property. We'll explore what this means in the Markov Property section.
+</Note>
+
+In the next section, we'll formalize these five components and see how they work together.

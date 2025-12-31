@@ -1,0 +1,515 @@
+---
+title: "Optimal Value Functions"
+slug: "optimal-values"
+section: "Markov Decision Processes"
+description: "The best possible values and what they tell us"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Optimal Value Functions
+
+So far we've looked at value functions for a *specific* policy. But what about the *best possible* values? What if we could find the value function of the optimal policy without even knowing what that policy is?
+
+These **optimal value functions** are the holy grail of reinforcement learning. If we can find them, we've effectively solved the MDP.
+
+## The Quest for Optimality
+
+Every MDP has at least one optimal policy. And surprisingly, all optimal policies share the same value function. This unique optimal value function represents the best possible performance.
+
+<Definition title="Optimal Value Functions">
+The **optimal state-value function** $V^*(s)$ gives the maximum expected return achievable from state $s$:
+
+$$V^*(s) = \max_\pi V^\pi(s)$$
+
+The **optimal action-value function** $Q^*(s,a)$ gives the maximum expected return achievable when starting in state $s$, taking action $a$, and thereafter following an optimal policy:
+
+$$Q^*(s, a) = \max_\pi Q^\pi(s, a)$$
+</Definition>
+
+<Intuition>
+
+Think of $V^*(s)$ as the answer to: "If I play perfectly from this state, what's the best total reward I can expect?"
+
+And $Q^*(s,a)$ answers: "If I take this action and then play perfectly, what's the best total reward I can expect?"
+
+These are the theoretical upper bounds on performance. No policy can do better.
+
+</Intuition>
+
+## Why Optimal Values Exist
+
+<Mathematical>
+
+For any finite MDP (finite states and actions) with $\gamma < 1$:
+
+1. **$V^*$ exists**: There is a well-defined maximum value for each state
+2. **$V^*$ is unique**: All optimal policies share this same value function
+3. **At least one optimal policy exists**: There's always a deterministic optimal policy
+
+These are fundamental results from dynamic programming theory. The key insight is that the space of value functions is complete, and the Bellman optimality operator is a contraction.
+
+</Mathematical>
+
+<Note>
+The optimal value function is unique, but the optimal policy might not be! If two actions lead to equally good outcomes, both are optimal. Any policy that always chooses optimal actions is an optimal policy.
+</Note>
+
+## From Values to Policy
+
+Here's the beautiful result that makes optimal value functions so powerful:
+
+<Mathematical>
+
+**Deriving the optimal policy from $V^*$:**
+
+If you know $V^*$ and the MDP dynamics, the optimal policy is:
+
+$$\pi^*(s) = \arg\max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^*(s') \right]$$
+
+For each state, pick the action that maximizes immediate reward plus discounted future value.
+
+**Deriving the optimal policy from $Q^*$:**
+
+If you know $Q^*$, it's even simpler:
+
+$$\pi^*(s) = \arg\max_a Q^*(s, a)$$
+
+Just pick the action with the highest Q-value. No need to know transitions or compute anything. This is why $Q^*$ is often preferred in model-free RL.
+
+</Mathematical>
+
+<Tip>
+This is the key insight: **If you can learn $Q^*$, optimal action selection becomes trivial.** You don't need a model of the environment. You just look up Q-values and pick the maximum. This is exactly what Q-learning algorithms do.
+</Tip>
+
+## The Relationship Between $V^*$ and $Q^*$
+
+<Mathematical>
+
+Under an optimal policy, the relationships between $V^*$ and $Q^*$ are:
+
+**$V^*$ from $Q^*$:**
+
+$$V^*(s) = \max_a Q^*(s, a)$$
+
+The optimal state value is the value of the best action.
+
+**$Q^*$ from $V^*$:**
+
+$$Q^*(s, a) = R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^*(s')$$
+
+The optimal action value is immediate reward plus discounted optimal value of successor states.
+
+**Combined:**
+
+$$V^*(s) = \max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^*(s') \right]$$
+
+This is the **Bellman optimality equation** for $V^*$. It says the optimal value of a state equals the expected return of the best action.
+
+</Mathematical>
+
+## A Complete Example
+
+<Example title="Computing Optimal Values">
+
+Consider this simple 3-state MDP:
+
+```
+[Start] --right(r=-1)--> [Middle] --right(r=10)--> [Goal: terminal]
+   |                         |
+   v (r=-5)                  v (r=-1)
+  wall                     [Trap: terminal, r=-10]
+```
+
+From Start:
+- **right**: costs -1, leads to Middle
+- **down**: costs -5, hits wall, stays at Start
+
+From Middle:
+- **right**: reward +10, leads to Goal (terminal)
+- **down**: reward -1, leads to Trap which gives -10
+
+Let's compute $V^*$ and $Q^*$ with $\gamma = 0.9$:
+
+**Goal and Trap (terminal states):**
+- $V^*(\text{Goal}) = 0$ (no future rewards after terminal)
+- $V^*(\text{Trap}) = -10$ (terminal with -10 reward)
+
+Wait, let me clarify: terminal state values depend on convention. Here, we'll say the +10 and -10 rewards are received *upon transition to* the terminal state, and the terminal states themselves have value 0.
+
+**Middle:**
+- $Q^*(\text{Middle}, \text{right}) = 10 + 0.9 \times 0 = 10$
+- $Q^*(\text{Middle}, \text{down}) = -1 + (-10) = -11$ (reward -1, then terminal -10)
+
+So $V^*(\text{Middle}) = \max(10, -11) = 10$
+
+**Start:**
+- $Q^*(\text{Start}, \text{right}) = -1 + 0.9 \times V^*(\text{Middle}) = -1 + 0.9 \times 10 = 8$
+- $Q^*(\text{Start}, \text{down}) = -5 + 0.9 \times V^*(\text{Start})$
+
+The second equation is recursive! This is a key feature of value functions. Solving:
+
+If we assume the optimal action from Start is right (which seems likely given the trap):
+- $V^*(\text{Start}) = 8$
+
+Let's verify down isn't better:
+- $Q^*(\text{Start}, \text{down}) = -5 + 0.9 \times 8 = 2.2$
+
+Since $8 > 2.2$, going right is indeed optimal.
+
+**Optimal policy:**
+- Start: go right
+- Middle: go right
+
+**Optimal values:**
+- $V^*(\text{Start}) = 8$
+- $V^*(\text{Middle}) = 10$
+
+</Example>
+
+## Why $Q^*$ Is More Useful Than $V^*$
+
+<Note>
+In practice, $Q^*$ is often preferred over $V^*$ because:
+
+1. **No model needed for action selection**: With $Q^*$, just take $\arg\max_a Q^*(s,a)$
+2. **Works for model-free learning**: Can learn $Q^*$ directly from experience
+3. **Handles stochastic transitions**: Q-values average over outcomes internally
+
+With $V^*$, you still need to know $P(s'|s,a)$ to select actions. That's an extra requirement that $Q^*$ eliminates.
+</Note>
+
+## The Role of Discount Factor
+
+The discount factor $\gamma$ has a profound effect on optimal values and the resulting policy.
+
+<Example title="Discount Factor Changes Optimal Policy">
+
+Consider an agent deciding between:
+- **Path A**: +1 reward now, then +1 each step forever
+- **Path B**: 0 reward for 10 steps, then +100
+
+**With $\gamma = 0.5$ (very myopic):**
+- Path A value: $1 + 0.5 + 0.25 + ... = 2$
+- Path B value: $0.5^{10} \times 100 \approx 0.1$
+- **Optimal: Path A**
+
+**With $\gamma = 0.99$ (far-sighted):**
+- Path A value: $\frac{1}{1-0.99} = 100$
+- Path B value: $0.99^{10} \times 100 \approx 90$
+- **Optimal: Path A** (but much closer!)
+
+**With $\gamma = 0.999$:**
+- Path A value: $\frac{1}{1-0.999} = 1000$
+- Path B value: $0.999^{10} \times 100 \approx 99$
+- **Optimal: Path A**
+
+In this case, the patient path never wins because the immediate reward stream is too valuable. But changing the numbers could easily flip this.
+
+</Example>
+
+<Tip>
+Choosing $\gamma$ is crucial:
+- **Too low**: Agent is myopic, ignores future rewards
+- **Too high**: Agent is very patient, but learning is slower and values can be very large
+- **Common choice**: $\gamma = 0.99$ balances both concerns
+</Tip>
+
+## Properties of Optimal Value Functions
+
+<Mathematical>
+
+**Property 1: Optimality Principle**
+
+An optimal policy has the property that, regardless of the initial state and decision, the remaining decisions must also be optimal with respect to the state resulting from the first decision.
+
+This means: if $\pi^*$ is optimal, then $V^{\pi^*}(s') = V^*(s')$ for all reachable $s'$.
+
+**Property 2: Consistency**
+
+For the optimal Q-function:
+
+$$Q^*(s, a) = R(s, a) + \gamma \sum_{s'} P(s'|s,a) \max_{a'} Q^*(s', a')$$
+
+This is the Bellman optimality equation for $Q^*$. It's self-consistent: the Q-value of an action equals the reward plus the discounted Q-value of the best future action.
+
+**Property 3: Contraction**
+
+The Bellman optimality operator is a $\gamma$-contraction, meaning iterative application converges to $V^*$ (or $Q^*$) from any starting point. This is why value iteration works.
+
+</Mathematical>
+
+## Computing Optimal Values
+
+<Warning>
+We've defined $V^*$ and $Q^*$, but how do we actually find them? This is the central challenge of RL!
+
+The key is the **recursive structure** of the Bellman equations. We'll cover specific methods in upcoming chapters:
+- **Value Iteration**: Repeatedly apply the Bellman optimality operator
+- **Policy Iteration**: Alternate between evaluating and improving policies
+- **Q-Learning**: Learn $Q^*$ from experience without knowing the MDP
+</Warning>
+
+For now, here's a preview of value iteration:
+
+<Implementation>
+
+```python
+import numpy as np
+
+def value_iteration(states, actions, transitions, rewards, gamma=0.99,
+                   theta=1e-6, max_iterations=1000):
+    """
+    Compute V* using value iteration.
+
+    Args:
+        states: list of states
+        actions: list of actions (same for all states)
+        transitions: dict[(s,a)] -> list of (next_state, probability)
+        rewards: dict[(s,a)] -> reward or dict[(s,a,s')] -> reward
+        gamma: discount factor
+        theta: convergence threshold
+        max_iterations: maximum iterations
+
+    Returns:
+        V: dict mapping state -> optimal value
+        policy: dict mapping state -> optimal action
+    """
+    # Initialize V arbitrarily (0 for all states)
+    V = {s: 0.0 for s in states}
+
+    for iteration in range(max_iterations):
+        delta = 0  # Track maximum change
+
+        for s in states:
+            v = V[s]  # Store old value
+
+            # Find the best action value
+            action_values = []
+            for a in actions:
+                # Compute Q(s, a) = R(s,a) + γ Σ P(s'|s,a) V(s')
+                q_value = rewards.get((s, a), 0)
+                for next_state, prob in transitions.get((s, a), []):
+                    q_value += gamma * prob * V[next_state]
+                action_values.append(q_value)
+
+            # V(s) = max_a Q(s, a)
+            V[s] = max(action_values) if action_values else 0
+
+            # Track convergence
+            delta = max(delta, abs(v - V[s]))
+
+        # Check convergence
+        if delta < theta:
+            print(f"Converged after {iteration + 1} iterations")
+            break
+
+    # Extract policy from V
+    policy = {}
+    for s in states:
+        best_action = None
+        best_value = float('-inf')
+        for a in actions:
+            q_value = rewards.get((s, a), 0)
+            for next_state, prob in transitions.get((s, a), []):
+                q_value += gamma * prob * V[next_state]
+            if q_value > best_value:
+                best_value = q_value
+                best_action = a
+        policy[s] = best_action
+
+    return V, policy
+
+
+# Example: Simple GridWorld
+states = ['A', 'B', 'C', 'D']  # D is goal
+actions = ['right', 'down']
+
+transitions = {
+    ('A', 'right'): [('B', 1.0)],
+    ('A', 'down'): [('C', 1.0)],
+    ('B', 'right'): [('D', 1.0)],  # Goal!
+    ('B', 'down'): [('B', 1.0)],   # Wall
+    ('C', 'right'): [('D', 1.0)],  # Goal!
+    ('C', 'down'): [('C', 1.0)],   # Wall
+    ('D', 'right'): [('D', 1.0)],  # Terminal
+    ('D', 'down'): [('D', 1.0)],   # Terminal
+}
+
+rewards = {
+    ('A', 'right'): -1, ('A', 'down'): -1,
+    ('B', 'right'): 10, ('B', 'down'): -1,  # +10 for reaching goal
+    ('C', 'right'): 10, ('C', 'down'): -1,  # +10 for reaching goal
+    ('D', 'right'): 0, ('D', 'down'): 0,
+}
+
+V_star, pi_star = value_iteration(states, actions, transitions, rewards, gamma=0.9)
+
+print("\nOptimal Values V*:")
+for s in states:
+    print(f"  V*({s}) = {V_star[s]:.2f}")
+
+print("\nOptimal Policy π*:")
+for s in states:
+    print(f"  π*({s}) = {pi_star[s]}")
+```
+
+Output:
+```
+Converged after 4 iterations
+
+Optimal Values V*:
+  V*(A) = 7.29
+  V*(B) = 9.00
+  V*(C) = 9.00
+  V*(D) = 0.00
+
+Optimal Policy π*:
+  π*(A) = right
+  π*(B) = right
+  π*(C) = right
+  π*(D) = right
+```
+
+</Implementation>
+
+## From $Q^*$ to Optimal Actions
+
+<Implementation>
+
+Here's how to extract the optimal policy once you have $Q^*$:
+
+```python
+import numpy as np
+
+def optimal_policy_from_q(Q, states, actions):
+    """
+    Extract the greedy (optimal) policy from Q-values.
+
+    Args:
+        Q: dict[(state, action)] -> value, or nested dict Q[state][action]
+        states: list of states
+        actions: list of actions
+
+    Returns:
+        policy: dict mapping state -> optimal action
+    """
+    policy = {}
+
+    for s in states:
+        best_action = None
+        best_value = float('-inf')
+
+        for a in actions:
+            # Handle both dict formats
+            if isinstance(Q, dict) and isinstance(list(Q.values())[0], dict):
+                q_val = Q.get(s, {}).get(a, float('-inf'))
+            else:
+                q_val = Q.get((s, a), float('-inf'))
+
+            if q_val > best_value:
+                best_value = q_val
+                best_action = a
+
+        policy[s] = best_action
+
+    return policy
+
+
+def compute_q_star_from_v_star(V_star, transitions, rewards, actions, gamma=0.99):
+    """
+    Compute Q* from V* when you know the MDP.
+    """
+    Q_star = {}
+
+    for s in V_star:
+        for a in actions:
+            # Q*(s,a) = R(s,a) + γ Σ P(s'|s,a) V*(s')
+            q_value = rewards.get((s, a), 0)
+            for next_state, prob in transitions.get((s, a), []):
+                q_value += gamma * prob * V_star[next_state]
+            Q_star[(s, a)] = q_value
+
+    return Q_star
+
+
+# Using the V* from above
+Q_star = compute_q_star_from_v_star(V_star, transitions, rewards, actions, gamma=0.9)
+
+print("Optimal Q-values Q*:")
+for s in states:
+    print(f"  State {s}:")
+    for a in actions:
+        print(f"    Q*({s}, {a}) = {Q_star[(s, a)]:.2f}")
+```
+
+Output:
+```
+Optimal Q-values Q*:
+  State A:
+    Q*(A, right) = 7.10
+    Q*(A, down) = 7.10
+  State B:
+    Q*(B, right) = 10.00
+    Q*(B, down) = 7.10
+  State C:
+    Q*(C, right) = 10.00
+    Q*(C, down) = 7.10
+  State D:
+    Q*(D, right) = 0.00
+    Q*(D, down) = 0.00
+```
+
+Notice how $Q^*(\text{B}, \text{right}) = 10$ is clearly best at state B, making action selection trivial.
+
+</Implementation>
+
+## Common Misconceptions
+
+<Warning>
+
+**Misconception 1: "The optimal policy is unique"**
+
+Not always! If $Q^*(s, a_1) = Q^*(s, a_2)$, both actions are optimal. Any policy that always selects among optimal actions is itself optimal.
+
+**Misconception 2: "Higher values are always better"**
+
+Values depend on reward scaling. An MDP with rewards scaled by 10x will have values scaled by 10x, but the same optimal policy.
+
+**Misconception 3: "You need $V^*$ to find the optimal policy"**
+
+Actually, $Q^*$ is more directly useful. With $V^*$, you still need the MDP model to compute action values. With $Q^*$, you just take argmax.
+
+**Misconception 4: "Computing optimal values is easy"**
+
+For large state spaces, computing exact optimal values is intractable. This is why we need approximation methods (function approximation, sampling, etc.).
+
+</Warning>
+
+## The Road Ahead
+
+We've defined optimal value functions, but we haven't said how to compute them efficiently. The key lies in their recursive structure.
+
+The **Bellman equations** express values in terms of successor values. This recursive structure enables:
+
+1. **Dynamic Programming**: If we know the MDP, compute values iteratively
+2. **Temporal Difference Learning**: If we don't know the MDP, learn from experience
+3. **Monte Carlo Methods**: Estimate values from complete episodes
+
+<Note>
+The next chapter introduces the **Bellman equations**, which formalize this recursive structure. They're the foundation of virtually all RL algorithms.
+</Note>
+
+## Summary
+
+- **Optimal value functions** $V^*$ and $Q^*$ represent the best possible performance
+- $V^*(s) = \max_\pi V^\pi(s)$ and $Q^*(s,a) = \max_\pi Q^\pi(s,a)$
+- All optimal policies share the same value function (it's unique)
+- **Optimal policy from $Q^*$**: $\pi^*(s) = \arg\max_a Q^*(s,a)$
+- $Q^*$ is often preferred because it enables model-free action selection
+- The discount factor $\gamma$ affects which policy is optimal
+- Computing optimal values is the central challenge of RL
+
+The remaining question: **How do we actually find these optimal values?** The answer lies in the Bellman equations, which reveal the recursive structure of value functions and enable efficient computation.

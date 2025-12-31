@@ -1,0 +1,332 @@
+---
+title: "On-Policy Behavior"
+slug: "on-policy-behavior"
+section: "Temporal Difference Learning"
+description: "Why SARSA is safe but sometimes suboptimal"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# On-Policy Behavior
+
+SARSA has a distinctive characteristic that sets it apart from Q-learning: it's an **on-policy** algorithm. This seemingly technical distinction has profound practical implications—it makes SARSA "safe" in ways that Q-learning is not.
+
+## What Does "On-Policy" Mean?
+
+<Definition title="On-Policy Learning">
+A learning method is **on-policy** if it learns about the policy it is currently following. The values it estimates are for the behavior policy, including any exploration. SARSA learns $Q^\pi$ where $\pi$ is the epsilon-greedy policy it follows.
+</Definition>
+
+<Intuition>
+
+Think of it this way:
+
+**On-policy (SARSA)**: "I'm learning how good my actions are, given how I actually behave—including my mistakes and random exploration."
+
+**Off-policy (Q-learning)**: "I'm learning how good the optimal actions are, regardless of what I actually do."
+
+The difference matters when exploration can be costly.
+
+</Intuition>
+
+## SARSA Learns $Q^\pi$, Not $Q^*$
+
+<Mathematical>
+
+Let's be precise about what SARSA converges to.
+
+SARSA's update uses $Q(S_{t+1}, A_{t+1})$ where $A_{t+1}$ is sampled from the current policy $\pi$ (typically epsilon-greedy). This means SARSA approximates:
+
+$$Q^\pi(s, a) = \mathbb{E}_\pi\left[R_{t+1} + \gamma Q^\pi(S_{t+1}, A_{t+1}) \mid S_t = s, A_t = a\right]$$
+
+This is the value of action $a$ in state $s$ under policy $\pi$—the policy we're following.
+
+In contrast, Q-learning approximates:
+
+$$Q^*(s, a) = \mathbb{E}\left[R_{t+1} + \gamma \max_{a'} Q^*(S_{t+1}, a') \mid S_t = s, A_t = a\right]$$
+
+This is the value under the optimal policy $\pi^*$.
+
+The key difference: SARSA's Q-values include the "cost" of exploration. Q-learning's don't.
+
+</Mathematical>
+
+<Warning>
+**Common Misconception**: "SARSA learns $Q^*$"
+
+This is wrong! SARSA learns $Q^\pi$ for the epsilon-greedy policy. Only as $\varepsilon \to 0$ does $Q^\pi \to Q^*$. If you train SARSA with $\varepsilon = 0.1$, the Q-values reflect what happens with 10% random actions.
+</Warning>
+
+## The Cliff Walking Example
+
+This classic example from Sutton & Barto perfectly illustrates the on-policy/off-policy distinction.
+
+<Example>
+**The Cliff Walking Environment**
+
+Imagine a 4x12 grid:
+
+```
+┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐
+│   │   │   │   │   │   │   │   │   │   │   │   │
+├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤
+│   │   │   │   │   │   │   │   │   │   │   │   │
+├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤
+│   │   │   │   │   │   │   │   │   │   │   │   │
+├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤
+│ S │ C │ C │ C │ C │ C │ C │ C │ C │ C │ C │ G │
+└───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘
+```
+
+- **S**: Start position
+- **G**: Goal (reward +10)
+- **C**: Cliff (reward -100, episode ends, back to start)
+- Every other step: reward -1
+
+**The Dilemma**:
+- The shortest path runs right along the cliff edge
+- But with epsilon-greedy exploration, you might randomly step into the cliff!
+
+</Example>
+
+<Intuition>
+
+**What SARSA learns**: "If I walk near the cliff, my random exploration might push me in. Better to take the safe path far from the edge."
+
+**What Q-learning learns**: "The optimal path is along the cliff. I should go that way."
+
+Both algorithms find the same optimal policy if $\varepsilon = 0$. But with exploration:
+
+- SARSA takes the safe path (longer but avoids cliff disasters)
+- Q-learning takes the risky path (shorter but falls off during training)
+
+</Intuition>
+
+## Visualizing the Difference
+
+<Example>
+**Learned Policies in Cliff Walking**
+
+After training with $\varepsilon = 0.1$:
+
+**SARSA's path** (safe route):
+```
+→ → → → → → → → → → → ↓
+                        ↓
+                        ↓
+S                       G
+```
+
+**Q-learning's path** (optimal but risky):
+```
+S → → → → → → → → → → G
+```
+
+SARSA's path is longer but accounts for the risk of falling. Q-learning's path is optimal but the agent falls off the cliff frequently during training.
+</Example>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class CliffWalking:
+    """The Cliff Walking environment from Sutton & Barto."""
+
+    def __init__(self):
+        self.height = 4
+        self.width = 12
+        self.start = (3, 0)
+        self.goal = (3, 11)
+        # Cliff is the bottom row between start and goal
+        self.cliff = [(3, i) for i in range(1, 11)]
+        self.state = None
+
+    def reset(self):
+        self.state = self.start
+        return self.state
+
+    def step(self, action):
+        """Actions: 0=UP, 1=DOWN, 2=LEFT, 3=RIGHT"""
+        row, col = self.state
+
+        if action == 0:
+            row = max(0, row - 1)
+        elif action == 1:
+            row = min(self.height - 1, row + 1)
+        elif action == 2:
+            col = max(0, col - 1)
+        elif action == 3:
+            col = min(self.width - 1, col + 1)
+
+        self.state = (row, col)
+
+        # Check for cliff
+        if self.state in self.cliff:
+            return self.start, -100, False, {}  # Back to start
+
+        # Check for goal
+        if self.state == self.goal:
+            return self.state, -1, True, {}
+
+        return self.state, -1, False, {}
+
+
+def compare_sarsa_qlearning(num_episodes=500, num_runs=100):
+    """Compare SARSA and Q-learning on Cliff Walking."""
+    sarsa_rewards = np.zeros((num_runs, num_episodes))
+    qlearn_rewards = np.zeros((num_runs, num_episodes))
+
+    for run in range(num_runs):
+        # Create agents
+        sarsa_agent = SARSAgent(n_actions=4, epsilon=0.1, alpha=0.5)
+        qlearn_agent = QLearningAgent(n_actions=4, epsilon=0.1, alpha=0.5)
+
+        env_sarsa = CliffWalking()
+        env_qlearn = CliffWalking()
+
+        for ep in range(num_episodes):
+            # Train SARSA
+            reward_sarsa, _ = train_sarsa_episode(env_sarsa, sarsa_agent)
+            sarsa_rewards[run, ep] = reward_sarsa
+
+            # Train Q-learning
+            reward_qlearn, _ = train_qlearning_episode(env_qlearn, qlearn_agent)
+            qlearn_rewards[run, ep] = reward_qlearn
+
+    return sarsa_rewards.mean(axis=0), qlearn_rewards.mean(axis=0)
+```
+
+</Implementation>
+
+## Why Is SARSA "Safer"?
+
+<Intuition>
+
+SARSA's safety comes from a subtle but important fact: its Q-values account for the exploration policy.
+
+When SARSA estimates $Q(s, a)$, it considers what will happen if you:
+1. Take action $a$ from state $s$
+2. Then follow the epsilon-greedy policy (with its random exploration)
+
+If the epsilon-greedy policy sometimes leads to disaster (like falling off a cliff), SARSA's Q-values will be lower for nearby states. This naturally leads to safer behavior.
+
+Q-learning, in contrast, estimates what would happen if you always took the best action afterwards. It ignores the fact that you'll sometimes explore randomly.
+
+</Intuition>
+
+<Mathematical>
+
+Consider a state one step from the cliff. Let's compute the Q-value for moving toward the cliff:
+
+**SARSA's calculation:**
+$$Q(s, toward\_cliff) = r + \gamma \mathbb{E}_{A' \sim \pi}[Q(s', A')]$$
+
+With $\varepsilon = 0.1$, there's a 10% chance $A'$ is random and might push you into the cliff. This lowers the expected future value.
+
+**Q-learning's calculation:**
+$$Q(s, toward\_cliff) = r + \gamma \max_{a'} Q(s', a')$$
+
+This assumes you'll take the best action next, ignoring the 10% chance of random movement.
+
+SARSA gives a lower Q-value for risky states, encouraging the agent to stay away.
+
+</Mathematical>
+
+## When Is On-Policy Better?
+
+<Tip>
+**Choose SARSA (on-policy) when:**
+- Exploration can be costly (falling off cliffs, breaking robots)
+- You want online performance during training to be good
+- You care about safety during the learning process
+- The environment is risky and mistakes are expensive
+</Tip>
+
+<Tip>
+**Choose Q-learning (off-policy) when:**
+- You want to learn the optimal policy regardless of behavior
+- Exploration costs are low
+- You can afford to make mistakes during training
+- You want to learn from data collected by other policies
+</Tip>
+
+## The Exploration-Exploitation-Safety Tradeoff
+
+<Intuition>
+
+There's a three-way tradeoff at play:
+
+1. **Exploration**: Try new actions to find better strategies
+2. **Exploitation**: Use what you've learned to get good rewards
+3. **Safety**: Avoid costly mistakes
+
+SARSA tends toward safety—it accounts for the cost of exploration in its values. Q-learning tends toward optimality—it finds the best policy regardless of exploration costs.
+
+Neither is universally better. The choice depends on your domain.
+
+</Intuition>
+
+## Real-World Implications
+
+<Example>
+**When SARSA's Caution Matters**
+
+**Robot navigation**: A robot learning to navigate shouldn't learn that "going near the stairs is fine" if its random exploration might make it fall.
+
+**Financial trading**: An algorithm that occasionally makes random trades shouldn't learn strategies that assume perfect execution.
+
+**Autonomous vehicles**: During training, random exploration shouldn't lead to paths that assume perfect control.
+
+In all these cases, SARSA's on-policy nature provides a safety margin.
+</Example>
+
+## Expected SARSA: A Middle Ground
+
+<Intuition>
+
+Recall Expected SARSA from the previous section:
+
+$$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha \left[ R_{t+1} + \gamma \sum_a \pi(a|S_{t+1}) Q(S_{t+1}, a) - Q(S_t, A_t) \right]$$
+
+Interestingly, Expected SARSA is still on-policy (it uses the policy probabilities), but with lower variance than regular SARSA. It often performs better than both SARSA and Q-learning in practice.
+
+</Intuition>
+
+## The Convergence Picture
+
+<Mathematical>
+
+Both SARSA and Q-learning converge under appropriate conditions:
+
+**SARSA converges to $Q^\pi$** where $\pi$ is the policy being followed. If $\pi$ is GLIE (Greedy in the Limit with Infinite Exploration)—meaning it eventually becomes greedy—then SARSA converges to $Q^*$.
+
+**Q-learning converges to $Q^*$** directly, regardless of the behavior policy (as long as all state-action pairs are visited).
+
+GLIE policies satisfy:
+1. All state-action pairs are explored infinitely often
+2. The policy converges to the greedy policy: $\lim_{k \to \infty} \pi_k(a|s) = \mathbf{1}[a = \arg\max_a Q(s,a)]$
+
+A decaying epsilon-greedy policy (where $\varepsilon \to 0$) is GLIE.
+
+</Mathematical>
+
+## Summary
+
+The on-policy nature of SARSA has important consequences:
+
+| Aspect | SARSA (On-Policy) | Q-Learning (Off-Policy) |
+|--------|-------------------|-------------------------|
+| **Learns** | $Q^\pi$ (current policy) | $Q^*$ (optimal policy) |
+| **Accounts for exploration** | Yes | No |
+| **Safety during training** | Higher | Lower |
+| **Optimal policy** | Only as $\varepsilon \to 0$ | Yes |
+| **Online performance** | Better | Worse |
+| **Sample efficiency** | Similar | Often better |
+
+<Note>
+The choice between SARSA and Q-learning isn't about which is "better"—it's about which matches your needs. In safety-critical applications, SARSA's caution is a feature, not a bug.
+</Note>
+
+In the next chapter, we'll dive deep into Q-learning—the off-policy algorithm that learns optimal values directly. We'll see the famous Cliff Walking comparison in action and understand why Q-learning is perhaps the most influential algorithm in RL history.

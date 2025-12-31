@@ -1,0 +1,409 @@
+---
+title: "Dyna Architecture"
+slug: "dyna"
+section: "Advanced Topics"
+description: "Combining real and simulated experience"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# The Dyna Architecture
+
+Dyna is one of the most elegant ideas in model-based RL: combine model-free learning with model-based planning in a unified framework. After each real experience, the agent also generates simulated experiences from its learned model—amplifying every real interaction many times over.
+
+## The Dyna Idea
+
+<Definition title="Dyna Architecture">
+
+Dyna integrates three processes:
+1. **Direct RL**: Learn from real experience (e.g., Q-learning updates)
+2. **Model Learning**: Build and maintain a model of the environment
+3. **Planning**: Use the model to generate simulated experiences for additional learning
+
+All three happen after each real environment step, creating a virtuous cycle of learning and planning.
+
+</Definition>
+
+<Intuition>
+
+Imagine you're learning to navigate a new city. You take a walk (real experience) and remember what you saw: "From the coffee shop, going left leads to the park." Later, sitting at home, you mentally replay your walk and plan alternative routes (simulated experience): "I wonder what would happen if I had turned right at the bakery..."
+
+Dyna does exactly this: learn from reality, remember what happened, then amplify that learning through imagination.
+
+The beauty is that you can do many imaginary walks for every real one. Each real experience teaches you something directly AND feeds into your mental model for many future imaginary experiences.
+
+</Intuition>
+
+## Dyna-Q: The Algorithm
+
+The classic Dyna algorithm combines tabular Q-learning with a simple deterministic model.
+
+<Mathematical>
+
+After each real transition $(s, a) \rightarrow (r, s')$:
+
+**Step 1: Direct RL** - Update Q from real experience:
+$$Q(s, a) \leftarrow Q(s, a) + \alpha[r + \gamma \max_{a'} Q(s', a') - Q(s, a)]$$
+
+**Step 2: Model Learning** - Remember what happened:
+$$\text{Model}(s, a) \leftarrow (r, s')$$
+
+**Step 3: Planning** - For $n$ iterations:
+1. Sample a previously visited $(s_{\text{sim}}, a_{\text{sim}})$ pair
+2. Query the model: $(r_{\text{sim}}, s'_{\text{sim}}) = \text{Model}(s_{\text{sim}}, a_{\text{sim}})$
+3. Update Q from simulated experience:
+$$Q(s_{\text{sim}}, a_{\text{sim}}) \leftarrow Q(s_{\text{sim}}, a_{\text{sim}}) + \alpha[r_{\text{sim}} + \gamma \max_{a'} Q(s'_{\text{sim}}, a') - Q(s_{\text{sim}}, a_{\text{sim}})]$$
+
+The update equations are identical—only the source of experience differs. Real experience comes from the environment; simulated experience comes from the model.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+from collections import defaultdict
+
+class DynaQ:
+    """
+    Dyna-Q: Q-learning with model-based planning.
+
+    Combines direct RL, model learning, and planning in one algorithm.
+    """
+
+    def __init__(self, n_states, n_actions, alpha=0.1, gamma=0.99,
+                 epsilon=0.1, planning_steps=10):
+        self.n_states = n_states
+        self.n_actions = n_actions
+        self.alpha = alpha
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.planning_steps = planning_steps
+
+        # Q-table
+        self.Q = np.zeros((n_states, n_actions))
+
+        # Model: (state, action) -> (reward, next_state)
+        self.model = {}
+
+        # Track which state-action pairs we've experienced
+        self.experienced = []
+
+    def select_action(self, state):
+        """Epsilon-greedy action selection."""
+        if np.random.random() < self.epsilon:
+            return np.random.randint(self.n_actions)
+        return np.argmax(self.Q[state])
+
+    def update(self, s, a, r, s_prime, done):
+        """
+        Full Dyna-Q update: direct RL + model learning + planning.
+        """
+        # Step 1: Direct RL - learn from real experience
+        if done:
+            target = r
+        else:
+            target = r + self.gamma * np.max(self.Q[s_prime])
+        self.Q[s, a] += self.alpha * (target - self.Q[s, a])
+
+        # Step 2: Model learning - remember this transition
+        self.model[(s, a)] = (r, s_prime, done)
+        if (s, a) not in self.experienced:
+            self.experienced.append((s, a))
+
+        # Step 3: Planning - simulate and learn from model
+        for _ in range(self.planning_steps):
+            # Sample a previously experienced state-action pair
+            s_sim, a_sim = self.experienced[np.random.randint(len(self.experienced))]
+
+            # Query the model
+            r_sim, s_prime_sim, done_sim = self.model[(s_sim, a_sim)]
+
+            # Q-learning update on simulated experience
+            if done_sim:
+                target_sim = r_sim
+            else:
+                target_sim = r_sim + self.gamma * np.max(self.Q[s_prime_sim])
+            self.Q[s_sim, a_sim] += self.alpha * (target_sim - self.Q[s_sim, a_sim])
+
+
+def train_dyna_q(env, agent, episodes=500):
+    """Training loop for Dyna-Q."""
+    returns = []
+
+    for episode in range(episodes):
+        state = env.reset()
+        episode_return = 0
+        done = False
+
+        while not done:
+            action = agent.select_action(state)
+            next_state, reward, done, _ = env.step(action)
+
+            # Dyna-Q update (includes planning!)
+            agent.update(state, action, reward, next_state, done)
+
+            episode_return += reward
+            state = next_state
+
+        returns.append(episode_return)
+
+        if episode % 100 == 0:
+            print(f"Episode {episode}, Return: {np.mean(returns[-100:]):.2f}")
+
+    return returns
+```
+
+</Implementation>
+
+## How Many Planning Steps?
+
+A key hyperparameter in Dyna is $n$: how many planning steps to take after each real step. This creates a sample efficiency vs compute tradeoff.
+
+<Intuition>
+
+Think about it this way:
+- **n = 0**: Pure model-free Q-learning. No imagination, just reality.
+- **n = 5**: For every real step, imagine 5 additional steps. 6x the learning per real interaction.
+- **n = 50**: For every real step, imagine 50 additional steps. Lots of imagination!
+
+More planning means faster learning from fewer real interactions—but each step takes more compute, and planning is only useful if the model is accurate.
+
+</Intuition>
+
+<Example title="The Impact of Planning Steps">
+
+Consider learning to navigate a 10x10 GridWorld maze:
+
+| Planning Steps | Episodes to Solve | Real Environment Steps |
+|----------------|-------------------|------------------------|
+| 0 (pure Q-learning) | ~1500 | ~30,000 |
+| 5 | ~200 | ~4,000 |
+| 50 | ~50 | ~1,000 |
+
+With 50 planning steps, we solve the maze with 30x fewer real interactions! The model, once learned, provides essentially unlimited free learning signal.
+
+</Example>
+
+<Mathematical>
+
+The sample efficiency improvement is roughly linear in planning steps (for a good model). If each real step produces $n+1$ learning updates (1 real + $n$ simulated), we need roughly $\frac{1}{n+1}$ as many real samples to achieve the same learning.
+
+However, this assumes the model is perfect. With model errors:
+- Simulated updates may be wrong
+- More planning can actually hurt if the model is very inaccurate
+- There's a sweet spot depending on model quality
+
+</Mathematical>
+
+## Dyna with Stochastic Models
+
+The basic Dyna uses a deterministic model. For stochastic environments, we need to handle uncertainty.
+
+<Implementation>
+
+```python
+class DynaQStochastic:
+    """
+    Dyna-Q with stochastic model support.
+
+    Learns transition probabilities from counts.
+    """
+
+    def __init__(self, n_states, n_actions, alpha=0.1, gamma=0.99,
+                 epsilon=0.1, planning_steps=10):
+        self.n_states = n_states
+        self.n_actions = n_actions
+        self.alpha = alpha
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.planning_steps = planning_steps
+
+        self.Q = np.zeros((n_states, n_actions))
+
+        # Stochastic model: count-based
+        self.transition_counts = np.zeros((n_states, n_actions, n_states))
+        self.reward_sums = np.zeros((n_states, n_actions))
+        self.visit_counts = np.zeros((n_states, n_actions))
+
+    def update_model(self, s, a, r, s_prime):
+        """Update the stochastic model."""
+        self.transition_counts[s, a, s_prime] += 1
+        self.reward_sums[s, a] += r
+        self.visit_counts[s, a] += 1
+
+    def sample_from_model(self, s, a):
+        """Sample a transition from the learned model."""
+        if self.visit_counts[s, a] == 0:
+            return None, None
+
+        # Sample next state from learned transition probabilities
+        probs = self.transition_counts[s, a] / self.visit_counts[s, a]
+        s_prime = np.random.choice(self.n_states, p=probs)
+
+        # Expected reward
+        r = self.reward_sums[s, a] / self.visit_counts[s, a]
+
+        return r, s_prime
+
+    def update(self, s, a, r, s_prime, done):
+        """Full Dyna-Q update with stochastic model."""
+        # Direct RL
+        target = r if done else r + self.gamma * np.max(self.Q[s_prime])
+        self.Q[s, a] += self.alpha * (target - self.Q[s, a])
+
+        # Model learning
+        self.update_model(s, a, r, s_prime)
+
+        # Planning
+        for _ in range(self.planning_steps):
+            # Sample previously visited state-action
+            visited = np.where(self.visit_counts > 0)
+            if len(visited[0]) == 0:
+                break
+            idx = np.random.randint(len(visited[0]))
+            s_sim, a_sim = visited[0][idx], visited[1][idx]
+
+            # Sample from stochastic model
+            r_sim, s_prime_sim = self.sample_from_model(s_sim, a_sim)
+            if r_sim is None:
+                continue
+
+            # Update
+            target_sim = r_sim + self.gamma * np.max(self.Q[s_prime_sim])
+            self.Q[s_sim, a_sim] += self.alpha * (target_sim - self.Q[s_sim, a_sim])
+```
+
+</Implementation>
+
+## Dyna-Q+ and Changing Environments
+
+What happens when the environment changes? The model becomes outdated, and planning with an old model can be harmful.
+
+<Warning title="The Stale Model Problem">
+
+If the environment changes (e.g., a shortcut opens up), the model still reflects the old environment. Planning with this outdated model will miss the new opportunity—or worse, plan for transitions that no longer exist.
+
+</Warning>
+
+<Intuition>
+
+Dyna-Q+ addresses this by adding a **bonus for exploration**. The longer it's been since we tried a state-action pair, the more optimistic we become about it. This encourages revisiting old experiences to check if anything has changed.
+
+It's like periodically revisiting old restaurants to see if they've improved, rather than always going to your current favorite.
+
+</Intuition>
+
+<Mathematical>
+
+In Dyna-Q+, planning updates use an augmented reward:
+
+$$r^+ = r + \kappa \sqrt{\tau}$$
+
+where $\tau$ is the number of time steps since $(s, a)$ was last tried in the real environment, and $\kappa$ is a small constant (e.g., 0.001).
+
+This bonus encourages exploration of state-action pairs that haven't been visited recently, helping detect environmental changes.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+class DynaQPlus:
+    """
+    Dyna-Q+ with exploration bonus for changing environments.
+    """
+
+    def __init__(self, n_states, n_actions, alpha=0.1, gamma=0.99,
+                 epsilon=0.1, planning_steps=10, kappa=0.001):
+        self.n_states = n_states
+        self.n_actions = n_actions
+        self.alpha = alpha
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.planning_steps = planning_steps
+        self.kappa = kappa  # Exploration bonus coefficient
+
+        self.Q = np.zeros((n_states, n_actions))
+        self.model = {}
+        self.time_since_visit = np.zeros((n_states, n_actions))
+        self.current_time = 0
+
+    def update(self, s, a, r, s_prime, done):
+        """Dyna-Q+ update with exploration bonus."""
+        self.current_time += 1
+
+        # Direct RL
+        target = r if done else r + self.gamma * np.max(self.Q[s_prime])
+        self.Q[s, a] += self.alpha * (target - self.Q[s, a])
+
+        # Model learning
+        self.model[(s, a)] = (r, s_prime, done)
+        self.time_since_visit[s, a] = self.current_time
+
+        # Planning with exploration bonus
+        for _ in range(self.planning_steps):
+            # Sample from all state-action pairs (not just experienced)
+            s_sim = np.random.randint(self.n_states)
+            a_sim = np.random.randint(self.n_actions)
+
+            if (s_sim, a_sim) in self.model:
+                r_sim, s_prime_sim, done_sim = self.model[(s_sim, a_sim)]
+
+                # Time since last real visit
+                tau = self.current_time - self.time_since_visit[s_sim, a_sim]
+
+                # Add exploration bonus
+                r_bonus = r_sim + self.kappa * np.sqrt(tau)
+
+                if done_sim:
+                    target_sim = r_bonus
+                else:
+                    target_sim = r_bonus + self.gamma * np.max(self.Q[s_prime_sim])
+
+                self.Q[s_sim, a_sim] += self.alpha * (target_sim - self.Q[s_sim, a_sim])
+```
+
+</Implementation>
+
+## Comparing Dyna to Alternatives
+
+<div className="grid md:grid-cols-3 gap-4 my-6">
+  <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+    <div className="text-blue-400 font-bold mb-2">Pure Q-Learning</div>
+    <div className="text-slate-300 text-sm space-y-1">
+      <div>+ Simple, no model needed</div>
+      <div>+ No model errors</div>
+      <div>- Poor sample efficiency</div>
+    </div>
+  </div>
+  <div className="bg-emerald-900/20 border border-emerald-700/50 rounded-lg p-4">
+    <div className="text-emerald-400 font-bold mb-2">Dyna-Q</div>
+    <div className="text-slate-300 text-sm space-y-1">
+      <div>+ Great sample efficiency</div>
+      <div>+ Simple architecture</div>
+      <div>- Requires good model</div>
+    </div>
+  </div>
+  <div className="bg-violet-900/20 border border-violet-700/50 rounded-lg p-4">
+    <div className="text-violet-400 font-bold mb-2">Pure Planning (MPC)</div>
+    <div className="text-slate-300 text-sm space-y-1">
+      <div>+ No value function needed</div>
+      <div>+ Flexible at test time</div>
+      <div>- Expensive per decision</div>
+    </div>
+  </div>
+</div>
+
+## Summary
+
+The Dyna architecture elegantly combines the best of model-free and model-based RL:
+
+- **Sample efficiency** from model-based planning
+- **Simplicity** of Q-learning updates
+- **Flexibility** to adjust planning effort vs computation
+
+The key insight is that real and simulated experience can be treated identically for learning—the Q-learning update doesn't care where the $(s, a, r, s')$ tuple came from. This makes Dyna easy to implement and reason about.
+
+In the next section, we'll see how modern methods like MuZero take model-based RL to the next level by learning abstract models optimized for planning rather than state prediction.

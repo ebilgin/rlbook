@@ -9,72 +9,104 @@ tags:
   - "philosophy"
 ---
 
-I am excited to announce [rlbook.ai](https://rlbook.ai)—a platform that aspires to be the most comprehensive resource for learning reinforcement learning (RL), from beginner to advanced levels. Much of the content will be AI-generated, then reviewed by myself (and hopefully others) and improved over time.
+I'm launching [rlbook.ai](https://rlbook.ai). I'm excited, but I also have mixed feelings.
 
-Beyond being an online resource for RL, this platform is an experiment in how AI can be used to create educational content. That's what I want to explore in this post.
+Five years ago, I spent close to two years writing [*Mastering Reinforcement Learning with Python*](https://www.amazon.com/Mastering-Reinforcement-Learning-Python-next-generation/dp/1838644148). It was exhausting but rewarding. I felt I'd contributed something useful to the RL community.
 
-## The Painful Process of Creating Educational Content Manually
+Over this new year break, I built rlbook.ai in two days. The content is better than my book in many ways—more interactive, more current, more comprehensive. I'm still reviewing and improving what the AI generated, but the quality is already really good.
 
-I've spent a significant chunk of my life teaching, though it's not my main profession. I gave volunteer and paid tutoring as an undergrad, served as a teaching assistant during my PhD, then worked as adjunct faculty for years. Later, I became an author and wrote [*Mastering Reinforcement Learning with Python*](https://www.amazon.com/Mastering-Reinforcement-Learning-Python-next-generation/dp/1838644148). I also created an RL course for an online platform. Throughout all this experience, I was told I was a decent educator—my book has some nice reviews on Amazon, for example.
+This feels both exciting and unsettling. What does it mean when two years of human effort can be surpassed by two days of AI-assisted work? I don't have all the answers, but I want to explore this openly.
 
-Looking back, though, all those efforts were incredibly time-consuming. At times, I very much regretted taking on those responsibilities. For example, I was significantly delayed on my book timelines. Writing a chapter took weeks, and I was never satisfied with the outcome. The process looked like this:
+## Why Traditional Content Creation is Painful
 
-1. **Research**: I gathered all the relevant resources and papers and read them.
-2. **Design**: I planned the flow of the chapter and the case study.
-3. **Writing**: This was painful, especially as a non-native English speaker. I struggled to find the best ways to express concepts in written form.
-4. **Diagrams**: Creating visuals was time-consuming, and the results rarely met my expectations.
-5. **Code**: In theory, the RL case studies were great for conveying ideas. In practice, getting them to work properly—let alone being great examples—took many iterations.
+I've spent years teaching—as a TA during my PhD, as adjunct faculty, and as a book author. Writing that book was truly challenging. Each chapter took weeks. I was never satisfied. The process looked like this:
 
-In short, I saw myself as someone who could envision good design for my content but struggled to turn that vision into reality. Too much time went into low-level tasks like fixing a diagram's style or crafting a working code example.
+1. Research everything thoroughly
+2. Plan the chapter flow and examples
+3. Struggle to express concepts clearly (especially hard as a non-native English speaker)
+4. Create diagrams that never quite looked right
+5. Debug code examples through endless iterations
+6. Move on, knowing I could have done better
 
-As with many other things, I think AI has fundamentally changed this. Many of those pain points are now gone.
+The worst part? After all that effort, the content was frozen. A reader suggests a better explanation? Great, maybe I can fix it in the second edition in 3-5 years. A new technique emerges? The book is already outdated.
 
-With this, rlbook.ai is an attempt to reimagine technical education in this new era.
+Books force you to stop iterating and ship. But learning never stops evolving.
 
-## Creating Educational Content in the Era of AI
+## What Changed (And What Didn't)
 
-To be clear, I think the ultimate state for AI-based education is a personalized AI assistant that knows you so well it tailors every topic to your exact preferences. Until then, I believe AI will help educators with low-level tasks while educators serve as curriculum designers and content supervisors. A couple of recent experiences helped me realize what this interim state of AI-assisted education might look like.
+LLMs are good at explaining established knowledge. They're getting better at synthesis and creativity, but for now, their strength is conveying existing ideas clearly and consistently. For technical education, that's actually most of the work.
 
-In 2025, I worked on a project to create educational content for my local community—teaching our culture to our youth in the U.S. We spent weeks contemplating the right format and tried to create content accordingly. While our results were okay, we got significantly better results when we fed our insights to Claude and had the entire curriculum generated by it. All we had to do was iterate by updating our prompts. This was a wake-up call for me.
+I saw this recently when I worked on an education project for my local community. We spent weeks manually creating content. When we switched to using Claude with carefully designed prompts, the results were significantly better. The lesson: we were better at designing *what* to teach than *how* to write it.
 
-Also recently, a major publisher reached out about a book project related to RL. Although I'm always excited about such opportunities, some things didn't make sense. A technical book isn't about generating novel ideas—it's about conveying existing knowledge effectively. First of all, LLMs are quite good at this. So, it was not clear to me what the role of human authors would be. Second, the book format has major drawbacks due to its static nature:
+Then a publisher reached out about another RL book. I had to think: what would I contribute that an LLM couldn't? Technical books aren't about novel research—they're about clear explanations. LLMs are extremely capable of that.
 
-- **Books require a cutoff, but learning never stops.** You can always think of better ways to explain something. But book writing forces you to freeze and move on—you can't iterate for long. Once published, you're locked in until the next edition.
-- **The feedback cycle is slow.** If someone makes a great suggestion about a chapter, you have to wait years to incorporate it.
-- **Books aren't the best medium for animations**, which can greatly improve the effectiveness of content.
-- **In a field like AI, things evolve fast** and your content gets outdated quickly.
+But curriculum design, quality supervision, ensuring coherence across many chapters, and building community—those still need human judgment. At least for now.
 
-That's why I believe the right format is a live web platform where content gets updated frequently with community input, with the help of AI. As is the case with many other areas reshaped by AI, the human role should be supervision and orchestration.
+## How rlbook.ai Works
 
-## The Vision for rlbook.ai
+The key difference between rlbook.ai and just "asking ChatGPT to explain RL" is this:
 
-My dream content for this platform would combine:
+**The prompts that generate content are versioned in the codebase and evolve over time.**
 
-- The exceptional animated presentation style of [3Blue1Brown](https://www.3blue1brown.com/)
-- The interactive presentation of technical concepts as in [Distill.pub](https://distill.pub/)
-- The availability of hands-on material as in [D2L.ai](https://d2l.ai/)
+Every chapter is generated from prompts that encode:
+- Platform-wide standards for notation and code style
+- Specific learning objectives and narrative arcs
+- Cross-references to other chapters
+- Requirements for interactive demos
+- Three complexity levels (intuition, math, implementation)
 
-To this end, here's the flywheel I aim to establish:
+When someone suggests a better way to explain something, we don't just fix that one chapter. We update the prompt template. Then we can improve all similar content.
 
-1. **Prompts as first-class citizens**: Content will be primarily controlled and generated via AI prompts, which are versioned in the [repository](https://github.com/ebilgin/rlbook) and evolve over time with feedback.
+Think of it as content-as-code: versioned, testable, and improvable through pull requests.
 
-2. **AI-generated initial content**: The initial content on a topic will be generated via prompts that follow the platform's broader standards. These standards are imposed by platform-level and chapter-level prompts, which evolve over time. These guardrail prompts are the platform's advantage over someone generating content from scratch on their own. That said, there's a non-zero chance that AI slop leaks through—that's why content at this level is marked "AI Generated" to let readers know.
+## The Quality Process
 
-3. **Editor review**: Once AI-generated content is reviewed by editors, most AI slop should be gone. The content should then be trustworthy and consistent with the rest of the platform.
+Content moves through clear stages:
 
-4. **Community feedback**: From the moment content is published, it's open for feedback via [Giscus](https://giscus.app/) comments and [Discord](https://discord.gg/mJ7n3zNf7r) discussions. This is the main input I'm hoping to collect to collectively improve the content.
+1. **AI-Generated**: Fast and comprehensive, but may contain errors or inconsistencies. Clearly marked so readers know what they're getting.
 
-5. **Verified state**: Once community feedback is incorporated and coding examples are verified to work, the content reaches a mature, verified state.
+2. **Editor Reviewed**: Human review (currently just me) for accuracy and coherence. Most problems get caught here.
 
-This is the high-level idea. There's a lot to figure out along the way.
+3. **Community Reviewed**: Published with open comments via [Giscus](https://giscus.app/) and [Discord](https://discord.gg/mJ7n3zNf7r). Readers help improve it.
 
-## Conclusion
+4. **Verified**: Code tested, feedback incorporated, cross-references validated. This is mature content.
 
-rlbook.ai is an experiment in AI-first educational content generation. Exactly how this will work, we'll see.
+The big difference from traditional publishing: **you don't need perfection before shipping**. You improve continuously based on real feedback.
 
-If this excites you, I invite you to:
-- **Contribute on [GitHub](https://github.com/ebilgin/rlbook)**
-- **Comment on content via Giscus discussions**
-- **Join the conversation on [Discord](https://discord.gg/mJ7n3zNf7r)**
+## What I'm Trying to Build
 
-Let's build this together.
+If I could combine my favorite learning resources, it would be:
+- [3Blue1Brown](https://www.3blue1brown.com/)'s visual explanations
+- [Distill.pub](https://distill.pub/)'s interactive technical content
+- [D2L.ai](https://d2l.ai/)'s hands-on code examples
+
+All kept current through AI assistance and community input.
+
+That's the aspiration. Whether it works, we'll see.
+
+## What I'm Still Figuring Out
+
+This is an experiment. Here are the things I don't know yet:
+
+- **How do you prevent drift?** As prompts evolve, how do you keep Chapter 20 consistent with Chapter 1?
+- **Where does AI help most?** Some content might need more human craft than others.
+- **How do you maintain voice?** Can AI-generated content feel coherent across 30+ chapters?
+- **Can community feedback scale?** What happens when there are 100 comments on one chapter?
+
+I'm learning as I go. If you have thoughts on these, I'd genuinely like to hear them.
+
+## A Note on Authenticity
+
+I could claim this is "the future of education" or "revolutionizing learning." But honestly? I'm not sure. This is one person's attempt to use AI to create better educational resources than I could alone. Maybe it works, maybe it doesn't.
+
+What I do believe: the old model of spending years writing static content doesn't make sense anymore. We can iterate faster and improve based on actual learner feedback. The tools have changed; we should change how we use them.
+
+## Get Involved
+
+If this interests you:
+
+- **[Contribute on GitHub](https://github.com/ebilgin/rlbook)**: Fix errors, improve prompts, suggest examples
+- **Leave feedback**: Comment on chapters with what worked or didn't
+- **[Join Discord](https://discord.gg/mJ7n3zNf7r)**: Discuss RL, content design, or just ask questions
+
+This is an open experiment. Let's see where it goes.

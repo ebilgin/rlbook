@@ -1,0 +1,529 @@
+---
+title: "Double DQN"
+slug: "double-dqn"
+section: "Deep Reinforcement Learning"
+description: "Fixing overestimation bias"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Double DQN
+
+DQN was a breakthrough, but it has a systematic flaw: it **overestimates** Q-values. This overestimation bias can slow learning and lead to suboptimal policies. Double DQN fixes this with a simple but elegant change: decouple action selection from action evaluation.
+
+## The Overestimation Problem
+
+<Definition title="Overestimation Bias">
+**Overestimation bias** occurs when Q-learning systematically estimates Q-values that are higher than their true values. This happens because the max operator in the target introduces an upward bias when Q-values contain noise or errors.
+</Definition>
+
+<Intuition>
+
+Consider a state where all actions are equally good, with true Q-value of 0. If our network has some estimation error, the Q-values might be:
+
+- $Q(s, a_1) = +0.3$ (overestimate)
+- $Q(s, a_2) = -0.2$ (underestimate)
+- $Q(s, a_3) = +0.1$ (overestimate)
+- $Q(s, a_4) = -0.1$ (underestimate)
+
+When we compute $\max_a Q(s, a) = 0.3$, we pick the action with the highest positive error. The expected maximum is positive even though the true value is 0.
+
+This is not a flaw in our network. It is a statistical property: **the maximum of noisy estimates is biased upward**. Even with unbiased estimators for each action, the max operation introduces positive bias.
+
+This bias compounds through bootstrapping. State A's overestimate becomes part of state B's target, which becomes part of state C's target, and so on.
+
+</Intuition>
+
+<Mathematical>
+
+For Q-values with estimation error:
+
+$$Q(s, a) = Q^*(s, a) + \epsilon_a$$
+
+where $\epsilon_a$ is zero-mean noise. The expected maximum is:
+
+$$\mathbb{E}\left[\max_a Q(s, a)\right] = \mathbb{E}\left[\max_a (Q^*(s, a) + \epsilon_a)\right] \geq \max_a Q^*(s, a)$$
+
+The inequality follows from Jensen's inequality for convex functions (max is convex).
+
+**Example**: With 4 actions and $\epsilon_a \sim \mathcal{N}(0, 1)$, the expected value of $\max_a \epsilon_a$ is approximately 1.03 (the expected maximum of 4 standard normal variables). This bias increases with more actions and higher variance.
+
+In Q-learning, this bias propagates through the Bellman update:
+
+$$Q(s, a) \leftarrow r + \gamma \max_{a'} Q(s', a')$$
+
+If $\max_{a'} Q(s', a')$ is overestimated, then $Q(s, a)$ becomes overestimated, which then affects states leading to $s$.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+def demonstrate_max_bias():
+    """
+    Show that taking the max of noisy estimates introduces positive bias.
+    """
+    np.random.seed(42)
+
+    true_values = [0.0, 0.0, 0.0, 0.0]  # All actions equally good
+    noise_std = 1.0
+    n_samples = 10000
+
+    max_estimates = []
+    for _ in range(n_samples):
+        # Add noise to each action's value
+        noisy_estimates = [v + np.random.randn() * noise_std for v in true_values]
+        max_estimates.append(max(noisy_estimates))
+
+    print("Max Bias Demonstration")
+    print("=" * 40)
+    print(f"True max value: {max(true_values):.3f}")
+    print(f"Expected max of noisy estimates: {np.mean(max_estimates):.3f}")
+    print(f"Overestimation bias: {np.mean(max_estimates) - max(true_values):.3f}")
+
+    # Bias increases with more actions
+    print("\nBias vs Number of Actions:")
+    for n_actions in [2, 4, 8, 16, 32]:
+        true_vals = [0.0] * n_actions
+        max_ests = []
+        for _ in range(n_samples):
+            noisy = [v + np.random.randn() for v in true_vals]
+            max_ests.append(max(noisy))
+        print(f"  {n_actions} actions: bias = {np.mean(max_ests):.3f}")
+
+demonstrate_max_bias()
+```
+
+</Implementation>
+
+## The Double Q-Learning Idea
+
+<Definition title="Double Q-Learning">
+**Double Q-Learning** uses two separate value estimates: one to select the best action, and another to evaluate that action. This decoupling prevents the overestimation that occurs when the same noisy estimate is used for both purposes.
+</Definition>
+
+<Intuition>
+
+The overestimation problem occurs because we use the same Q-function for two purposes:
+1. **Selection**: Which action is best? $a^* = \arg\max_a Q(s, a)$
+2. **Evaluation**: What is the value of that action? $Q(s, a^*)$
+
+If $Q(s, a_1)$ happens to be overestimated due to noise, we both select $a_1$ (because it appears best) and use that inflated value in our target. The noise compounds.
+
+Double Q-learning breaks this coupling:
+1. **Selection**: Use Q-network A to pick the action: $a^* = \arg\max_a Q_A(s, a)$
+2. **Evaluation**: Use Q-network B to evaluate it: $Q_B(s, a^*)$
+
+Now, even if $Q_A$ overestimates $a_1$ and selects it, $Q_B$ provides an independent estimate. If $Q_B$ does not share the same noise pattern, the overestimation is corrected.
+
+</Intuition>
+
+<Mathematical>
+
+**Standard Q-learning target**:
+
+$$y = r + \gamma \max_{a'} Q(s', a'; \theta)$$
+
+The same $\theta$ selects and evaluates the action.
+
+**Double Q-learning target**:
+
+$$y = r + \gamma Q(s', \arg\max_{a'} Q(s', a'; \theta_A); \theta_B)$$
+
+Here:
+- $\theta_A$ determines which action is best (selection)
+- $\theta_B$ evaluates that action's value (evaluation)
+
+If the estimation errors in $\theta_A$ and $\theta_B$ are independent, the overestimation bias is greatly reduced.
+
+**Why does this help?**
+
+Let $a_A^* = \arg\max_a Q_A(s, a)$ be the action selected by network A.
+
+Standard Q-learning: $y = r + \gamma Q_A(s, a_A^*)$
+
+Since $a_A^*$ was chosen to maximize $Q_A$, we are guaranteed to pick actions where $Q_A$ is high, including those with positive estimation error.
+
+Double Q-learning: $y = r + \gamma Q_B(s, a_A^*)$
+
+Now $Q_B$ evaluates the action. If $Q_B$'s errors are uncorrelated with $Q_A$'s, selecting based on $Q_A$'s noise does not systematically inflate $Q_B$'s evaluation.
+
+</Mathematical>
+
+## Double DQN Implementation
+
+<Intuition>
+
+DQN already maintains two networks: the online network and the target network. Double DQN cleverly repurposes these:
+
+- **Selection**: Use the online network to select the best action
+- **Evaluation**: Use the target network to evaluate that action
+
+This requires only a one-line change to the target computation:
+
+```python
+# Standard DQN
+target = reward + gamma * target_network(next_state).max()
+
+# Double DQN
+best_action = online_network(next_state).argmax()
+target = reward + gamma * target_network(next_state)[best_action]
+```
+
+The online and target networks naturally have different parameters (target lags behind), so their errors are somewhat decorrelated. This simple change significantly reduces overestimation.
+
+</Intuition>
+
+<Mathematical>
+
+**DQN target**:
+
+$$y = r + \gamma \max_{a'} Q(s', a'; \theta^-)$$
+
+where $\theta^-$ is the target network.
+
+**Double DQN target**:
+
+$$y = r + \gamma Q\left(s', \arg\max_{a'} Q(s', a'; \theta); \theta^-\right)$$
+
+where $\theta$ is the online network.
+
+The key insight is:
+- Action selection: $\arg\max_{a'} Q(s', a'; \theta)$ uses the **online** network
+- Action evaluation: $Q(s', a^*; \theta^-)$ uses the **target** network
+
+This decoupling is free in terms of computation, since DQN already maintains both networks.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+import copy
+
+class DoubleDQN:
+    """
+    Double DQN implementation.
+
+    The only difference from DQN is how targets are computed.
+    """
+
+    def __init__(self, state_dim, n_actions, hidden_dim=128,
+                 gamma=0.99, lr=1e-4):
+        self.gamma = gamma
+        self.n_actions = n_actions
+
+        # Online and target networks
+        self.online_network = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, n_actions)
+        )
+        self.target_network = copy.deepcopy(self.online_network)
+
+        self.optimizer = optim.Adam(self.online_network.parameters(), lr=lr)
+
+    def compute_target_dqn(self, rewards, next_states, dones):
+        """
+        Standard DQN target computation.
+
+        target = r + gamma * max_a' Q_target(s', a')
+
+        Same network for selection and evaluation.
+        """
+        with torch.no_grad():
+            next_q_values = self.target_network(next_states)
+            max_next_q = next_q_values.max(dim=1)[0]
+            targets = rewards + self.gamma * max_next_q * (1 - dones)
+        return targets
+
+    def compute_target_double_dqn(self, rewards, next_states, dones):
+        """
+        Double DQN target computation.
+
+        target = r + gamma * Q_target(s', argmax_a' Q_online(s', a'))
+
+        Online network for selection, target network for evaluation.
+        """
+        with torch.no_grad():
+            # Selection: use online network to find best action
+            next_q_online = self.online_network(next_states)
+            best_actions = next_q_online.argmax(dim=1)
+
+            # Evaluation: use target network to evaluate that action
+            next_q_target = self.target_network(next_states)
+            selected_q = next_q_target.gather(1, best_actions.unsqueeze(1)).squeeze(1)
+
+            targets = rewards + self.gamma * selected_q * (1 - dones)
+        return targets
+
+    def train_step(self, states, actions, rewards, next_states, dones, use_double=True):
+        """
+        Single training step.
+
+        Args:
+            use_double: If True, use Double DQN. If False, use standard DQN.
+        """
+        states = torch.FloatTensor(states)
+        actions = torch.LongTensor(actions)
+        rewards = torch.FloatTensor(rewards)
+        next_states = torch.FloatTensor(next_states)
+        dones = torch.FloatTensor(dones)
+
+        # Current Q-values
+        current_q = self.online_network(states).gather(1, actions.unsqueeze(1)).squeeze(1)
+
+        # Compute targets
+        if use_double:
+            targets = self.compute_target_double_dqn(rewards, next_states, dones)
+        else:
+            targets = self.compute_target_dqn(rewards, next_states, dones)
+
+        # Loss and update
+        loss = nn.MSELoss()(current_q, targets)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        return loss.item()
+
+    def update_target_network(self):
+        """Copy online network weights to target network."""
+        self.target_network.load_state_dict(self.online_network.state_dict())
+
+
+# Compare DQN vs Double DQN targets
+def compare_targets():
+    """Show the difference between DQN and Double DQN targets."""
+    agent = DoubleDQN(state_dim=4, n_actions=4)
+
+    # Dummy batch
+    batch_size = 5
+    states = np.random.randn(batch_size, 4).astype(np.float32)
+    actions = np.random.randint(0, 4, batch_size)
+    rewards = np.random.randn(batch_size).astype(np.float32)
+    next_states = np.random.randn(batch_size, 4).astype(np.float32)
+    dones = np.zeros(batch_size, dtype=np.float32)
+
+    # Compute both targets
+    dqn_targets = agent.compute_target_dqn(
+        torch.FloatTensor(rewards),
+        torch.FloatTensor(next_states),
+        torch.FloatTensor(dones)
+    )
+
+    double_dqn_targets = agent.compute_target_double_dqn(
+        torch.FloatTensor(rewards),
+        torch.FloatTensor(next_states),
+        torch.FloatTensor(dones)
+    )
+
+    print("Target Comparison (DQN vs Double DQN)")
+    print("=" * 50)
+    print(f"DQN targets: {dqn_targets.numpy()}")
+    print(f"Double DQN targets: {double_dqn_targets.numpy()}")
+    print(f"Difference: {(dqn_targets - double_dqn_targets).numpy()}")
+    print(f"Mean DQN target: {dqn_targets.mean():.4f}")
+    print(f"Mean Double DQN target: {double_dqn_targets.mean():.4f}")
+
+compare_targets()
+```
+
+</Implementation>
+
+## Why Double DQN Works
+
+<Intuition>
+
+Consider a situation where the online network overestimates action $a_1$ due to noise:
+
+**DQN**: Picks $a_1$ (highest estimated value) and uses that inflated estimate.
+
+**Double DQN**: Picks $a_1$ (online network's favorite) but evaluates using the target network. If the target network does not share the same overestimation for $a_1$, the evaluation is more accurate.
+
+The target network lags behind by thousands of updates, so its errors are partially decorrelated from the online network's. This decorrelation is what reduces bias.
+
+Note that Double DQN does not eliminate overestimation entirely. It reduces it by breaking the coupling between selection and evaluation.
+
+</Intuition>
+
+<Mathematical>
+
+**Analysis of bias reduction**:
+
+Let $Q_{\text{online}}(s, a) = Q^*(s, a) + \epsilon_a^{\text{online}}$ and $Q_{\text{target}}(s, a) = Q^*(s, a) + \epsilon_a^{\text{target}}$.
+
+For standard DQN:
+$$\mathbb{E}[\max_a Q_{\text{target}}(s, a)] = \mathbb{E}[\max_a (Q^*(s, a) + \epsilon_a^{\text{target}})]$$
+
+This is maximally biased because we pick the action with highest noise.
+
+For Double DQN:
+$$\mathbb{E}[Q_{\text{target}}(s, \arg\max_a Q_{\text{online}}(s, a))]$$
+
+If $\epsilon^{\text{online}}$ and $\epsilon^{\text{target}}$ are uncorrelated:
+- Action selection depends on $\epsilon^{\text{online}}$
+- Evaluation depends on $\epsilon^{\text{target}}$
+- The expected value is closer to $Q^*$ because high $\epsilon^{\text{online}}$ does not imply high $\epsilon^{\text{target}}$
+
+In practice, the networks are not fully independent (target is a delayed copy), but the temporal gap creates enough decorrelation to substantially reduce bias.
+
+</Mathematical>
+
+## Integrating Double DQN
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+from collections import deque
+import random
+import copy
+
+class DoubleDQNAgent:
+    """
+    Complete Double DQN agent with experience replay.
+    """
+
+    def __init__(
+        self,
+        state_dim,
+        n_actions,
+        buffer_size=100000,
+        batch_size=32,
+        gamma=0.99,
+        lr=1e-4,
+        target_update_freq=1000,
+        epsilon_start=1.0,
+        epsilon_end=0.01,
+        epsilon_decay=10000,
+    ):
+        self.n_actions = n_actions
+        self.batch_size = batch_size
+        self.gamma = gamma
+        self.target_update_freq = target_update_freq
+
+        # Epsilon schedule
+        self.epsilon_start = epsilon_start
+        self.epsilon_end = epsilon_end
+        self.epsilon_decay = epsilon_decay
+
+        # Networks
+        self.online_net = nn.Sequential(
+            nn.Linear(state_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, n_actions)
+        )
+        self.target_net = copy.deepcopy(self.online_net)
+
+        self.optimizer = optim.Adam(self.online_net.parameters(), lr=lr)
+
+        # Replay buffer
+        self.buffer = deque(maxlen=buffer_size)
+
+        self.step_count = 0
+
+    def get_epsilon(self):
+        return self.epsilon_end + (self.epsilon_start - self.epsilon_end) * \
+               np.exp(-self.step_count / self.epsilon_decay)
+
+    def select_action(self, state):
+        if np.random.random() < self.get_epsilon():
+            return np.random.randint(self.n_actions)
+        with torch.no_grad():
+            state_t = torch.FloatTensor(state).unsqueeze(0)
+            return self.online_net(state_t).argmax(dim=1).item()
+
+    def store(self, state, action, reward, next_state, done):
+        self.buffer.append((state, action, reward, next_state, done))
+
+    def train_step(self):
+        if len(self.buffer) < self.batch_size:
+            return None
+
+        # Sample batch
+        batch = random.sample(self.buffer, self.batch_size)
+        states, actions, rewards, next_states, dones = map(np.array, zip(*batch))
+
+        states_t = torch.FloatTensor(states)
+        actions_t = torch.LongTensor(actions)
+        rewards_t = torch.FloatTensor(rewards)
+        next_states_t = torch.FloatTensor(next_states)
+        dones_t = torch.FloatTensor(dones)
+
+        # Current Q-values
+        current_q = self.online_net(states_t).gather(1, actions_t.unsqueeze(1)).squeeze(1)
+
+        # Double DQN target
+        with torch.no_grad():
+            # Selection: online network
+            best_actions = self.online_net(next_states_t).argmax(dim=1)
+            # Evaluation: target network
+            next_q = self.target_net(next_states_t).gather(1, best_actions.unsqueeze(1)).squeeze(1)
+            targets = rewards_t + self.gamma * next_q * (1 - dones_t)
+
+        # Loss and update
+        loss = nn.MSELoss()(current_q, targets)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        # Update target network
+        self.step_count += 1
+        if self.step_count % self.target_update_freq == 0:
+            self.target_net.load_state_dict(self.online_net.state_dict())
+
+        return loss.item()
+
+
+# Example training
+agent = DoubleDQNAgent(state_dim=4, n_actions=2)
+
+print("Double DQN Agent Training")
+print("=" * 40)
+
+for i in range(500):
+    # Simulate experience
+    state = np.random.randn(4)
+    action = agent.select_action(state)
+    next_state = np.random.randn(4)
+    reward = np.random.randn()
+    done = np.random.random() < 0.05
+
+    agent.store(state, action, reward, next_state, done)
+    loss = agent.train_step()
+
+    if i % 100 == 0 and loss is not None:
+        print(f"Step {i}: Loss = {loss:.4f}, Epsilon = {agent.get_epsilon():.3f}")
+```
+
+</Implementation>
+
+## Summary
+
+Double DQN addresses the overestimation bias in DQN:
+
+1. **Problem**: Taking the max of noisy Q-estimates biases values upward
+2. **Solution**: Decouple action selection (online network) from evaluation (target network)
+3. **Change**: One line of code in the target computation
+4. **Result**: More accurate Q-values and better policies
+
+The key insight is that using the same network for both selection and evaluation couples the noise, causing systematic overestimation. Double DQN breaks this coupling with no additional computational cost.
+
+<Note>
+Double DQN is essentially free to implement. You already have two networks (online and target). The only change is using the online network for argmax and the target network for evaluation. There is no reason not to use Double DQN over standard DQN.
+</Note>

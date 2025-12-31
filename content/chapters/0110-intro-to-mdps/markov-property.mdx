@@ -1,0 +1,216 @@
+---
+title: "The Markov Property"
+slug: "markov-property"
+section: "Markov Decision Processes"
+description: "Why the present is all you need to predict the future"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# The Markov Property
+
+The "M" in MDP stands for Markov, named after mathematician Andrey Markov. The **Markov property** is the key assumption that makes reinforcement learning tractable.
+
+## The Core Idea
+
+<Definition title="Markov Property">
+A state is **Markov** if and only if the future is independent of the past given the present:
+
+$$P(S_{t+1} | S_t, A_t, S_{t-1}, A_{t-1}, ..., S_0, A_0) = P(S_{t+1} | S_t, A_t)$$
+
+In words: knowing the current state is enough to predict the next state. History doesn't provide additional information.
+</Definition>
+
+<Intuition>
+
+Imagine you're playing chess. You look at the board and see a specific configuration. To decide your next move and predict what might happen, do you need to know:
+
+- How the pieces got to their current positions? **No.**
+- What moves were played earlier? **No.**
+- The current position of all pieces? **Yes, that's all you need.**
+
+The current board position is a **Markov state**—it contains all the information needed to predict the future.
+
+</Intuition>
+
+## Why It Matters
+
+The Markov property is powerful because it dramatically simplifies reasoning:
+
+<div className="grid md:grid-cols-2 gap-6 my-6">
+  <div className="p-4 bg-gradient-to-br from-red-900/20 to-red-800/10 rounded-lg border border-red-700/50">
+    <h4 className="font-semibold text-red-400 mb-3">❌ Without Markov Property</h4>
+    <ul className="text-slate-400 text-sm space-y-2">
+      <li>Must track entire history</li>
+      <li>State space grows exponentially with time</li>
+      <li>Learning becomes intractable</li>
+      <li>No simple recursive structure</li>
+    </ul>
+  </div>
+  <div className="p-4 bg-gradient-to-br from-emerald-900/20 to-emerald-800/10 rounded-lg border border-emerald-700/50 ring-2 ring-emerald-500/20">
+    <h4 className="font-semibold text-emerald-400 mb-3">✓ With Markov Property</h4>
+    <ul className="text-slate-400 text-sm space-y-2">
+      <li>Only need current state</li>
+      <li>State space is fixed</li>
+      <li>Algorithms can be efficient</li>
+      <li>Bellman equations become possible</li>
+    </ul>
+  </div>
+</div>
+
+<Mathematical>
+
+The Markov property enables the **Bellman equations**, which we'll study in the next chapter. These equations express values recursively:
+
+$$V(s) = \sum_a \pi(a|s) \sum_{s'} P(s'|s,a)[R(s,a,s') + \gamma V(s')]$$
+
+This recursion only works because $V(s')$ depends only on $s'$, not on how we reached $s'$. If history mattered, we'd need $V(s', \text{history})$—an intractable representation.
+
+</Mathematical>
+
+## Is the Real World Markov?
+
+<Warning>
+Strictly speaking, most real-world problems are **not** perfectly Markov. However, the Markov property isn't about the world—it's about our **state representation**.
+</Warning>
+
+<Intuition>
+
+Consider a thermostat controlling room temperature:
+
+**Non-Markov representation:** State = current temperature (e.g., 70°F)
+- Problem: Is the room heating up or cooling down? The same temperature can lead to different futures depending on recent history.
+
+**Markov representation:** State = (current temperature, rate of change, HVAC status)
+- Now the state contains enough information to predict what happens next.
+
+The key insight: **We can make any problem Markov by choosing a rich enough state representation.**
+
+</Intuition>
+
+<Example title="Making States Markov">
+
+Consider a robot that observes only its position, not velocity:
+
+<div className="my-4 p-4 bg-slate-800/50 rounded-lg">
+
+**Observation: Robot at position (2, 3)**
+
+Is this Markov? To predict the next position, we need to know:
+- Which direction is it moving?
+- How fast?
+
+Just knowing the position isn't enough—the same position could lead to different futures.
+
+</div>
+
+**Solution:** Include velocity in the state: $s = (\text{position}, \text{velocity})$
+
+Now the state is Markov. This is why robotics and physics often use **position + velocity** (or position + momentum) as state.
+
+</Example>
+
+## State vs Observation
+
+A crucial distinction:
+
+<Definition title="State vs Observation">
+- **State**: Complete information needed for Markov property to hold
+- **Observation**: What the agent actually sees (might be incomplete)
+
+When observations don't capture the full state, we have a **Partially Observable MDP** (POMDP).
+</Definition>
+
+<Example title="Poker as a POMDP">
+
+In poker:
+- **Full state**: All cards in the deck, who has what
+- **Observation**: Your own cards and visible community cards
+
+You can't see opponents' cards, so your observation is not Markov. Different hidden cards lead to different futures from the same observation.
+
+Solutions:
+1. Maintain a **belief state** (probability distribution over hidden states)
+2. Use **history** of observations as a proxy for state
+3. Learn to approximate the belief from observation sequences
+
+</Example>
+
+## Designing Markov States
+
+<Tip>
+When designing an RL system, ask yourself: **"Does my state representation contain everything needed to predict future rewards?"**
+
+If not, you need to expand the state.
+</Tip>
+
+Common strategies:
+
+1. **Include derivatives**: Position + velocity, not just position
+2. **Include history**: Stack recent observations (common in Atari games)
+3. **Include hidden state**: For recurrent systems, use LSTM/GRU hidden states
+4. **Include relevant context**: Time of day, user preferences, etc.
+
+<Implementation>
+
+Here's how game-playing agents often handle partially observable situations:
+
+```python
+# Frame stacking: Use recent frames as "state"
+# Common for Atari games where velocity matters
+def stack_frames(observation, frame_stack, n_frames=4):
+    """Stack last n frames to approximate Markov state."""
+    frame_stack.append(observation)
+    if len(frame_stack) > n_frames:
+        frame_stack.pop(0)
+
+    # Pad if we don't have enough frames yet
+    while len(frame_stack) < n_frames:
+        frame_stack.insert(0, frame_stack[0])
+
+    return np.stack(frame_stack, axis=-1)
+
+
+# Example: Atari Breakout
+# Single frame: Can't tell if ball is going up or down
+# 4 stacked frames: Ball position over time reveals velocity
+state = stack_frames(current_frame, frame_history, n_frames=4)
+```
+
+This is why DQN and many Atari agents use **4 consecutive frames** as input—a single frame isn't Markov (you can't tell which way the ball is moving), but 4 frames approximately are.
+
+</Implementation>
+
+## The Markov Assumption in Practice
+
+In practice, we often proceed **as if** states are Markov, even when they're not perfectly so:
+
+1. **Good enough works**: Small violations of Markov property often don't matter much
+2. **Approximate solutions**: RL algorithms are robust to some non-Markovness
+3. **Learned representations**: Deep RL can learn to extract Markov-ish features
+
+<Mathematical>
+
+For theoretical guarantees, we need the exact Markov property. But practically:
+
+$$P(S_{t+1} | S_t, A_t) \approx P(S_{t+1} | S_t, A_t, \text{history})$$
+
+If this approximation is good, RL algorithms will work. How "good" is domain-dependent.
+
+</Mathematical>
+
+## Summary
+
+The Markov property states that the current state contains all information needed to predict the future:
+
+- **It's not about the world**—it's about our state representation
+- **We can make states Markov** by including enough information
+- **When observations aren't Markov**, we enter POMDP territory
+- **In practice**, approximate Markovness often suffices
+
+This property is what makes RL tractable. It enables the recursive structure (Bellman equations) that underlies all RL algorithms.
+
+<Note>
+We'll see the Markov property at work in the next chapter when we derive the Bellman equations. Without it, those elegant recursive formulations wouldn't be possible.
+</Note>

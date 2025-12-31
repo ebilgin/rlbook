@@ -1,0 +1,830 @@
+---
+title: "Linear Function Approximation"
+slug: "linear-approximation"
+section: "Deep Reinforcement Learning"
+description: "Features, weights, and gradient descent"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Linear Function Approximation
+
+We established that tabular methods cannot scale. The solution is to represent value functions with parameterized models. In this section, we start with the simplest and most interpretable approach: **linear function approximation**.
+
+Linear methods introduce all the key ideas of function approximation, including features, gradients, and the semi-gradient trick, while remaining transparent enough to understand completely.
+
+## From Tables to Features
+
+<Definition title="Feature Vector">
+A **feature vector** $\phi(s) \in \mathbb{R}^d$ is a representation of a state as a fixed-length vector of numbers. Each component captures some aspect of the state that is relevant for estimating its value.
+</Definition>
+
+<Intuition>
+
+Instead of treating each state as unique, we describe states by their **features**. Consider the Mountain Car problem:
+
+**Raw state**: (position, velocity) = (-0.52, 0.034)
+
+**Feature vector**: What aspects matter for the value?
+- Position (how close to goal?)
+- Velocity (moving toward goal?)
+- Position x velocity (building momentum?)
+- Distance from goal
+- Energy (kinetic + potential)
+
+We convert the state into a vector of meaningful measurements:
+
+$$\phi(s) = [1, \text{position}, \text{velocity}, \text{pos} \times \text{vel}, \text{pos}^2, \text{vel}^2]$$
+
+Similar states (like (-0.52, 0.034) and (-0.53, 0.035)) will have similar feature vectors, and thus get similar value predictions. This is how we achieve generalization.
+
+</Intuition>
+
+<Mathematical>
+
+A **feature vector** (also called **basis functions** or **state representation**) is a function:
+
+$$\phi: \mathcal{S} \rightarrow \mathbb{R}^d$$
+
+that maps each state to a $d$-dimensional vector. The choice of $\phi$ encodes our prior knowledge about which state aspects matter.
+
+**Common feature types:**
+
+- **Polynomial features**: $\phi(s) = [1, s_1, s_2, s_1 s_2, s_1^2, s_2^2, \ldots]$
+- **Radial basis functions**: $\phi_i(s) = \exp\left(-\frac{\|s - c_i\|^2}{2\sigma^2}\right)$ for centers $c_i$
+- **Tile coding**: Binary features indicating which tiles contain the state
+- **Fourier basis**: $\phi_i(s) = \cos(\pi \mathbf{c}_i^\top s)$ for frequency vectors $\mathbf{c}_i$
+
+The feature dimension $d$ is typically much smaller than the state space size, enabling compact representation.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+def polynomial_features(state, degree=2):
+    """
+    Create polynomial features from a continuous state.
+
+    Args:
+        state: Array of state variables [x1, x2, ...]
+        degree: Maximum polynomial degree
+
+    Returns:
+        Feature vector including all polynomial terms up to degree
+    """
+    from itertools import combinations_with_replacement
+
+    state = np.atleast_1d(state)
+    n_vars = len(state)
+
+    features = [1.0]  # Bias term
+
+    for d in range(1, degree + 1):
+        for combo in combinations_with_replacement(range(n_vars), d):
+            term = 1.0
+            for idx in combo:
+                term *= state[idx]
+            features.append(term)
+
+    return np.array(features)
+
+def rbf_features(state, centers, sigma=1.0):
+    """
+    Radial Basis Function features.
+
+    Args:
+        state: Current state
+        centers: Array of RBF centers, shape (n_centers, state_dim)
+        sigma: Width of each RBF
+
+    Returns:
+        Feature vector of RBF activations
+    """
+    state = np.atleast_1d(state)
+    distances = np.linalg.norm(centers - state, axis=1)
+    return np.exp(-distances**2 / (2 * sigma**2))
+
+# Example: Mountain Car features
+def mountain_car_features(state):
+    """Hand-crafted features for Mountain Car."""
+    position, velocity = state
+
+    # Normalize to roughly [-1, 1]
+    pos_norm = (position + 0.3) / 0.9  # position in [-1.2, 0.6]
+    vel_norm = velocity / 0.07         # velocity in [-0.07, 0.07]
+
+    return np.array([
+        1.0,                    # Bias
+        pos_norm,               # Position
+        vel_norm,               # Velocity
+        pos_norm * vel_norm,    # Interaction (momentum direction)
+        pos_norm ** 2,          # Distance from center
+        vel_norm ** 2,          # Speed squared
+        np.cos(3 * pos_norm),   # Captures the valley shape
+    ])
+
+# Test
+state = (-0.5, 0.03)
+print(f"State: {state}")
+print(f"Polynomial features (degree 2): {polynomial_features(state, 2)}")
+print(f"Mountain Car features: {mountain_car_features(state)}")
+```
+
+</Implementation>
+
+## The Linear Value Function
+
+<Definition title="Linear Function Approximation">
+A **linear value function** represents the value as a weighted sum of features:
+$$\hat{V}(s; \mathbf{w}) = \mathbf{w}^\top \phi(s) = \sum_{i=1}^{d} w_i \phi_i(s)$$
+where $\mathbf{w} \in \mathbb{R}^d$ are the learned weights.
+</Definition>
+
+<Intuition>
+
+The value of a state is a weighted combination of its features. Each weight $w_i$ represents how much feature $i$ contributes to the value:
+
+- $w_{\text{position}} > 0$: Being closer to the goal is good
+- $w_{\text{velocity}} > 0$: Moving faster (toward goal) is good
+- $w_{\text{pos} \times \text{vel}} > 0$: Building momentum in the right direction is good
+
+The weights are learned from experience. Initially, they are zero (or random). As the agent experiences states and rewards, it adjusts the weights so that high-value states get positive predictions.
+
+This is "linear" because the prediction is a linear function of the **weights** $\mathbf{w}$, not necessarily of the state. The features $\phi(s)$ can be highly nonlinear functions of the state.
+
+</Intuition>
+
+<Mathematical>
+
+For a linear value function:
+
+$$\hat{V}(s; \mathbf{w}) = \mathbf{w}^\top \phi(s)$$
+
+The gradient with respect to $\mathbf{w}$ is simply the feature vector:
+
+$$\nabla_\mathbf{w} \hat{V}(s; \mathbf{w}) = \phi(s)$$
+
+This makes linear function approximation particularly elegant: the gradient is just the features, independent of the weights.
+
+For the action-value function with state-action features:
+
+$$\hat{Q}(s, a; \mathbf{w}) = \mathbf{w}^\top \phi(s, a)$$
+
+Or equivalently, with separate weights per action:
+
+$$\hat{Q}(s, a; \mathbf{w}) = \mathbf{w}_a^\top \phi(s)$$
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class LinearValueFunction:
+    """
+    Linear function approximation for state values.
+
+    V(s) = w^T * phi(s)
+    """
+
+    def __init__(self, n_features):
+        """Initialize with zero weights."""
+        self.w = np.zeros(n_features)
+
+    def __call__(self, features):
+        """Compute value for given feature vector."""
+        return np.dot(self.w, features)
+
+    def gradient(self, features):
+        """Gradient of V with respect to w is just the features."""
+        return features
+
+
+class LinearQFunction:
+    """
+    Linear function approximation for action values.
+
+    Q(s, a) = w_a^T * phi(s)
+    """
+
+    def __init__(self, n_features, n_actions):
+        """Initialize with zero weights for each action."""
+        self.w = np.zeros((n_actions, n_features))
+        self.n_actions = n_actions
+
+    def __call__(self, features, action=None):
+        """
+        Compute Q-values.
+
+        If action is None, return Q-values for all actions.
+        Otherwise, return Q-value for specific action.
+        """
+        if action is None:
+            return self.w @ features  # All actions
+        return np.dot(self.w[action], features)  # Single action
+
+    def gradient(self, features, action):
+        """Gradient for specific action."""
+        grad = np.zeros_like(self.w)
+        grad[action] = features
+        return grad
+
+    def get_greedy_action(self, features):
+        """Return action with highest Q-value."""
+        q_values = self(features)
+        return np.argmax(q_values)
+
+# Example usage
+n_features = 7
+n_actions = 3
+
+V = LinearValueFunction(n_features)
+Q = LinearQFunction(n_features, n_actions)
+
+# Simulate a feature vector
+features = np.array([1.0, 0.5, -0.3, -0.15, 0.25, 0.09, 0.8])
+
+print(f"Initial V(s): {V(features):.4f}")
+print(f"Initial Q(s, :): {Q(features)}")
+print(f"Gradient of V: {V.gradient(features)}")
+```
+
+</Implementation>
+
+## Gradient Descent for Value Learning
+
+<Intuition>
+
+How do we learn the weights $\mathbf{w}$? We use **gradient descent**, the same technique that powers deep learning.
+
+The idea is simple:
+1. Make a prediction: $\hat{V}(s)$
+2. Observe the actual value (or an estimate): $V^{\text{target}}$
+3. Compute the error: $\delta = V^{\text{target}} - \hat{V}(s)$
+4. Adjust weights to reduce the error: $\mathbf{w} \leftarrow \mathbf{w} + \alpha \delta \cdot \nabla_\mathbf{w} \hat{V}(s)$
+
+For linear approximation, the gradient is just the feature vector, so:
+
+$$\mathbf{w} \leftarrow \mathbf{w} + \alpha \delta \cdot \phi(s)$$
+
+If the prediction was too low ($\delta > 0$), we increase the weights for the features that were active. If too high ($\delta < 0$), we decrease them.
+
+</Intuition>
+
+<Mathematical>
+
+We want to minimize the **Mean Squared Value Error**:
+
+$$\overline{\text{VE}}(\mathbf{w}) = \sum_{s \in \mathcal{S}} \mu(s) \left[ V^\pi(s) - \hat{V}(s; \mathbf{w}) \right]^2$$
+
+where $\mu(s)$ is the state distribution under the policy.
+
+Taking the gradient:
+
+$$\nabla_\mathbf{w} \overline{\text{VE}}(\mathbf{w}) = -2 \sum_s \mu(s) \left[ V^\pi(s) - \hat{V}(s; \mathbf{w}) \right] \nabla_\mathbf{w} \hat{V}(s; \mathbf{w})$$
+
+Stochastic gradient descent samples a single state and updates:
+
+$$\mathbf{w} \leftarrow \mathbf{w} + \alpha \left[ V^\pi(s) - \hat{V}(s; \mathbf{w}) \right] \nabla_\mathbf{w} \hat{V}(s; \mathbf{w})$$
+
+For linear approximation where $\nabla_\mathbf{w} \hat{V}(s; \mathbf{w}) = \phi(s)$:
+
+$$\mathbf{w} \leftarrow \mathbf{w} + \alpha \left[ V^\pi(s) - \hat{V}(s; \mathbf{w}) \right] \phi(s)$$
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class LinearValueFunction:
+    """Linear value function with gradient descent updates."""
+
+    def __init__(self, n_features, alpha=0.01):
+        self.w = np.zeros(n_features)
+        self.alpha = alpha
+
+    def __call__(self, features):
+        return np.dot(self.w, features)
+
+    def update(self, features, target):
+        """
+        Gradient descent update toward target value.
+
+        Args:
+            features: Feature vector for current state
+            target: Target value to move toward
+
+        Returns:
+            TD error (for monitoring)
+        """
+        prediction = self(features)
+        error = target - prediction
+
+        # Gradient descent: w += alpha * error * gradient
+        # For linear: gradient = features
+        self.w += self.alpha * error * features
+
+        return error
+
+# Demonstration: learning a simple value function
+np.random.seed(42)
+
+# True value function: V(s) = 2*x - 3*y + 1
+def true_value(x, y):
+    return 2*x - 3*y + 1
+
+def get_features(x, y):
+    return np.array([1.0, x, y])
+
+# Learn from samples
+V = LinearValueFunction(n_features=3, alpha=0.1)
+errors = []
+
+for _ in range(1000):
+    # Random state
+    x, y = np.random.uniform(-1, 1, 2)
+    features = get_features(x, y)
+    target = true_value(x, y)
+
+    error = V.update(features, target)
+    errors.append(error**2)
+
+print(f"True weights: [1, 2, -3]")
+print(f"Learned weights: {V.w}")
+print(f"Final MSE: {np.mean(errors[-100:]):.6f}")
+```
+
+</Implementation>
+
+## Semi-Gradient TD Learning
+
+<Definition title="Semi-Gradient Method">
+A **semi-gradient method** computes the gradient only with respect to the estimated value, not the target. When the target includes bootstrapped values (like in TD learning), we treat the target as a constant for gradient computation.
+</Definition>
+
+<Intuition>
+
+In TD learning, we do not know the true value $V^\pi(s)$. Instead, we use the **TD target**:
+
+$$V^{\text{target}} = R + \gamma \hat{V}(S'; \mathbf{w})$$
+
+This target includes our own value estimate for the next state. If we took the full gradient, we would need to differentiate through $\hat{V}(S'; \mathbf{w})$ as well.
+
+The **semi-gradient** approach treats the target as a constant. We only differentiate the prediction:
+
+$$\mathbf{w} \leftarrow \mathbf{w} + \alpha \left[ R + \gamma \hat{V}(S'; \mathbf{w}) - \hat{V}(S; \mathbf{w}) \right] \nabla_\mathbf{w} \hat{V}(S; \mathbf{w})$$
+
+Why "semi"? Because we compute half of the true gradient. Surprisingly, this works well in practice and is more stable than the full gradient.
+
+</Intuition>
+
+<Mathematical>
+
+**Semi-Gradient TD(0)** for value estimation:
+
+$$\mathbf{w} \leftarrow \mathbf{w} + \alpha \underbrace{\left[ R + \gamma \hat{V}(S'; \mathbf{w}) - \hat{V}(S; \mathbf{w}) \right]}_{\text{TD error } \delta} \nabla_\mathbf{w} \hat{V}(S; \mathbf{w})$$
+
+For linear approximation:
+
+$$\mathbf{w} \leftarrow \mathbf{w} + \alpha \delta \, \phi(S)$$
+
+**Semi-Gradient Q-Learning**:
+
+$$\mathbf{w} \leftarrow \mathbf{w} + \alpha \left[ R + \gamma \max_{a'} \hat{Q}(S', a'; \mathbf{w}) - \hat{Q}(S, A; \mathbf{w}) \right] \nabla_\mathbf{w} \hat{Q}(S, A; \mathbf{w})$$
+
+**Why semi-gradient?**
+
+The full gradient would be:
+
+$$\nabla_\mathbf{w} \left( R + \gamma \hat{V}(S') - \hat{V}(S) \right)^2 = 2\delta \left( \gamma \nabla_\mathbf{w} \hat{V}(S') - \nabla_\mathbf{w} \hat{V}(S) \right)$$
+
+The semi-gradient ignores the $\gamma \nabla_\mathbf{w} \hat{V}(S')$ term. This prevents the target from "chasing" the prediction and generally leads to more stable learning.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class LinearTDAgent:
+    """
+    Linear function approximation with semi-gradient TD(0).
+    """
+
+    def __init__(self, n_features, alpha=0.01, gamma=0.99):
+        self.w = np.zeros(n_features)
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def value(self, features):
+        """Estimate value of state."""
+        return np.dot(self.w, features)
+
+    def update(self, features, reward, next_features, done):
+        """
+        Semi-gradient TD(0) update.
+
+        Args:
+            features: phi(s)
+            reward: r
+            next_features: phi(s')
+            done: Whether s' is terminal
+
+        Returns:
+            TD error
+        """
+        current_value = self.value(features)
+
+        if done:
+            td_target = reward
+        else:
+            td_target = reward + self.gamma * self.value(next_features)
+
+        td_error = td_target - current_value
+
+        # Semi-gradient update: only gradient of current value
+        self.w += self.alpha * td_error * features
+
+        return td_error
+
+
+class LinearSarsaAgent:
+    """
+    Linear function approximation with semi-gradient SARSA.
+    """
+
+    def __init__(self, n_features, n_actions, alpha=0.01, gamma=0.99, epsilon=0.1):
+        self.w = np.zeros((n_actions, n_features))
+        self.n_actions = n_actions
+        self.alpha = alpha
+        self.gamma = gamma
+        self.epsilon = epsilon
+
+    def q_value(self, features, action=None):
+        """Get Q-value(s) for state features."""
+        if action is None:
+            return self.w @ features
+        return np.dot(self.w[action], features)
+
+    def select_action(self, features):
+        """Epsilon-greedy action selection."""
+        if np.random.random() < self.epsilon:
+            return np.random.randint(self.n_actions)
+        return np.argmax(self.q_value(features))
+
+    def update(self, features, action, reward, next_features, next_action, done):
+        """
+        Semi-gradient SARSA update.
+
+        Args:
+            features: phi(s)
+            action: a
+            reward: r
+            next_features: phi(s')
+            next_action: a' (selected by policy)
+            done: Whether s' is terminal
+
+        Returns:
+            TD error
+        """
+        current_q = self.q_value(features, action)
+
+        if done:
+            td_target = reward
+        else:
+            td_target = reward + self.gamma * self.q_value(next_features, next_action)
+
+        td_error = td_target - current_q
+
+        # Semi-gradient: only differentiate Q(s, a), not target
+        self.w[action] += self.alpha * td_error * features
+
+        return td_error
+
+
+# Example: Training loop
+def train_episode(env, agent, get_features):
+    """Train for one episode using SARSA."""
+    state = env.reset()
+    features = get_features(state)
+    action = agent.select_action(features)
+
+    total_reward = 0
+    done = False
+
+    while not done:
+        next_state, reward, done, _ = env.step(action)
+        next_features = get_features(next_state)
+        next_action = agent.select_action(next_features)
+
+        agent.update(features, action, reward, next_features, next_action, done)
+
+        features = next_features
+        action = next_action
+        total_reward += reward
+
+    return total_reward
+```
+
+</Implementation>
+
+## Tile Coding: A Powerful Feature Method
+
+<Definition title="Tile Coding">
+**Tile coding** is a feature engineering technique that covers the state space with multiple overlapping grids (tilings). Each tiling has its own offset, so nearby states activate different combinations of tiles, enabling smooth generalization.
+</Definition>
+
+<Intuition>
+
+Tile coding is like placing multiple transparent graph papers over your state space, each slightly offset from the others.
+
+Imagine a 2D state (position, velocity). We place 4 tilings, each with 10x10 tiles:
+- Tiling 1: Standard grid
+- Tiling 2: Shifted right by 1/4 tile
+- Tiling 3: Shifted up by 1/4 tile
+- Tiling 4: Shifted right and up by 1/4 tile
+
+For any state, exactly one tile is active in each tiling, giving us a 4-hot feature vector out of 400 possible features.
+
+**Why does this work?**
+- Two nearby states will share some (but not all) active tiles
+- Updating the weights for shared tiles transfers knowledge between states
+- Multiple tilings provide smooth interpolation between discrete regions
+
+</Intuition>
+
+<Mathematical>
+
+With $n$ tilings, each with $m$ tiles, we have $n \times m$ binary features. For any state $s$:
+
+$$\phi(s) \in \{0, 1\}^{n \times m}$$
+
+with exactly $n$ ones (one per tiling).
+
+The value function becomes:
+
+$$\hat{V}(s; \mathbf{w}) = \sum_{i \in \text{active tiles}} w_i$$
+
+The learning rate should be divided by the number of tilings:
+
+$$\alpha_{\text{tile}} = \frac{\alpha}{n}$$
+
+This ensures that the total step size remains appropriate since $n$ weights are updated per step.
+
+**Generalization pattern**: Two states share $k$ active tiles if they are close enough. The correlation between their values is proportional to $k/n$.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class TileCoder:
+    """
+    Tile coding for continuous state spaces.
+
+    Creates overlapping tilings to enable generalization while
+    maintaining discrete feature representations.
+    """
+
+    def __init__(self, state_bounds, n_tilings=8, tiles_per_dim=8):
+        """
+        Args:
+            state_bounds: List of (min, max) for each state dimension
+            n_tilings: Number of overlapping tilings
+            tiles_per_dim: Number of tiles per dimension per tiling
+        """
+        self.state_bounds = np.array(state_bounds)
+        self.n_tilings = n_tilings
+        self.tiles_per_dim = tiles_per_dim
+        self.n_dims = len(state_bounds)
+
+        # Total number of tiles
+        self.n_tiles_per_tiling = tiles_per_dim ** self.n_dims
+        self.n_features = n_tilings * self.n_tiles_per_tiling
+
+        # Compute tile widths
+        self.tile_widths = (self.state_bounds[:, 1] - self.state_bounds[:, 0]) / tiles_per_dim
+
+        # Random offsets for each tiling (between 0 and 1 tile width)
+        np.random.seed(42)
+        self.offsets = np.random.uniform(0, 1, (n_tilings, self.n_dims)) * self.tile_widths
+
+    def get_features(self, state):
+        """
+        Get binary feature vector for a state.
+
+        Returns:
+            Binary array of length n_features with exactly n_tilings ones
+        """
+        state = np.clip(state, self.state_bounds[:, 0], self.state_bounds[:, 1] - 1e-6)
+
+        features = np.zeros(self.n_features)
+
+        for tiling in range(self.n_tilings):
+            # Apply offset
+            offset_state = state - self.state_bounds[:, 0] + self.offsets[tiling]
+
+            # Compute tile indices for each dimension
+            tile_indices = (offset_state / self.tile_widths).astype(int)
+            tile_indices = np.clip(tile_indices, 0, self.tiles_per_dim - 1)
+
+            # Flatten to single index
+            flat_idx = 0
+            for d in range(self.n_dims):
+                flat_idx = flat_idx * self.tiles_per_dim + tile_indices[d]
+
+            # Set feature
+            feature_idx = tiling * self.n_tiles_per_tiling + flat_idx
+            features[feature_idx] = 1.0
+
+        return features
+
+    def get_active_tiles(self, state):
+        """Get indices of active tiles (for sparse representation)."""
+        return np.where(self.get_features(state) == 1.0)[0]
+
+
+class TileCodedQ:
+    """
+    Q-function with tile coding for continuous states.
+    """
+
+    def __init__(self, state_bounds, n_actions, n_tilings=8, tiles_per_dim=8, alpha=0.1):
+        self.tile_coder = TileCoder(state_bounds, n_tilings, tiles_per_dim)
+        self.n_actions = n_actions
+        self.alpha = alpha / n_tilings  # Divide by tilings
+
+        # Weights for each action
+        self.w = np.zeros((n_actions, self.tile_coder.n_features))
+
+    def q_value(self, state, action=None):
+        """Get Q-value(s) for state."""
+        features = self.tile_coder.get_features(state)
+        if action is None:
+            return self.w @ features
+        return np.dot(self.w[action], features)
+
+    def update(self, state, action, target):
+        """Semi-gradient update toward target."""
+        features = self.tile_coder.get_features(state)
+        prediction = np.dot(self.w[action], features)
+        error = target - prediction
+
+        self.w[action] += self.alpha * error * features
+        return error
+
+
+# Example: Mountain Car
+mountain_car_bounds = [(-1.2, 0.6), (-0.07, 0.07)]
+Q = TileCodedQ(mountain_car_bounds, n_actions=3, n_tilings=8, tiles_per_dim=8)
+
+print(f"Number of features: {Q.tile_coder.n_features}")
+print(f"Features per tiling: {Q.tile_coder.n_tiles_per_tiling}")
+
+# Test with a sample state
+state = (-0.5, 0.02)
+active_tiles = Q.tile_coder.get_active_tiles(state)
+print(f"\nState {state}:")
+print(f"Active tiles: {active_tiles}")
+print(f"Q-values: {Q.q_value(state)}")
+```
+
+</Implementation>
+
+## Convergence and the Deadly Triad
+
+<Warning>
+Linear function approximation with TD learning does not always converge. The combination of function approximation, bootstrapping, and off-policy learning can cause divergence.
+</Warning>
+
+<Intuition>
+
+We have been assuming that semi-gradient TD converges. For tabular methods, Q-learning is guaranteed to converge to the optimal Q-function. But with function approximation, things are more complicated.
+
+There are three ingredients that together can cause divergence, known as the **deadly triad**:
+
+1. **Function approximation**: Representing values with fewer parameters than states
+2. **Bootstrapping**: Using estimated values in the target (like TD learning)
+3. **Off-policy learning**: Learning about a policy different from the one generating data
+
+Any two of these are generally fine:
+- Tabular + bootstrapping + off-policy: Q-learning converges
+- Function approximation + Monte Carlo + off-policy: Converges (no bootstrapping)
+- Function approximation + bootstrapping + on-policy: SARSA with linear FA converges
+
+But all three together? The algorithm can diverge, with Q-values exploding to infinity.
+
+</Intuition>
+
+<Mathematical>
+
+For linear function approximation with on-policy TD(0), convergence is guaranteed to:
+
+$$\mathbf{w}^* = \arg\min_\mathbf{w} \sum_s \mu(s) \left[ V^\pi(s) - \hat{V}(s; \mathbf{w}) \right]^2$$
+
+where $\mu$ is the on-policy state distribution.
+
+The TD fixed point is:
+
+$$\mathbf{A}\mathbf{w} = \mathbf{b}$$
+
+where:
+
+$$\mathbf{A} = \mathbb{E}\left[ \phi(s)(\phi(s) - \gamma \phi(s'))^\top \right]$$
+$$\mathbf{b} = \mathbb{E}\left[ R \, \phi(s) \right]$$
+
+For on-policy learning, $\mathbf{A}$ is positive definite, ensuring convergence.
+
+For off-policy learning, $\mathbf{A}$ may not be positive definite, and the fixed point may not exist or be stable. This is the root cause of the deadly triad.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+def demonstrate_deadly_triad():
+    """
+    Simple example showing potential divergence with the deadly triad.
+
+    This is a contrived example, but illustrates the principle.
+    """
+    # Simple 2-state MDP with function approximation that aliases states
+    # State 1 and State 2 share the same feature (bad!)
+    # Off-policy: behavior policy visits state 1, target policy prefers state 2
+
+    n_steps = 100
+    w = 0.0  # Single weight
+    alpha = 0.1
+    gamma = 0.9
+
+    w_history = [w]
+
+    for step in range(n_steps):
+        # Behavior policy: always in "state 1"
+        # But target policy would prefer "state 2"
+
+        # Feature is always 1 (aliased states)
+        phi = 1.0
+
+        # Rewards: state 1 gives +1
+        reward = 1.0
+
+        # TD target using off-policy max
+        # Pretend next state has value that's also represented by same feature
+        # This creates a self-reinforcing loop
+        td_target = reward + gamma * w * phi  # Bootstrapping
+
+        # Current value
+        current_v = w * phi
+
+        # TD error
+        td_error = td_target - current_v
+
+        # Update (this can diverge if gamma * phi^2 > 1)
+        # In this case: gamma * 1 = 0.9 < 1, so it converges
+        # But with aliasing and off-policy, different dynamics emerge
+        w += alpha * td_error * phi
+
+        w_history.append(w)
+
+    return w_history
+
+# Run demonstration
+history = demonstrate_deadly_triad()
+print(f"Weight trajectory (first 10): {history[:10]}")
+print(f"Final weight: {history[-1]:.4f}")
+print("\nThis simple example converges, but more complex off-policy")
+print("scenarios with function approximation can diverge.")
+```
+
+</Implementation>
+
+## Summary
+
+Linear function approximation provides a foundation for understanding value function approximation:
+
+1. **Features** transform states into fixed-length vectors that capture relevant structure
+2. **Linear value functions** are weighted sums of features: $\hat{V}(s) = \mathbf{w}^\top \phi(s)$
+3. **Semi-gradient TD** updates weights using TD errors, treating the target as constant
+4. **Tile coding** provides a powerful way to create features for continuous states
+5. The **deadly triad** warns that function approximation + bootstrapping + off-policy can diverge
+
+Linear methods are interpretable and have theoretical guarantees for on-policy learning. However, they require careful feature engineering, and their expressiveness is limited by the features we design.
+
+The next section introduces neural networks, which can learn their own features directly from raw observations, opening the door to deep reinforcement learning.
+
+<Tip>
+For many practical problems, linear function approximation with good features (like tile coding) is competitive with deep RL and much easier to debug. Consider starting with linear methods before jumping to neural networks.
+</Tip>

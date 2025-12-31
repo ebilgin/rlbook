@@ -1,0 +1,484 @@
+---
+title: "Linear UCB"
+slug: "linucb"
+section: "Bandit Problems"
+description: "Contextual exploration with linear models"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Linear UCB (LinUCB)
+
+LinUCB is the workhorse algorithm for contextual bandits. It extends the UCB principle—"optimism in the face of uncertainty"—to handle context-dependent rewards. The key insight: not only do we want to explore arms we're uncertain about, we want to explore arms we're uncertain about *for the current context*.
+
+## From UCB to LinUCB
+
+<Intuition>
+
+Recall UCB for standard bandits:
+
+$$A_t = \arg\max_a \left[ Q_t(a) + c\sqrt{\frac{\ln t}{N_t(a)}} \right]$$
+
+We picked the arm with the highest "optimistic estimate"—the estimated value plus an exploration bonus based on uncertainty.
+
+LinUCB does the same thing, but now:
+- The estimated value depends on context: $\hat{r}(x, a) = x^\top \hat{\theta}_a$
+- The uncertainty depends on context too: how well do we know the reward *for this specific context*?
+
+Arms that we're uncertain about for the current context get an exploration bonus, even if we've tried them many times for other contexts.
+
+</Intuition>
+
+## The LinUCB Algorithm
+
+<Definition title="LinUCB">
+For each arm $a$, maintain a linear model that predicts reward from context. Select the arm with the highest upper confidence bound: estimated reward plus an exploration bonus based on prediction uncertainty.
+</Definition>
+
+<Mathematical>
+
+For each arm $a$, we maintain:
+- $A_a \in \mathbb{R}^{d \times d}$: Regularized design matrix (starts as $I_d$)
+- $b_a \in \mathbb{R}^d$: Reward-weighted context sum (starts as $0$)
+- $\hat{\theta}_a = A_a^{-1} b_a$: Current parameter estimate
+
+At each round with context $x_t$:
+
+1. For each arm $a$, compute:
+   - Estimated reward: $\hat{\mu}_a = x_t^\top \hat{\theta}_a$
+   - Prediction variance: $\sigma_a^2 = x_t^\top A_a^{-1} x_t$
+   - UCB value: $\text{UCB}_a = \hat{\mu}_a + \alpha \sqrt{x_t^\top A_a^{-1} x_t}$
+
+2. Select: $a_t = \arg\max_a \text{UCB}_a$
+
+3. Observe reward $r_t$ and update:
+   - $A_{a_t} \leftarrow A_{a_t} + x_t x_t^\top$
+   - $b_{a_t} \leftarrow b_{a_t} + r_t x_t$
+   - $\hat{\theta}_{a_t} = A_{a_t}^{-1} b_{a_t}$
+
+The exploration parameter $\alpha$ controls the width of the confidence bound.
+
+</Mathematical>
+
+<Intuition>
+
+Let's unpack the key quantities:
+
+**$A_a = I + \sum_{t: a_t = a} x_t x_t^\top$**: This matrix accumulates information about which directions in feature space we've explored for arm $a$. It starts as identity (regularization) and grows as we see more data.
+
+**$\hat{\theta}_a = A_a^{-1} b_a$**: This is the ridge regression solution—the weight vector that best predicts rewards from context for arm $a$.
+
+**$x^\top A_a^{-1} x$**: This is the **prediction variance**—how uncertain we are about the reward for this specific context. It's small when $x$ is similar to contexts we've seen before, large when $x$ is in an unexplored direction.
+
+The UCB value $\hat{\mu} + \alpha\sqrt{x^\top A_a^{-1} x}$ is optimistic: we assume the arm might perform as well as the upper end of our confidence interval.
+
+</Intuition>
+
+## Visualizing Confidence Ellipsoids
+
+<Intuition>
+
+In 2D feature space, the uncertainty about $\theta$ forms an **ellipsoid**. The shape tells us which directions we're confident about:
+
+Imagine you're estimating a weight vector $\theta = [\theta_1, \theta_2]$:
+- If you've seen many contexts with high $x_1$ and low $x_2$, you're confident about $\theta_1$ but not $\theta_2$
+- The ellipsoid is stretched in the $\theta_2$ direction (high uncertainty) and compressed in $\theta_1$ (low uncertainty)
+
+For a new context $x$:
+- If $x$ points in a well-explored direction, $x^\top A^{-1} x$ is small
+- If $x$ points in an unexplored direction, $x^\top A^{-1} x$ is large
+
+This is how LinUCB knows where to explore: contexts that project onto unexplored feature directions get higher exploration bonuses.
+
+</Intuition>
+
+<Example title="Confidence Ellipsoid in Action">
+
+Suppose we have 2D contexts and we've observed:
+- Context [1, 0] many times
+- Context [0, 1] only once
+
+Our $A$ matrix might look like:
+$$A = \begin{pmatrix} 101 & 0 \\ 0 & 2 \end{pmatrix}$$
+
+For a new context:
+- $x = [1, 0]$: variance = $[1, 0] A^{-1} [1, 0]^\top = 1/101 = 0.01$ (low uncertainty)
+- $x = [0, 1]$: variance = $[0, 1] A^{-1} [0, 1]^\top = 1/2 = 0.5$ (high uncertainty)
+- $x = [1, 1]$: variance = $[1, 1] A^{-1} [1, 1]^\top = 1/101 + 1/2 = 0.51$ (mixed)
+
+LinUCB will give a larger exploration bonus to arms when the context points in the less-explored $x_2$ direction.
+
+</Example>
+
+## Implementation
+
+<Implementation>
+
+```python
+import numpy as np
+from typing import Optional
+
+class LinUCBArm:
+    """
+    Linear UCB model for a single arm.
+
+    Maintains sufficient statistics for ridge regression
+    and computes UCB values for contexts.
+    """
+
+    def __init__(self, d: int, alpha: float = 1.0, lambda_reg: float = 1.0):
+        """
+        Initialize LinUCB arm.
+
+        Args:
+            d: Dimension of context vectors
+            alpha: Exploration parameter
+            lambda_reg: Regularization parameter
+        """
+        self.d = d
+        self.alpha = alpha
+
+        # A = lambda * I + sum of outer products
+        self.A = lambda_reg * np.eye(d)
+        # b = sum of reward-weighted contexts
+        self.b = np.zeros(d)
+
+        # Cached inverse and theta (recomputed on update)
+        self._A_inv = np.linalg.inv(self.A)
+        self._theta = np.zeros(d)
+
+    @property
+    def theta(self) -> np.ndarray:
+        """Current parameter estimate."""
+        return self._theta
+
+    def get_ucb(self, context: np.ndarray) -> float:
+        """
+        Compute UCB value for this arm given context.
+
+        Returns:
+            Estimated reward plus exploration bonus
+        """
+        # Estimated reward
+        mean = context @ self._theta
+
+        # Prediction standard deviation
+        variance = context @ self._A_inv @ context
+        std = np.sqrt(max(variance, 0))  # Numerical stability
+
+        return mean + self.alpha * std
+
+    def get_expected_reward(self, context: np.ndarray) -> float:
+        """Return estimated reward without exploration bonus."""
+        return context @ self._theta
+
+    def update(self, context: np.ndarray, reward: float):
+        """
+        Update model with new observation.
+
+        Args:
+            context: Context vector for this observation
+            reward: Observed reward
+        """
+        # Update sufficient statistics
+        self.A += np.outer(context, context)
+        self.b += reward * context
+
+        # Recompute inverse and theta
+        self._A_inv = np.linalg.inv(self.A)
+        self._theta = self._A_inv @ self.b
+
+
+class LinUCB:
+    """
+    LinUCB algorithm for contextual bandits.
+
+    Each arm has its own linear model (disjoint LinUCB).
+    """
+
+    def __init__(self, n_arms: int, d: int, alpha: float = 1.0):
+        """
+        Initialize LinUCB.
+
+        Args:
+            n_arms: Number of arms
+            d: Dimension of context vectors
+            alpha: Exploration parameter (higher = more exploration)
+        """
+        self.n_arms = n_arms
+        self.d = d
+        self.alpha = alpha
+        self.arms = [LinUCBArm(d, alpha) for _ in range(n_arms)]
+        self.t = 0
+
+    def select_action(self, context: np.ndarray) -> int:
+        """
+        Select arm with highest UCB for given context.
+
+        Args:
+            context: Current context vector
+
+        Returns:
+            Index of selected arm
+        """
+        self.t += 1
+        ucb_values = [arm.get_ucb(context) for arm in self.arms]
+        return int(np.argmax(ucb_values))
+
+    def update(self, context: np.ndarray, action: int, reward: float):
+        """
+        Update the selected arm's model.
+
+        Args:
+            context: Context for this round
+            action: Selected arm index
+            reward: Observed reward
+        """
+        self.arms[action].update(context, reward)
+
+    def get_all_ucbs(self, context: np.ndarray) -> np.ndarray:
+        """Return UCB values for all arms (for visualization)."""
+        return np.array([arm.get_ucb(context) for arm in self.arms])
+
+
+# Example usage
+def run_linucb_demo():
+    np.random.seed(42)
+
+    n_arms = 5
+    d = 10
+    n_steps = 1000
+
+    # Create a contextual bandit environment
+    true_theta = np.random.randn(n_arms, d) * 0.5
+
+    agent = LinUCB(n_arms, d, alpha=1.0)
+
+    total_reward = 0
+    total_regret = 0
+
+    for step in range(n_steps):
+        # Generate context
+        context = np.random.randn(d)
+
+        # Optimal arm and its expected reward
+        expected_rewards = context @ true_theta.T
+        optimal_arm = np.argmax(expected_rewards)
+        optimal_reward = expected_rewards[optimal_arm]
+
+        # Agent's choice
+        action = agent.select_action(context)
+
+        # Noisy reward
+        reward = expected_rewards[action] + np.random.randn() * 0.1
+
+        # Update
+        agent.update(context, action, reward)
+
+        total_reward += reward
+        total_regret += optimal_reward - expected_rewards[action]
+
+        if (step + 1) % 200 == 0:
+            print(f"Step {step+1}: Avg reward = {total_reward/(step+1):.3f}, "
+                  f"Total regret = {total_regret:.1f}")
+
+
+run_linucb_demo()
+```
+
+</Implementation>
+
+## Choosing Alpha
+
+<Tip>
+**Guidelines for the Exploration Parameter**
+
+The parameter $\alpha$ controls how much we explore:
+- $\alpha = 0$: Pure exploitation (no exploration bonus)
+- $\alpha = 1$: Moderate exploration (common default)
+- $\alpha = 2-3$: More exploration
+
+Theoretical analysis suggests:
+$$\alpha = \sqrt{\frac{1}{2} \ln\left(\frac{2TK}{\delta}\right)}$$
+
+where $T$ is the time horizon, $K$ is the number of arms, and $\delta$ is the failure probability.
+
+In practice, start with $\alpha = 1$ and tune based on performance.
+</Tip>
+
+<Warning>
+**Scale Sensitivity**
+
+LinUCB's exploration bonus is sensitive to the scale of rewards and features:
+- If rewards are in $[0, 100]$ instead of $[0, 1]$, the exploration bonus might be too small
+- If some features have much larger magnitude than others, they'll dominate the uncertainty
+
+**Best practices:**
+1. Normalize rewards to roughly $[-1, 1]$ or $[0, 1]$
+2. Standardize features (zero mean, unit variance)
+3. Adjust $\alpha$ based on the scale of your problem
+</Warning>
+
+## Computational Efficiency
+
+<Intuition>
+
+LinUCB requires inverting a $d \times d$ matrix for each arm at each update. For high-dimensional features, this can be slow: $O(d^3)$ per arm per update.
+
+**Optimization: Sherman-Morrison formula**
+
+Instead of inverting from scratch, update the inverse incrementally:
+
+$$A^{-1}_{\text{new}} = A^{-1}_{\text{old}} - \frac{A^{-1}_{\text{old}} x x^\top A^{-1}_{\text{old}}}{1 + x^\top A^{-1}_{\text{old}} x}$$
+
+This is $O(d^2)$ per update—much faster for large $d$.
+
+</Intuition>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class EfficientLinUCBArm:
+    """
+    LinUCB arm with efficient incremental updates.
+
+    Uses Sherman-Morrison formula to update the inverse
+    in O(d^2) instead of O(d^3).
+    """
+
+    def __init__(self, d: int, alpha: float = 1.0, lambda_reg: float = 1.0):
+        self.d = d
+        self.alpha = alpha
+        self.lambda_reg = lambda_reg
+
+        # Maintain the inverse directly
+        self.A_inv = np.eye(d) / lambda_reg
+        self.b = np.zeros(d)
+        self.theta = np.zeros(d)
+
+    def get_ucb(self, context: np.ndarray) -> float:
+        mean = context @ self.theta
+        variance = context @ self.A_inv @ context
+        return mean + self.alpha * np.sqrt(max(variance, 0))
+
+    def update(self, context: np.ndarray, reward: float):
+        # Sherman-Morrison update for A_inv
+        # A_inv_new = A_inv - (A_inv @ x @ x.T @ A_inv) / (1 + x.T @ A_inv @ x)
+        A_inv_x = self.A_inv @ context
+        denom = 1.0 + context @ A_inv_x
+
+        self.A_inv -= np.outer(A_inv_x, A_inv_x) / denom
+        self.b += reward * context
+        self.theta = self.A_inv @ self.b
+```
+
+</Implementation>
+
+## Hybrid LinUCB
+
+<Intuition>
+
+Sometimes, features can be split into:
+1. **Arm-specific features** $x_a$: Different for each arm (e.g., article features)
+2. **Shared features** $z$: Same across arms (e.g., user features)
+
+Hybrid LinUCB learns:
+- A shared parameter $\beta$ for user features
+- Per-arm parameters $\theta_a$ for arm-specific features
+
+$$\mathbb{E}[r | z, x_a, a] = z^\top \beta + x_a^\top \theta_a$$
+
+This allows knowledge to transfer across arms through the shared $\beta$.
+
+</Intuition>
+
+<Mathematical>
+
+The hybrid model can be written as:
+
+$$\mathbb{E}[r_t | z_t, x_{a,t}] = z_t^\top \beta + x_{a,t}^\top \theta_a$$
+
+where:
+- $z_t \in \mathbb{R}^{k}$ is the shared context
+- $x_{a,t} \in \mathbb{R}^d$ is the arm-specific context
+- $\beta \in \mathbb{R}^k$ is shared across arms
+- $\theta_a \in \mathbb{R}^d$ is specific to arm $a$
+
+The sufficient statistics now include cross-terms between shared and arm features, making the update more complex but allowing richer models.
+
+</Mathematical>
+
+## Regret Analysis
+
+<Mathematical>
+
+LinUCB achieves regret bounded by:
+
+$$\text{Regret}(T) \leq O\left(d\sqrt{T \ln(T)}\right)$$
+
+This bound tells us:
+1. Regret grows as $\sqrt{T}$ (sublinear—we improve over time)
+2. Dependence on dimension $d$ is linear (higher dimensions need more exploration)
+3. Logarithmic factor from concentration inequalities
+
+The $\sqrt{T}$ rate is near-optimal for contextual bandits. Comparing to standard bandits:
+- Standard UCB: $O(\sqrt{KT})$ where $K$ is number of arms
+- LinUCB: $O(d\sqrt{T})$ where $d$ is feature dimension
+
+When $d < K$ (few features, many arms), LinUCB can be much more efficient.
+
+</Mathematical>
+
+## LinUCB vs Epsilon-Greedy with Linear Models
+
+<Intuition>
+
+You could also use epsilon-greedy with linear regression for each arm. How does it compare?
+
+**Epsilon-greedy + Linear**:
+- Explores randomly with probability $\varepsilon$
+- Simple to implement
+- Doesn't adapt exploration to the context
+
+**LinUCB**:
+- Explores where uncertainty is high for the current context
+- More sample-efficient
+- Slightly more complex
+
+The key advantage of LinUCB: it knows *where* to explore. If we've seen many contexts in one region of feature space, epsilon-greedy still explores uniformly. LinUCB focuses exploration on unexplored regions.
+
+</Intuition>
+
+<Example title="When LinUCB Shines">
+
+Imagine a 2D feature space where:
+- Arm 1 is best in the top-left quadrant
+- Arm 2 is best everywhere else
+- You've seen many contexts from the top-left
+
+**Epsilon-greedy**: Keeps exploring both arms uniformly everywhere, wasting pulls in the well-understood top-left region.
+
+**LinUCB**: The top-left region has low uncertainty—it exploits there. The other regions have high uncertainty—it explores there.
+
+LinUCB focuses exploration budget where it matters most.
+
+</Example>
+
+## Summary
+
+LinUCB extends UCB to contextual bandits:
+
+1. **Core idea**: Optimism in context-dependent uncertainty
+2. **Model**: Linear relationship between context and reward
+3. **Exploration**: Based on prediction variance $x^\top A^{-1} x$
+4. **Update**: Ridge regression with incremental updates
+5. **Regret**: $O(d\sqrt{T})$—near-optimal
+
+<Note>
+LinUCB was introduced in the famous Li et al. (2010) paper on news recommendation at Yahoo!. It demonstrated that contextual bandits with linear models could significantly improve click-through rates in production. Today, variants of LinUCB power many recommendation and ad selection systems.
+</Note>
+
+In the next section, we'll see LinUCB and contextual bandits in action across real-world applications.

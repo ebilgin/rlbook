@@ -1,0 +1,90 @@
+---
+title: "Contextual Bandits"
+slug: "contextual-bandits"
+section: "Bandit Problems"
+description: "Personalized decisions based on context features"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "multi-armed-bandits"
+    title: "Multi-Armed Bandits"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Contextual Bandits
+
+<ChapterObjectives>
+- Understand how contextual bandits extend multi-armed bandits with features
+- Formalize the contextual bandit problem mathematically
+- Implement LinUCB for linear reward models
+- Recognize real-world applications in recommendations, advertising, and personalization
+- Understand the bridge from bandits to full reinforcement learning
+</ChapterObjectives>
+
+A news website needs to decide which headline to show each visitor. But here's the catch: different people like different things. A sports fan wants game scores; a tech enthusiast wants startup news.
+
+This isn't just about finding the best arm—it's about finding the best arm *for each person*. Welcome to **contextual bandits**.
+
+## From One-Size-Fits-All to Personalization
+
+In multi-armed bandits, we sought a single best action. But many real problems have **context**—features that should inform our decision:
+
+- **User profile**: Age, location, browsing history
+- **Time of day**: Morning news vs evening entertainment
+- **Device type**: Mobile users want shorter content
+
+Contextual bandits learn to map these features to actions, personalizing decisions while still exploring efficiently.
+
+<Note>
+Contextual bandits are the workhorse behind modern recommendation systems, online advertising, and personalized medicine. They're simpler than full RL but more powerful than basic bandits.
+</Note>
+
+## Chapter Overview
+
+<div className="grid md:grid-cols-3 gap-4 my-6">
+  <a href="/chapters/contextual-bandits/context-matters" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">Why Context Matters</h3>
+    <p className="text-slate-400 text-sm mt-1">From bandits to personalized decisions</p>
+  </a>
+  <a href="/chapters/contextual-bandits/linucb" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">Linear UCB</h3>
+    <p className="text-slate-400 text-sm mt-1">Contextual exploration with linear models</p>
+  </a>
+  <a href="/chapters/contextual-bandits/applications" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">Real-World Applications</h3>
+    <p className="text-slate-400 text-sm mt-1">Recommendations, ads, and clinical trials</p>
+  </a>
+</div>
+
+## The Key Insight
+
+<Definition title="Contextual Bandit">
+A sequential decision problem where the agent observes context (features) before choosing an action, and the expected reward depends on both the context and the chosen action.
+</Definition>
+
+Contextual bandits bridge the gap between:
+- **Simple bandits**: One best arm for everyone
+- **Full RL**: Sequential decisions that change the environment
+
+By conditioning on context, we personalize without needing the full complexity of states and transitions.
+
+## Prerequisites
+
+This chapter builds on:
+- Exploration strategies from [Multi-Armed Bandits](/chapters/multi-armed-bandits)
+- Especially [UCB](/chapters/multi-armed-bandits/ucb) which LinUCB extends
+
+---
+
+<KeyTakeaways>
+- **Context** allows personalization: different users get different recommendations
+- **LinUCB** extends UCB to linear reward models with confidence ellipsoids
+- Context is not state: it doesn't change due to your actions
+- Contextual bandits power real systems: news, ads, medical trials
+- When actions affect future context, you need full RL (MDPs)
+</KeyTakeaways>
+
+<NextChapter slug="intro-to-mdps" title="Introduction to MDPs" />

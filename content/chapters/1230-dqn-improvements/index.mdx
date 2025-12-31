@@ -1,0 +1,95 @@
+---
+title: "DQN Improvements"
+slug: "dqn-improvements"
+section: "Deep Reinforcement Learning"
+description: "Enhancements that make DQN even better"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "dqn"
+    title: "Deep Q-Networks"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# DQN Improvements
+
+<ChapterObjectives>
+- Identify limitations of vanilla DQN
+- Explain Double DQN and why it fixes overestimation bias
+- Describe Prioritized Experience Replay and its benefits
+- Understand Dueling Networks architecture and its intuition
+- Explain how Rainbow combines improvements for state-of-the-art performance
+</ChapterObjectives>
+
+DQN was a breakthrough, but it wasn't perfect. The Q-values it learned were systematically too high, it wasted time relearning easy transitions, and it couldn't distinguish between good states and good actions.
+
+Each of these problems sparked an improvement, and combining them all created **Rainbow**, one of the most sample-efficient value-based agents.
+
+## DQN's Limitations
+
+After the initial DQN success, researchers identified several ways to improve it:
+
+1. **Overestimation bias**: The max operator causes Q-values to be too high
+2. **Uniform sampling**: Not all transitions are equally useful for learning
+3. **Entangled values**: State value and action advantages are learned together
+
+## Chapter Overview
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <a href="/chapters/dqn-improvements/double-dqn" className="block p-4 bg-gradient-to-br from-blue-900/30 to-blue-800/10 rounded-lg border border-blue-700/50 hover:border-blue-500/50 transition-colors">
+    <h3 className="font-semibold text-blue-400">Double DQN</h3>
+    <p className="text-slate-400 text-sm mt-1">Fixing overestimation bias</p>
+  </a>
+  <a href="/chapters/dqn-improvements/prioritized-replay" className="block p-4 bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 rounded-lg border border-emerald-700/50 hover:border-emerald-500/50 transition-colors">
+    <h3 className="font-semibold text-emerald-400">Prioritized Replay</h3>
+    <p className="text-slate-400 text-sm mt-1">Learning more from important transitions</p>
+  </a>
+  <a href="/chapters/dqn-improvements/dueling-networks" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">Dueling Networks</h3>
+    <p className="text-slate-400 text-sm mt-1">Separating state value from action advantage</p>
+  </a>
+  <a href="/chapters/dqn-improvements/rainbow" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">Rainbow</h3>
+    <p className="text-slate-400 text-sm mt-1">The sum is greater than its parts</p>
+  </a>
+</div>
+
+## The Key Insight
+
+<Definition title="DQN Improvements Philosophy">
+Each DQN improvement addresses a specific, identifiable problem. The elegance lies in their complementary nature: they can be combined for compounding benefits.
+</Definition>
+
+Each improvement we'll cover solves a specific problem:
+
+- **Double DQN**: Uses two networks to decouple action selection from evaluation
+- **Prioritized Experience Replay**: Samples important transitions more frequently
+- **Dueling Networks**: Separates learning "how good is this state?" from "which action is best?"
+- **Rainbow**: Combines six improvements into one powerful agent
+
+## Prerequisites
+
+This chapter builds directly on:
+- [Deep Q-Networks](/chapters/dqn) for the base algorithm we're improving
+
+## Key Questions We'll Answer
+
+- Why do DQN's Q-values tend to be too high?
+- How can we prioritize learning from surprising experiences?
+- When does it matter to separate state value from action value?
+- Do all these improvements stack together?
+
+---
+
+<KeyTakeaways>
+- **Double DQN** fixes overestimation with a simple change to the target computation
+- **Prioritized Experience Replay** focuses learning on high-error transitions
+- **Dueling Networks** explicitly separate state value from action advantages
+- **Rainbow** combines six improvements, showing they complement each other
+- Each improvement is independently valuable; together they're even better
+</KeyTakeaways>
+
+<NextChapter slug="intro-to-policy-gradients" title="Introduction to Policy Gradients" />

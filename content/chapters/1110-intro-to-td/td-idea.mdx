@@ -1,0 +1,231 @@
+---
+title: "The TD Idea"
+slug: "td-idea"
+section: "Temporal Difference Learning"
+description: "Bootstrapping: learning from incomplete returns"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# The TD Idea
+
+Imagine trying to predict how long your commute will take. Monte Carlo would say: "Wait until you arrive, then update your prediction based on the actual time." But you're smarter than that. As you drive, you constantly revise your estimate: "I've been driving for 10 minutes and I'm at the highway—based on how long the rest usually takes, I think the total will be about 25 minutes."
+
+This is the essence of **Temporal Difference (TD) learning**: updating predictions based on other predictions, before the final outcome is known.
+
+## The Problem with Waiting
+
+Recall from Dynamic Programming that we can compute value functions if we have a model of the environment. And from Monte Carlo methods, we can estimate values from complete episodes of experience. But both approaches have significant limitations:
+
+- **Dynamic Programming** requires a complete model of the environment (transition probabilities, rewards)
+- **Monte Carlo** requires waiting until an episode ends to learn anything
+
+What if the episode is very long? What if it never ends (continuing tasks)? What if we want to learn online, updating our estimates as we go?
+
+<Definition title="Temporal Difference Learning">
+A family of RL methods that learn by comparing predictions made at successive time steps. The "temporal difference" is the gap between what we predicted a state's value would be and what we now think it should be, based on the immediate reward and our estimate of the next state's value.
+</Definition>
+
+## The Key Insight: Bootstrapping
+
+<Intuition>
+
+Here's the central idea of TD learning:
+
+Instead of waiting for the actual return $G_t$ (which requires the episode to end), we can use our current estimate $V(S_{t+1})$ as a stand-in for everything that comes after the next state.
+
+Think of it like this: if you're predicting the total score of a basketball game at halftime, you don't need to wait for the game to end. You can use the current score plus your estimate of how the second half will go.
+
+The actual return is:
+$$G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \cdots$$
+
+The TD approximation replaces everything after $R_{t+1}$ with our estimate:
+$$G_t \approx R_{t+1} + \gamma V(S_{t+1})$$
+
+This $R_{t+1} + \gamma V(S_{t+1})$ is called the **TD target**.
+
+</Intuition>
+
+<Definition title="Bootstrapping">
+Using estimated values to update other estimates. In TD learning, we use our current estimate of $V(S_{t+1})$ to improve our estimate of $V(S_t)$, rather than waiting for the actual return. The name comes from the phrase "pulling yourself up by your bootstraps."
+</Definition>
+
+The term "bootstrapping" captures both the power and the risk of this approach:
+
+- **Power**: We can learn immediately, without waiting
+- **Risk**: We're building estimates on top of estimates—if our estimates are wrong, we might reinforce those errors
+
+<Mathematical>
+
+Let's be precise about what's happening. The true value function satisfies the Bellman equation:
+
+$$V^\pi(s) = \mathbb{E}_\pi\left[R_{t+1} + \gamma V^\pi(S_{t+1}) \mid S_t = s\right]$$
+
+This says: the value of a state equals the expected immediate reward plus the discounted value of the next state.
+
+Monte Carlo estimates $V^\pi(s)$ by averaging actual returns:
+$$V(s) \leftarrow V(s) + \alpha\left[G_t - V(s)\right]$$
+
+TD learning replaces the actual return $G_t$ with the bootstrapped estimate:
+$$V(s) \leftarrow V(s) + \alpha\left[R_{t+1} + \gamma V(S_{t+1}) - V(s)\right]$$
+
+The term in brackets is called the **TD error**:
+$$\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$$
+
+</Mathematical>
+
+## The TD Error: A Surprise Signal
+
+<Intuition>
+
+The TD error $\delta_t$ tells us how "surprised" we are at each step. It measures the difference between:
+
+1. **What we expected**: $V(S_t)$ — our estimate of the current state's value
+2. **What we now think**: $R_{t+1} + \gamma V(S_{t+1})$ — the reward we got plus our estimate of where we ended up
+
+If $\delta_t > 0$, things went better than expected (positive surprise).
+If $\delta_t < 0$, things went worse than expected (negative surprise).
+If $\delta_t = 0$, our prediction was perfect.
+
+Over time, as our value estimates improve, the TD error should average to zero—meaning our predictions are consistent with what actually happens.
+
+</Intuition>
+
+<Example>
+**A Concrete Example**
+
+Suppose you're in GridWorld, in a state with estimated value $V(s) = 5.0$. You take an action, receive reward $r = -1$, and end up in a state with estimated value $V(s') = 7.0$. With $\gamma = 0.9$:
+
+- **TD target**: $r + \gamma V(s') = -1 + 0.9 \times 7.0 = 5.3$
+- **TD error**: $\delta = 5.3 - 5.0 = 0.3$
+
+The TD error is positive! This means the transition was slightly better than our current estimate suggests. With learning rate $\alpha = 0.1$:
+
+- **New estimate**: $V(s) \leftarrow 5.0 + 0.1 \times 0.3 = 5.03$
+
+We've nudged our estimate upward to account for this surprisingly good transition.
+</Example>
+
+## Why TD Learning is Powerful
+
+TD learning gives us several advantages over other methods:
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="p-4 bg-gradient-to-br from-green-900/30 to-green-800/10 rounded-lg border border-green-700/50">
+    <h4 className="font-semibold text-green-400 mb-2">Online Learning</h4>
+    <p className="text-slate-400 text-sm">Updates happen every step, not just at episode end. Learning is immediate and continuous.</p>
+  </div>
+  <div className="p-4 bg-gradient-to-br from-blue-900/30 to-blue-800/10 rounded-lg border border-blue-700/50">
+    <h4 className="font-semibold text-blue-400 mb-2">No Model Required</h4>
+    <p className="text-slate-400 text-sm">Like Monte Carlo, TD learns from experience. No need to know transition probabilities.</p>
+  </div>
+  <div className="p-4 bg-gradient-to-br from-purple-900/30 to-purple-800/10 rounded-lg border border-purple-700/50">
+    <h4 className="font-semibold text-purple-400 mb-2">Continuing Tasks</h4>
+    <p className="text-slate-400 text-sm">Works for tasks that never end. MC requires episodes; TD doesn't.</p>
+  </div>
+  <div className="p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50">
+    <h4 className="font-semibold text-amber-400 mb-2">Lower Variance</h4>
+    <p className="text-slate-400 text-sm">Updates depend on one transition, not an entire episode. Less noise in estimates.</p>
+  </div>
+</div>
+
+## The Cost: Bias
+
+<Warning>
+TD learning introduces **bias** because we're using estimates to update estimates. If $V(S_{t+1})$ is wrong, we're learning from a faulty target. This bias decreases as our estimates improve, but it never fully disappears until convergence.
+</Warning>
+
+The bias-variance tradeoff is fundamental:
+
+- **Monte Carlo**: Unbiased (uses actual returns) but high variance (returns are noisy)
+- **TD Learning**: Biased (uses estimated returns) but low variance (single-step updates)
+
+In practice, TD's lower variance often wins. Learning faster with slightly biased estimates usually beats learning slowly with perfect but noisy estimates.
+
+<Implementation>
+
+Here's the core TD idea in code:
+
+```python
+import numpy as np
+
+def td_update(V, state, reward, next_state, alpha=0.1, gamma=0.99, done=False):
+    """
+    Perform a single TD(0) update.
+
+    The key insight: instead of waiting for the actual return,
+    we use r + gamma * V[next_state] as our target.
+    """
+    if done:
+        # Terminal state: no future value
+        td_target = reward
+    else:
+        # Bootstrapping: use our estimate of the next state's value
+        td_target = reward + gamma * V[next_state]
+
+    # TD error: how surprised are we?
+    td_error = td_target - V[state]
+
+    # Update: move our estimate toward the target
+    V[state] = V[state] + alpha * td_error
+
+    return td_error
+```
+
+Notice the structure:
+1. **Compute the target**: $r + \gamma V(s')$ (or just $r$ if terminal)
+2. **Compute the error**: how far off were we?
+3. **Update**: take a step toward the target
+
+This pattern—target, error, update—appears throughout reinforcement learning.
+
+</Implementation>
+
+## Connection to the Bellman Equation
+
+<Mathematical>
+
+TD learning can be understood as a sample-based version of the Bellman equation.
+
+The Bellman equation for $V^\pi$ says:
+$$V^\pi(s) = \mathbb{E}_\pi\left[R_{t+1} + \gamma V^\pi(S_{t+1}) \mid S_t = s\right]$$
+
+This requires computing an expectation over all possible transitions—which needs a model.
+
+TD learning replaces the expectation with a sample:
+$$V(S_t) \leftarrow V(S_t) + \alpha\left[\underbrace{R_{t+1} + \gamma V(S_{t+1})}_{\text{sample of expected value}} - V(S_t)\right]$$
+
+Each transition $(S_t, R_{t+1}, S_{t+1})$ gives us one sample of what the right-hand side of the Bellman equation should be. By averaging many such samples (through the incremental update), we converge to the true value function.
+
+This is why TD learning is sometimes called "sample-based dynamic programming" or "model-free bootstrapping."
+
+</Mathematical>
+
+## The Relationship to DP and MC
+
+TD learning sits between Dynamic Programming and Monte Carlo:
+
+| Aspect | DP | MC | TD |
+|--------|----|----|-----|
+| **Bootstraps?** | Yes | No | Yes |
+| **Uses samples?** | No | Yes | Yes |
+| **Requires model?** | Yes | No | No |
+| **Requires episodes?** | No | Yes | No |
+| **Update timing** | Synchronous | End of episode | Every step |
+
+<Note>
+TD learning is sometimes called the "one weird trick" of RL. It combines the sample-based learning of Monte Carlo with the bootstrapping of Dynamic Programming, getting the best of both worlds while avoiding their main limitations.
+</Note>
+
+## Summary
+
+The TD idea is deceptively simple but profoundly powerful:
+
+1. **Don't wait for the end**—update predictions immediately using new observations
+2. **Bootstrap from estimates**—use $V(s')$ as a stand-in for the unknown future
+3. **The TD error is your guide**—it tells you how to adjust your predictions
+
+This single idea—learning from temporal differences—is the foundation for Q-learning, SARSA, and all modern deep RL algorithms.
+
+In the next section, we'll see how to turn this idea into a concrete algorithm: TD(0).

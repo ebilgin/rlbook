@@ -1,0 +1,133 @@
+---
+title: "Offline RL"
+slug: "offline-rl"
+section: "Advanced Topics"
+description: "Learning from logged data without environment interaction"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "q-learning"
+    title: "Q-Learning"
+  - slug: "dqn"
+    title: "Deep Q-Networks"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Offline Reinforcement Learning
+
+<ChapterObjectives>
+- Explain why offline RL is important for real-world applications
+- Describe the distribution shift problem
+- Implement Conservative Q-Learning (CQL)
+- Explain behavior cloning and its limitations
+- Understand the tradeoff between conservatism and optimality
+- Identify when offline RL is appropriate vs online RL
+</ChapterObjectives>
+
+What if you can't explore? In healthcare, you can't experiment on patients to learn a treatment policy. In autonomous driving, you can't crash cars to learn safe behavior. In industrial control, you can't risk damaging expensive equipment.
+
+But you have years of logged data from doctors, human drivers, and plant operators. Can you learn good policies from this fixed dataset, without any new interaction?
+
+<Intuition>
+
+Offline RL is learning to drive from dashcam footage. You watch thousands of hours of driving videos: what human drivers did, what happened as a result. But you never actually get behind the wheel during training. Can you learn to drive well?
+
+The answer is: yes, but it's tricky. The challenge is that your policy might want to do something the humans never did—and you have no data about what happens then.
+
+</Intuition>
+
+## Chapter Overview
+
+<div className="my-8">
+  <div className="text-slate-400 text-sm mb-4">In this chapter:</div>
+
+  <div className="space-y-3">
+    <a href="/chapters/offline-rl/offline-setting" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-cyan-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-cyan-400 font-bold text-lg">The Offline Setting</div>
+      <div className="text-slate-400 text-sm mt-1">Why offline RL matters and when to use it: learning from fixed datasets without environment interaction</div>
+    </a>
+
+    <a href="/chapters/offline-rl/distribution-shift" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-violet-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-violet-400 font-bold text-lg">Distribution Shift</div>
+      <div className="text-slate-400 text-sm mt-1">The core challenge: why standard RL algorithms fail on offline data and how Q-values become unreliable</div>
+    </a>
+
+    <a href="/chapters/offline-rl/conservative-methods" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-amber-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-amber-400 font-bold text-lg">Conservative Methods</div>
+      <div className="text-slate-400 text-sm mt-1">Solutions like CQL that stay close to the data by penalizing out-of-distribution actions</div>
+    </a>
+  </div>
+</div>
+
+## The Big Picture
+
+<Definition title="Offline RL">
+Reinforcement learning from a fixed dataset of previously collected experience, with no ability to interact with the environment during training. Also called "batch RL" or "data-driven RL."
+</Definition>
+
+Offline RL learns from a fixed dataset without environment interaction. The core challenge is **distribution shift**: the learned policy might choose actions never seen in the data, and we have no way to know if those actions are good or catastrophic. Conservative methods explicitly discourage out-of-distribution actions.
+
+<Intuition>
+
+The key difference from online RL:
+
+**Online RL**: Try something, see what happens, learn from it. If you're uncertain about an action, you can explore and find out.
+
+**Offline RL**: You only have the data you have. If you're uncertain about an action not in the data, you can't explore—you must either trust your extrapolation or avoid that action entirely.
+
+This fundamental constraint changes everything about how we approach the problem.
+
+</Intuition>
+
+## Why Offline RL Matters
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="bg-emerald-900/20 border border-emerald-700/50 rounded-lg p-4">
+    <div className="text-emerald-400 font-bold mb-2">Real-World Applications</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>Healthcare: treatment policies from medical records</li>
+      <li>Autonomous driving: learning from human demonstrations</li>
+      <li>Robotics: using collected teleoperation data</li>
+      <li>Industrial control: optimizing from historical operations</li>
+    </ul>
+  </div>
+  <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+    <div className="text-blue-400 font-bold mb-2">Key Benefits</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>Safety: no risky exploration during training</li>
+      <li>Leverage existing data: use what you already have</li>
+      <li>Reproducibility: same data gives same training</li>
+      <li>Cost-effective: no need for expensive simulators</li>
+    </ul>
+  </div>
+</div>
+
+<Tip title="Start Here">
+
+New to offline RL? Begin with [The Offline Setting](/chapters/offline-rl/offline-setting) to understand when and why offline RL is needed, then continue through the sections in order.
+
+</Tip>
+
+## Connection to RLHF
+
+<Note title="Looking Ahead">
+
+Offline RL principles are central to how modern language models are trained. In RLHF (Reinforcement Learning from Human Feedback), we collect comparison data offline—humans don't interact with the model during reward model training. The techniques in this chapter lay the groundwork for the next chapter on RLHF.
+
+</Note>
+
+---
+
+<KeyTakeaways>
+- Offline RL learns from fixed datasets without environment interaction
+- Distribution shift causes Q-learning to overestimate unseen actions
+- Conservative methods like CQL penalize out-of-distribution actions
+- Dataset quality matters more than dataset quantity
+- Offline RL enables deployment in safety-critical domains
+- Modern language model training (RLHF) uses offline RL principles
+</KeyTakeaways>
+
+<NextChapter slug="rlhf" title="RLHF and Language Models" />

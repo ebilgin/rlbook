@@ -1,0 +1,111 @@
+---
+title: "Deep Q-Networks"
+slug: "dqn"
+section: "Deep Reinforcement Learning"
+description: "The breakthrough that made deep RL work"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "q-learning"
+    title: "Q-Learning"
+  - slug: "function-approximation"
+    title: "Function Approximation"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Deep Q-Networks (DQN)
+
+<ChapterObjectives>
+- Explain why naive Q-learning with neural networks fails
+- Describe how experience replay breaks correlation
+- Explain target networks and why they stabilize training
+- Implement DQN from scratch
+- Understand frame stacking and preprocessing for visual inputs
+</ChapterObjectives>
+
+In 2013, a paper from DeepMind shook the AI world: a single algorithm, with the same hyperparameters, learned to play 49 different Atari games from raw pixels, some at superhuman level.
+
+That algorithm was **DQN**, and it showed that deep learning and reinforcement learning could work together.
+
+## The Breakthrough
+
+<Definition title="Deep Q-Network (DQN)">
+A Q-learning agent that uses a deep neural network to approximate the Q-function, stabilized by two key innovations: **experience replay** and **target networks**.
+</Definition>
+
+The deadly triad (off-policy + function approximation + bootstrapping) seemed fatal. DQN survives by breaking two correlations:
+
+1. **Experience replay** breaks the correlation between consecutive samples
+2. **Target networks** break the correlation between Q-values and their targets
+
+## Chapter Overview
+
+This chapter covers the complete DQN algorithm, piece by piece:
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <a href="/chapters/dqn/dqn-architecture" className="block p-4 bg-gradient-to-br from-blue-900/30 to-blue-800/10 rounded-lg border border-blue-700/50 hover:border-blue-500/50 transition-colors">
+    <h3 className="font-semibold text-blue-400">The DQN Architecture</h3>
+    <p className="text-slate-400 text-sm mt-1">CNNs for processing visual observations</p>
+  </a>
+  <a href="/chapters/dqn/experience-replay" className="block p-4 bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 rounded-lg border border-emerald-700/50 hover:border-emerald-500/50 transition-colors">
+    <h3 className="font-semibold text-emerald-400">Experience Replay</h3>
+    <p className="text-slate-400 text-sm mt-1">Breaking correlations through random sampling</p>
+  </a>
+  <a href="/chapters/dqn/target-networks" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">Target Networks</h3>
+    <p className="text-slate-400 text-sm mt-1">Stabilizing training with frozen targets</p>
+  </a>
+  <a href="/chapters/dqn/putting-it-together" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">Putting It Together</h3>
+    <p className="text-slate-400 text-sm mt-1">The complete DQN algorithm</p>
+  </a>
+</div>
+
+## The Core Idea
+
+DQN is fundamentally just Q-learning with a neural network:
+
+$$Q(s, a) \leftarrow Q(s, a) + \alpha \left[ r + \gamma \max_{a'} Q(s', a') - Q(s, a) \right]$$
+
+But instead of a table, we have:
+- A neural network $Q(s, a; \theta)$ parameterized by weights $\theta$
+- A **replay buffer** storing past experiences
+- A **target network** $Q(s, a; \theta^-)$ with frozen weights
+
+<Mathematical>
+
+The DQN loss function:
+
+$$L(\theta) = \mathbb{E}_{(s,a,r,s') \sim \mathcal{D}} \left[ \left( r + \gamma \max_{a'} Q(s', a'; \theta^-) - Q(s, a; \theta) \right)^2 \right]$$
+
+where $\mathcal{D}$ is the replay buffer and $\theta^-$ are the target network parameters.
+
+</Mathematical>
+
+## Prerequisites
+
+This chapter builds on:
+- [Q-Learning](/chapters/q-learning) for the core algorithm
+- [Function Approximation](/chapters/function-approximation) for why we need neural networks and the challenges they introduce
+
+## Key Questions We'll Answer
+
+- Why does naive neural network Q-learning fail?
+- How does storing and replaying experiences help?
+- Why do we need a separate target network?
+- What preprocessing is needed for visual inputs?
+
+---
+
+<KeyTakeaways>
+- DQN = Q-learning + neural network + two key tricks
+- **Experience replay** decorrelates training samples and improves data efficiency
+- **Target networks** provide stable targets during learning
+- **Frame stacking** provides temporal information from static images
+- DQN achieved superhuman performance on many Atari games with a single algorithm
+</KeyTakeaways>
+
+<NextChapter slug="dqn-improvements" title="DQN Improvements" />

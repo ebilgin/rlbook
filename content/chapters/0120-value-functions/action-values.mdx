@@ -1,0 +1,483 @@
+---
+title: "Action Value Functions"
+slug: "action-values"
+section: "Markov Decision Processes"
+description: "How good is it to take an action in a state?"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Action Value Functions
+
+State values tell us how good it is to *be* somewhere. But to actually make decisions, we need to know how good each *action* is. That's what action-value functions (Q-functions) provide.
+
+The Q-function is perhaps the most important concept in reinforcement learning. It's the foundation of Q-learning, DQN, and many other algorithms.
+
+## The Question Q-Values Answer
+
+State values answer: "How good is this state?"
+
+Action values answer a more directly useful question: **"How good is this action in this state?"**
+
+<Definition title="Action-Value Function">
+The action-value function $Q^\pi(s,a)$ gives the expected return when starting in state $s$, taking action $a$, and then following policy $\pi$ thereafter:
+
+$$Q^\pi(s, a) = \mathbb{E}_\pi[G_t | S_t = s, A_t = a]$$
+</Definition>
+
+<Intuition>
+
+Q-values let you compare actions directly. If you're in a state and wondering "should I go left or right?", you can just look at the Q-values:
+
+- $Q(s, \text{left}) = 5.2$
+- $Q(s, \text{right}) = 8.7$
+
+Right is better! The Q-values give you an immediate answer without needing to simulate forward or know the MDP dynamics.
+
+Think of Q-values as an **action rating system**. Each action gets a score based on where it leads and what follows.
+
+</Intuition>
+
+## Why Q-Values Matter for Control
+
+<Note>
+Here's the key insight: **V-values tell you where to be, but Q-values tell you what to do.**
+
+To use V-values for action selection, you need to know where each action leads (the transition probabilities). To use Q-values, you just need to compare numbers.
+</Note>
+
+This is why Q-learning and its variants are so popular: they learn Q-values directly, enabling action selection without a model of the environment.
+
+<Example title="V-values vs Q-values for Decision Making">
+
+Suppose you're in state $s$ with two actions available: **left** and **right**.
+
+**Using V-values** (requires knowing the MDP):
+- Left leads to state $s_1$ with probability 0.8, state $s_2$ with probability 0.2
+- Right leads to state $s_3$ with probability 1.0
+- Must compute: $Q(s, \text{left}) = R(s, \text{left}) + \gamma(0.8 \cdot V(s_1) + 0.2 \cdot V(s_2))$
+- Then compare with $Q(s, \text{right}) = R(s, \text{right}) + \gamma \cdot V(s_3)$
+
+**Using Q-values** (no model needed):
+- Look up $Q(s, \text{left}) = 7.3$
+- Look up $Q(s, \text{right}) = 8.1$
+- Right is better. Done!
+
+Q-values have "pre-computed" the effect of the transitions.
+
+</Example>
+
+## The V-Q Relationship
+
+State values and action values are intimately connected. Understanding this relationship is crucial for RL.
+
+<Mathematical>
+
+**From Q to V:**
+
+$$V^\pi(s) = \sum_{a \in \mathcal{A}} \pi(a|s) \cdot Q^\pi(s, a)$$
+
+The state value is the **weighted average** of action values, weighted by the policy's action probabilities. If the policy always takes action $a^*$, then $V(s) = Q(s, a^*)$.
+
+**From V to Q:**
+
+$$Q^\pi(s, a) = R(s,a) + \gamma \sum_{s'} P(s'|s,a) \cdot V^\pi(s')$$
+
+The action value is the immediate reward plus the discounted value of the expected next state. This requires knowing the transition probabilities $P(s'|s,a)$.
+
+</Mathematical>
+
+<Intuition>
+
+Think of it this way:
+
+- **V-values** compress your situation into one number
+- **Q-values** give you a number for each possible move from that situation
+- $V(s)$ is like your "average prospects" from state $s$
+- $Q(s,a)$ is your "prospects if you take this specific action"
+
+If you know all the Q-values at a state, you can compute V by averaging. If you know V and the MDP dynamics, you can compute Q.
+
+</Intuition>
+
+## Computing Q-Values: A Worked Example
+
+<Example title="Q-Value Calculation in GridWorld">
+
+Consider a simple 2x2 GridWorld:
+
+```
+ _____ _____
+|     |     |
+| S   | +5  |
+|_____|_____|
+|     |     |
+| -1  | G   |
+|_____|_____|
+
+S = Start (top-left)
+G = Goal with +10 reward (bottom-right)
++5 = Bonus cell
+-1 = Penalty cell
+Step cost: -0.1
+γ = 0.9
+```
+
+Let's compute Q-values for state S under a given policy. From S, we can go **right** or **down**.
+
+**Q(S, right):**
+- Immediate reward: $-0.1$ (step) $+ 5$ (bonus) $= 4.9$
+- Next state: top-right cell
+- From there, optimal play reaches goal in one step
+- $V(\text{top-right}) \approx -0.1 + 0.9 \times 10 = 8.9$
+- So: $Q(S, \text{right}) = 4.9 + 0.9 \times 8.9 = 12.91$
+
+**Q(S, down):**
+- Immediate reward: $-0.1$ (step) $- 1$ (penalty) $= -1.1$
+- Next state: bottom-left cell
+- From there, optimal play reaches goal in one step
+- $V(\text{bottom-left}) \approx -0.1 + 0.9 \times 10 = 8.9$
+- So: $Q(S, \text{down}) = -1.1 + 0.9 \times 8.9 = 6.91$
+
+**Conclusion:** Going right ($Q = 12.91$) is much better than going down ($Q = 6.91$). The bonus on the right path makes a big difference.
+
+</Example>
+
+## Q-Values for Different Policies
+
+Like state values, Q-values depend on the policy being followed **after** the initial action.
+
+<Warning>
+$Q^\pi(s, a)$ is the value of taking action $a$ and then following $\pi$. Even if $a$ is a bad action under $\pi$, we're forced to take it first. The policy only controls what happens afterwards.
+</Warning>
+
+<Example title="Same Action, Different Q-Values">
+
+Consider state $s$ where action "right" leads to state $s'$, which has a choice between a safe path and a risky path.
+
+**Under a cautious policy** (always takes safe path from $s'$):
+- $Q^{\text{cautious}}(s, \text{right}) = R + \gamma \cdot V^{\text{cautious}}(s') = 0 + 0.9 \times 5 = 4.5$
+
+**Under a risky policy** (takes risky path from $s'$, 50% chance of +20, 50% chance of -10):
+- $Q^{\text{risky}}(s, \text{right}) = R + \gamma \cdot V^{\text{risky}}(s') = 0 + 0.9 \times 5 = 4.5$
+
+Wait, they're the same! That's because $V^{\text{risky}}(s') = 0.5 \times 20 + 0.5 \times (-10) = 5$ happens to equal $V^{\text{cautious}}(s')$.
+
+But if the risky path had different probabilities, the Q-values would differ even for the same initial action.
+
+</Example>
+
+## Q-Values and Optimal Action Selection
+
+Here's the beautiful result that makes Q-learning possible:
+
+<Mathematical>
+
+If you know $Q^*(s, a)$ (the optimal Q-values), finding the optimal action is trivial:
+
+$$\pi^*(s) = \arg\max_a Q^*(s, a)$$
+
+Just pick the action with the highest Q-value. No need to know transitions, no need to plan ahead. The Q-values have already captured everything about future rewards.
+
+This is why so much of RL research focuses on learning good Q-value estimates.
+
+</Mathematical>
+
+## Q-Values for Stochastic Environments
+
+When the environment is stochastic, Q-values average over possible outcomes:
+
+<Mathematical>
+
+With stochastic transitions:
+
+$$Q^\pi(s, a) = \sum_{s'} P(s'|s,a) \left[ R(s, a, s') + \gamma V^\pi(s') \right]$$
+
+Or equivalently:
+
+$$Q^\pi(s, a) = R(s, a) + \gamma \sum_{s'} P(s'|s,a) V^\pi(s')$$
+
+The Q-value for an action is an **expected value** over where that action might lead.
+
+</Mathematical>
+
+<Example title="Stochastic Q-Values">
+
+Action "attempt-right" in state $s$:
+- 80% chance: actually move right (reward: +1, next state value: 10)
+- 20% chance: slip and stay in place (reward: 0, next state value: 5)
+
+With $\gamma = 0.9$:
+
+$$Q(s, \text{attempt-right}) = 0.8 \times (1 + 0.9 \times 10) + 0.2 \times (0 + 0.9 \times 5)$$
+$$= 0.8 \times 10 + 0.2 \times 4.5 = 8.9$$
+
+The Q-value captures the expected outcome, accounting for the uncertainty in the environment.
+
+</Example>
+
+## Implementation
+
+<Implementation>
+
+Here's how to work with Q-values in Python:
+
+```python
+import numpy as np
+from collections import defaultdict
+
+# Q-values as a nested dictionary: Q[state][action] = value
+Q = defaultdict(lambda: defaultdict(float))
+
+# Set some Q-values
+Q['start']['left'] = 3.2
+Q['start']['right'] = 7.8
+Q['start']['up'] = 2.1
+
+def get_best_action(Q, state):
+    """Return the action with highest Q-value for a state."""
+    actions = Q[state]
+    if not actions:
+        return None
+    return max(actions, key=lambda a: actions[a])
+
+def get_state_value(Q, state, policy=None):
+    """
+    Compute V(s) from Q-values.
+
+    If policy is None, use greedy (max) policy.
+    Otherwise, policy[state] should be a dict of {action: probability}.
+    """
+    actions = Q[state]
+    if not actions:
+        return 0.0
+
+    if policy is None:
+        # Greedy: V(s) = max_a Q(s,a)
+        return max(actions.values())
+    else:
+        # Stochastic: V(s) = sum_a π(a|s) * Q(s,a)
+        probs = policy.get(state, {})
+        return sum(probs.get(a, 0) * q for a, q in actions.items())
+
+
+# Example: Greedy action selection
+best = get_best_action(Q, 'start')
+print(f"Best action from 'start': {best}")  # right
+
+# Example: State value under greedy policy
+v = get_state_value(Q, 'start')
+print(f"V(start) under greedy policy: {v}")  # 7.8
+
+# Example: State value under uniform policy
+uniform_policy = {
+    'start': {'left': 1/3, 'right': 1/3, 'up': 1/3}
+}
+v_uniform = get_state_value(Q, 'start', uniform_policy)
+print(f"V(start) under uniform policy: {v_uniform:.2f}")  # 4.37
+```
+
+</Implementation>
+
+## Monte Carlo Q-Value Estimation
+
+<Implementation>
+
+Just as we can estimate V-values from episodes, we can estimate Q-values:
+
+```python
+import numpy as np
+from collections import defaultdict
+
+def estimate_q_values_mc(episodes, gamma=0.99):
+    """
+    Estimate Q(s,a) using Monte Carlo from episodes.
+
+    Each episode is a list of (state, action, reward) tuples.
+    """
+    returns = defaultdict(list)  # returns[(s,a)] = list of observed returns
+
+    for episode in episodes:
+        # Calculate returns for each (state, action) pair
+        G = 0
+        # Work backward through the episode
+        for t in range(len(episode) - 1, -1, -1):
+            state, action, reward = episode[t]
+            G = reward + gamma * G
+            returns[(state, action)].append(G)
+
+    # Average the returns for each (state, action)
+    Q = defaultdict(dict)
+    for (state, action), obs_returns in returns.items():
+        Q[state][action] = np.mean(obs_returns)
+
+    return Q
+
+
+# Example episodes
+episodes = [
+    # Episode 1: start --right--> middle --right--> goal
+    [('start', 'right', -1), ('middle', 'right', 10)],
+    # Episode 2: start --down--> bottom --right--> goal
+    [('start', 'down', -1), ('bottom', 'right', 10)],
+    # Episode 3: start --right--> middle --right--> goal
+    [('start', 'right', -1), ('middle', 'right', 10)],
+]
+
+Q = estimate_q_values_mc(episodes, gamma=0.9)
+
+print("Estimated Q-values:")
+for state in sorted(Q.keys()):
+    for action, value in Q[state].items():
+        print(f"  Q({state}, {action}) = {value:.2f}")
+```
+
+Output:
+```
+Estimated Q-values:
+  Q(bottom, right) = 10.00
+  Q(middle, right) = 10.00
+  Q(start, down) = 8.00
+  Q(start, right) = 8.00
+```
+
+Note: Q(start, right) = -1 + 0.9 * 10 = 8.0, which matches our estimate!
+
+</Implementation>
+
+## Q-Tables and Visualization
+
+For small, discrete problems, Q-values are often stored in a **Q-table**:
+
+<Implementation>
+
+```python
+import numpy as np
+
+class QTable:
+    """A simple Q-table for discrete state and action spaces."""
+
+    def __init__(self, n_states, n_actions, init_value=0.0):
+        self.table = np.full((n_states, n_actions), init_value)
+
+    def __getitem__(self, key):
+        state, action = key
+        return self.table[state, action]
+
+    def __setitem__(self, key, value):
+        state, action = key
+        self.table[state, action] = value
+
+    def get_best_action(self, state):
+        """Return action with highest Q-value."""
+        return np.argmax(self.table[state])
+
+    def get_action_values(self, state):
+        """Return Q-values for all actions in a state."""
+        return self.table[state].copy()
+
+    def visualize(self, state_names=None, action_names=None):
+        """Print the Q-table nicely formatted."""
+        n_states, n_actions = self.table.shape
+
+        if state_names is None:
+            state_names = [f"s{i}" for i in range(n_states)]
+        if action_names is None:
+            action_names = [f"a{i}" for i in range(n_actions)]
+
+        # Header
+        header = "State | " + " | ".join(f"{a:>8}" for a in action_names)
+        print(header)
+        print("-" * len(header))
+
+        # Rows
+        for i, state in enumerate(state_names):
+            values = " | ".join(f"{self.table[i,j]:>8.2f}"
+                              for j in range(n_actions))
+            print(f"{state:>5} | {values}")
+
+
+# Example: 4-state, 2-action Q-table
+Q = QTable(4, 2)
+Q[0, 0] = 5.2   # Q(state0, action0)
+Q[0, 1] = 8.7   # Q(state0, action1)
+Q[1, 0] = 3.1
+Q[1, 1] = 3.5
+Q[2, 0] = 6.0
+Q[2, 1] = 5.8
+Q[3, 0] = 9.9
+Q[3, 1] = 10.0  # Goal state
+
+Q.visualize(
+    state_names=['Start', 'Left', 'Right', 'Goal'],
+    action_names=['Left', 'Right']
+)
+```
+
+Output:
+```
+State |     Left |    Right
+-------------------------------
+Start |     5.20 |     8.70
+ Left |     3.10 |     3.50
+Right |     6.00 |     5.80
+ Goal |     9.90 |    10.00
+```
+
+The best action in each state is the one with the higher value (shown by comparing columns).
+
+</Implementation>
+
+## Common Patterns with Q-Values
+
+<Tip>
+
+**Pattern 1: Greedy Policy Extraction**
+```python
+def greedy_policy(Q, state):
+    return max(Q[state], key=lambda a: Q[state][a])
+```
+
+**Pattern 2: Epsilon-Greedy Exploration**
+```python
+def epsilon_greedy(Q, state, epsilon=0.1):
+    if np.random.random() < epsilon:
+        return np.random.choice(list(Q[state].keys()))
+    return max(Q[state], key=lambda a: Q[state][a])
+```
+
+**Pattern 3: Softmax Action Selection**
+```python
+def softmax_policy(Q, state, temperature=1.0):
+    actions = list(Q[state].keys())
+    q_values = np.array([Q[state][a] for a in actions])
+    probs = np.exp(q_values / temperature)
+    probs /= probs.sum()
+    return np.random.choice(actions, p=probs)
+```
+
+</Tip>
+
+## Why Q-Values Are Central to RL
+
+<Note>
+Q-values are at the heart of most RL algorithms because:
+
+1. **Model-free control**: You can act optimally knowing only Q-values, no MDP model needed
+2. **Direct optimization**: Learning Q-values directly gives you a policy
+3. **Off-policy learning**: You can learn about optimal actions while exploring suboptimally
+4. **Sample efficiency**: Each experience updates Q-values for specific actions
+</Note>
+
+Algorithms like Q-learning, SARSA, DQN, and many others are fundamentally about learning good Q-value estimates.
+
+## Summary
+
+- **Action-value function** $Q^\pi(s, a)$ measures expected return from taking action $a$ in state $s$
+- Q-values enable direct action comparison without knowing the MDP
+- **V-Q relationship**: $V^\pi(s) = \sum_a \pi(a|s) Q^\pi(s,a)$ and $Q^\pi(s,a) = R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^\pi(s')$
+- Q-values can be estimated from experience using Monte Carlo methods
+- For **optimal action selection**: just pick $\arg\max_a Q^*(s,a)$
+
+We've seen how values work for a fixed policy. But what are the *best possible* values? That's where **optimal value functions** come in.

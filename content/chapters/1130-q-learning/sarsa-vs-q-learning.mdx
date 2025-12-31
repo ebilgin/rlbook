@@ -1,0 +1,400 @@
+---
+title: "SARSA vs Q-Learning"
+slug: "sarsa-vs-q-learning"
+section: "Temporal Difference Learning"
+description: "The CliffWalking experiment"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# SARSA vs Q-Learning
+
+The difference between SARSA and Q-learning might seem small—just $Q(S', A')$ vs $\max_{a'} Q(S', a')$. But this tiny change leads to dramatically different behavior in certain environments. The **Cliff Walking** problem is the perfect illustration.
+
+## The Cliff Walking Environment
+
+<Example>
+**The Setup**
+
+Imagine a 4x12 grid:
+
+```
+┌───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┐
+│   │   │   │   │   │   │   │   │   │   │   │   │  Row 0
+├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤
+│   │   │   │   │   │   │   │   │   │   │   │   │  Row 1
+├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤
+│   │   │   │   │   │   │   │   │   │   │   │   │  Row 2
+├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤
+│ S │ C │ C │ C │ C │ C │ C │ C │ C │ C │ C │ G │  Row 3
+└───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘
+  0   1   2   3   4   5   6   7   8   9  10  11
+```
+
+- **S (Start)**: Position (3, 0)
+- **G (Goal)**: Position (3, 11)
+- **C (Cliff)**: Positions (3, 1) through (3, 10)
+- **Actions**: UP, DOWN, LEFT, RIGHT
+- **Rewards**: -1 per step, -100 for falling off cliff (returns to start)
+
+**The Dilemma**: The shortest path runs along the bottom edge, right next to the cliff. But with epsilon-greedy exploration, random actions near the cliff can be fatal!
+</Example>
+
+## What Happens?
+
+<Intuition>
+
+**Q-Learning** learns that the optimal path is along the cliff:
+- It uses $\max_{a'} Q(S', a')$ — assuming optimal future behavior
+- The values don't account for exploration risk
+- Final policy: walk right along the cliff (shortest path)
+
+**SARSA** learns to take a safer route:
+- It uses $Q(S', A')$ — the actual next action, including exploration
+- The values account for the 10% chance of random moves
+- Final policy: go up first, walk along the top, then come down (safer path)
+
+</Intuition>
+
+The key insight: with $\varepsilon = 0.1$, there's a 10% chance of taking a random action. Near the cliff, a random action could push you in!
+
+- **Q-learning ignores this risk** in its value estimates
+- **SARSA accounts for it** because it uses the actual (possibly random) next action
+
+## The Results
+
+<Example>
+**Learned Paths**
+
+After training with $\varepsilon = 0.1$:
+
+**SARSA's Path** (safe route, ~17 steps):
+```
+START → → → → → → → → → → → ↓
+                              ↓
+                              ↓
+S                             G
+```
+
+**Q-learning's Path** (optimal but risky, ~13 steps):
+```
+S → → → → → → → → → → → G
+```
+
+**Reward During Training:**
+- SARSA: Averages around -17 per episode (longer path, but rarely falls)
+- Q-learning: Averages around -25 to -40 per episode (falls frequently during exploration)
+
+**Reward After Training (with $\varepsilon = 0$):**
+- Both find the optimal path (-13 per episode)
+
+The difference is in the **learning process**, not the final policy.
+</Example>
+
+## Why Does This Happen?
+
+<Mathematical>
+
+Consider a state one step above the cliff. Let's compare the Q-values for moving DOWN:
+
+**Q-Learning's estimate:**
+$$Q(s, DOWN) = -1 + \gamma \max_{a'} Q(s_{cliff\_edge}, a')$$
+
+Q-learning assumes we'll act optimally after moving down. The value reflects the optimal continuation.
+
+**SARSA's estimate:**
+$$Q(s, DOWN) = -1 + \gamma \mathbb{E}_{A' \sim \pi}[Q(s_{cliff\_edge}, A')]$$
+
+SARSA uses the expected value under the epsilon-greedy policy. With $\varepsilon = 0.1$, there's a chance $A'$ is random and moves us into the cliff. This lowers the expected value.
+
+The result: SARSA gives a lower Q-value to states near the cliff, naturally steering the policy away.
+
+</Mathematical>
+
+## Complete Implementation
+
+<Implementation>
+
+```python
+import numpy as np
+from collections import defaultdict
+import matplotlib.pyplot as plt
+
+class CliffWalkingEnv:
+    """The Cliff Walking environment from Sutton & Barto."""
+
+    def __init__(self):
+        self.height = 4
+        self.width = 12
+        self.start = (3, 0)
+        self.goal = (3, 11)
+        self.cliff = [(3, i) for i in range(1, 11)]
+        self.state = None
+        self.action_effects = {
+            0: (-1, 0),  # UP
+            1: (1, 0),   # DOWN
+            2: (0, -1),  # LEFT
+            3: (0, 1)    # RIGHT
+        }
+
+    def reset(self):
+        self.state = self.start
+        return self.state
+
+    def step(self, action):
+        row, col = self.state
+        drow, dcol = self.action_effects[action]
+
+        # Apply action (stay in bounds)
+        new_row = max(0, min(self.height - 1, row + drow))
+        new_col = max(0, min(self.width - 1, col + dcol))
+        self.state = (new_row, new_col)
+
+        # Check for cliff
+        if self.state in self.cliff:
+            self.state = self.start
+            return self.start, -100, False, {}
+
+        # Check for goal
+        if self.state == self.goal:
+            return self.state, -1, True, {}
+
+        return self.state, -1, False, {}
+
+
+def run_episode_sarsa(env, Q, alpha, gamma, epsilon):
+    """Run one SARSA episode."""
+    state = env.reset()
+    action = epsilon_greedy_action(Q, state, epsilon, 4)
+    total_reward = 0
+
+    while True:
+        next_state, reward, done, _ = env.step(action)
+        total_reward += reward
+
+        next_action = epsilon_greedy_action(Q, next_state, epsilon, 4)
+
+        # SARSA update
+        if done:
+            Q[state][action] += alpha * (reward - Q[state][action])
+        else:
+            Q[state][action] += alpha * (
+                reward + gamma * Q[next_state][next_action] - Q[state][action]
+            )
+
+        if done:
+            break
+
+        state = next_state
+        action = next_action
+
+    return total_reward
+
+
+def run_episode_qlearning(env, Q, alpha, gamma, epsilon):
+    """Run one Q-learning episode."""
+    state = env.reset()
+    total_reward = 0
+
+    while True:
+        action = epsilon_greedy_action(Q, state, epsilon, 4)
+        next_state, reward, done, _ = env.step(action)
+        total_reward += reward
+
+        # Q-learning update
+        if done:
+            Q[state][action] += alpha * (reward - Q[state][action])
+        else:
+            Q[state][action] += alpha * (
+                reward + gamma * np.max(Q[next_state]) - Q[state][action]
+            )
+
+        if done:
+            break
+
+        state = next_state
+
+    return total_reward
+
+
+def epsilon_greedy_action(Q, state, epsilon, n_actions):
+    """Select action using epsilon-greedy."""
+    if np.random.random() < epsilon:
+        return np.random.randint(n_actions)
+    return np.argmax(Q[state])
+
+
+def compare_sarsa_qlearning(num_episodes=500, num_runs=50,
+                            alpha=0.5, gamma=1.0, epsilon=0.1):
+    """Compare SARSA and Q-learning on Cliff Walking."""
+    sarsa_rewards = np.zeros((num_runs, num_episodes))
+    qlearn_rewards = np.zeros((num_runs, num_episodes))
+
+    for run in range(num_runs):
+        # Initialize Q-tables
+        Q_sarsa = defaultdict(lambda: np.zeros(4))
+        Q_qlearn = defaultdict(lambda: np.zeros(4))
+
+        for ep in range(num_episodes):
+            env_sarsa = CliffWalkingEnv()
+            env_qlearn = CliffWalkingEnv()
+
+            sarsa_rewards[run, ep] = run_episode_sarsa(
+                env_sarsa, Q_sarsa, alpha, gamma, epsilon
+            )
+            qlearn_rewards[run, ep] = run_episode_qlearning(
+                env_qlearn, Q_qlearn, alpha, gamma, epsilon
+            )
+
+    return sarsa_rewards.mean(axis=0), qlearn_rewards.mean(axis=0)
+
+
+# Run comparison
+sarsa_avg, qlearn_avg = compare_sarsa_qlearning()
+
+# Plot results
+plt.figure(figsize=(10, 6))
+plt.plot(sarsa_avg, label='SARSA', alpha=0.8)
+plt.plot(qlearn_avg, label='Q-Learning', alpha=0.8)
+plt.xlabel('Episode')
+plt.ylabel('Sum of Rewards During Episode')
+plt.title('SARSA vs Q-Learning on Cliff Walking')
+plt.legend()
+plt.ylim(-100, 0)
+plt.grid(True, alpha=0.3)
+plt.show()
+```
+
+</Implementation>
+
+## Visualizing the Learned Policies
+
+<Implementation>
+
+```python
+def visualize_cliff_policy(Q, title="Policy"):
+    """Visualize the learned policy on Cliff Walking."""
+    arrows = {0: '^', 1: 'v', 2: '<', 3: '>'}
+
+    print(f"\n{title}:")
+    print("-" * 49)
+
+    for row in range(4):
+        row_str = "|"
+        for col in range(12):
+            state = (row, col)
+            if state == (3, 0):
+                row_str += " S "
+            elif state == (3, 11):
+                row_str += " G "
+            elif state in [(3, i) for i in range(1, 11)]:
+                row_str += " C "
+            else:
+                best_action = np.argmax(Q[state])
+                row_str += f" {arrows[best_action]} "
+            row_str += "|"
+        print(row_str)
+
+    print("-" * 49)
+
+
+# After training
+visualize_cliff_policy(Q_sarsa, "SARSA Policy")
+visualize_cliff_policy(Q_qlearn, "Q-Learning Policy")
+```
+
+**Example output:**
+
+```
+SARSA Policy:
+-------------------------------------------------
+| > | > | > | > | > | > | > | > | > | > | > | v |
+| > | > | > | > | > | > | > | > | > | > | > | v |
+| > | > | > | > | > | > | > | > | > | > | > | v |
+| S | C | C | C | C | C | C | C | C | C | C | G |
+-------------------------------------------------
+
+Q-Learning Policy:
+-------------------------------------------------
+| > | > | > | > | > | > | > | > | > | > | v | v |
+| > | > | > | > | > | > | > | > | > | > | > | v |
+| > | > | > | > | > | > | > | > | > | > | > | v |
+| S | C | C | C | C | C | C | C | C | C | C | G |
+-------------------------------------------------
+```
+
+</Implementation>
+
+## The Core Insight
+
+<Intuition>
+
+The difference comes down to a fundamental question:
+
+**SARSA asks**: "What's the value of this state-action, given that I'll continue to explore?"
+
+**Q-learning asks**: "What's the value of this state-action, assuming I'll act optimally from now on?"
+
+For Cliff Walking:
+- Q-learning says: "The cliff edge is fine—I'll just go right"
+- SARSA says: "The cliff edge is dangerous—I might randomly step off"
+
+Both are "correct" in their own way:
+- Q-learning is correct about the optimal policy
+- SARSA is correct about the expected performance during training
+</Intuition>
+
+## When to Choose Which
+
+<Tip>
+**Choose SARSA when:**
+- Exploration during training can be costly
+- You care about performance during learning, not just after
+- Safety matters (robotics, finance, medical)
+- You want the policy to match its training behavior
+</Tip>
+
+<Tip>
+**Choose Q-learning when:**
+- You want to find the truly optimal policy
+- Training costs don't matter much
+- You can afford mistakes during exploration
+- You want to learn from data collected by other policies (experience replay)
+</Tip>
+
+## Common Misconceptions
+
+<Warning>
+**"Q-learning is always better because it finds optimal"**
+
+Wrong! During training, SARSA often accumulates more total reward because it accounts for exploration risk. The "optimal" policy Q-learning finds might be dangerous to learn.
+</Warning>
+
+<Warning>
+**"SARSA finds a suboptimal policy"**
+
+Partially true, but misleading. SARSA finds the optimal policy for an agent that explores. As $\varepsilon \to 0$, both converge to the same policy.
+</Warning>
+
+<Warning>
+**"The algorithms converge to different policies"**
+
+Not exactly. With $\varepsilon = 0$ (pure exploitation), both find the same optimal policy. The difference is in:
+1. The Q-values during training
+2. The behavior during training
+3. The implied policy when $\varepsilon > 0$
+</Warning>
+
+## Summary Table
+
+| Aspect | SARSA | Q-Learning |
+|--------|-------|------------|
+| **Update uses** | $Q(S', A')$ | $\max_{a'} Q(S', a')$ |
+| **Learns** | $Q^\pi$ (current policy) | $Q^*$ (optimal policy) |
+| **Training reward** | Higher (avoids risks) | Lower (takes risks) |
+| **Final policy** | Safe (accounts for $\varepsilon$) | Optimal (ignores $\varepsilon$) |
+| **Cliff Walking** | Goes around | Goes along edge |
+| **Best for** | Safe learning | Finding optimal |
+
+The Cliff Walking experiment beautifully illustrates that "optimal" doesn't always mean "best." The choice between SARSA and Q-learning depends on whether you care more about the journey (training performance) or the destination (final policy).

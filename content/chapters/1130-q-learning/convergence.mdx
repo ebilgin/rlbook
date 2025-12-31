@@ -1,0 +1,385 @@
+---
+title: "Convergence and the Deadly Triad"
+slug: "convergence"
+section: "Temporal Difference Learning"
+description: "When Q-learning works and when it breaks"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Convergence and the Deadly Triad
+
+Q-learning has remarkable theoretical guarantees: it converges to optimal Q-values under fairly mild conditions. But these guarantees come with caveats that become critical when we scale to larger problems. Understanding when Q-learning works—and when it can spectacularly fail—is essential for practical RL.
+
+## When Does Q-Learning Converge?
+
+<Mathematical>
+
+**Theorem (Watkins & Dayan, 1992):**
+
+Q-learning converges to $Q^*$ with probability 1, under these conditions:
+
+1. **Tabular representation**: Each state-action pair has its own independent entry in the Q-table
+2. **Sufficient exploration**: All state-action pairs are visited infinitely often
+3. **Decaying step sizes**: The learning rate satisfies:
+   - $\sum_{t=0}^{\infty} \alpha_t = \infty$ (the sum diverges)
+   - $\sum_{t=0}^{\infty} \alpha_t^2 < \infty$ (the sum of squares converges)
+4. **Bounded rewards**: The reward function is bounded
+
+A simple choice satisfying condition 3: $\alpha_t = \frac{1}{1 + \text{visits}(s, a)}$
+
+</Mathematical>
+
+<Intuition>
+
+What do these conditions mean intuitively?
+
+1. **Tabular**: Every state-action pair is independent. No generalization, no function approximation.
+
+2. **Sufficient exploration**: You have to try everything eventually. If you never visit a state-action pair, you can't learn its value.
+
+3. **Decaying learning rate**: Early updates should matter, but later updates should be smaller. This ensures we converge rather than oscillating forever.
+
+4. **Bounded rewards**: No infinite rewards. This keeps the value function finite.
+
+In practice, we often violate condition 3 (using constant $\alpha$) and it still works—just without formal guarantees.
+
+</Intuition>
+
+## The Deadly Triad
+
+<Definition title="The Deadly Triad">
+The combination of three elements that can cause instability and divergence in RL:
+
+1. **Off-policy learning**: Learning about a policy different from the one generating data
+2. **Function approximation**: Generalizing from limited samples (e.g., neural networks)
+3. **Bootstrapping**: Using estimated values to update estimates (as in TD learning)
+
+Any two of these are usually fine. All three together can cause Q-values to diverge to infinity.
+</Definition>
+
+<Warning>
+Q-learning is **off-policy** and uses **bootstrapping**. The moment we add **function approximation** (like a neural network), we complete the deadly triad. This is exactly what Deep Q-Networks (DQN) do—and why they need special techniques like experience replay and target networks to work.
+</Warning>
+
+## Why Does the Deadly Triad Cause Problems?
+
+<Intuition>
+
+Here's the intuition for why the combination is dangerous:
+
+**Off-policy + Bootstrapping**: We're updating our estimates based on other estimates, but the data distribution doesn't match what we're learning about. This can amplify errors.
+
+**Function Approximation**: When we generalize, an update to one state affects others. If those effects are wrong, errors can cascade.
+
+**The Deadly Combination**: With off-policy learning, we might update Q(s,a) using data from a state we rarely visit. With function approximation, this update affects many other states. With bootstrapping, those affected states then affect their neighbors. Errors can compound and explode.
+
+</Intuition>
+
+<Mathematical>
+
+The technical issue is that the Bellman operator is no longer a contraction when combined with function approximation.
+
+In tabular Q-learning, we can show:
+$$\|T Q - T Q^*\|_\infty \leq \gamma \|Q - Q^*\|_\infty$$
+
+where $T$ is the Bellman operator. This is a contraction—repeated application shrinks the distance to $Q^*$.
+
+With function approximation, let $\Pi$ be the projection onto the function class. Then:
+$$\Pi T Q \neq T \Pi Q$$
+
+and $\Pi T$ is no longer guaranteed to be a contraction. The updates can increase error instead of decreasing it.
+
+</Mathematical>
+
+## What Can Go Wrong
+
+<Example>
+**Baird's Counterexample**
+
+Consider a simple MDP with 7 states and 2 actions, designed by Leemon Baird in 1995. With linear function approximation:
+
+- Q-learning diverges to infinity
+- The weights grow without bound
+- This happens even with simple linear features
+
+This counterexample shows that the deadly triad isn't just theoretical—it causes real failures.
+</Example>
+
+<Example>
+**Signs of Divergence**
+
+In practice, you might see:
+- Q-values growing unboundedly large
+- Policies that suddenly become random after working well
+- Training loss increasing instead of decreasing
+- Rewards collapsing after initial improvement
+
+These can indicate deadly triad issues.
+</Example>
+
+## How DQN Addresses the Deadly Triad
+
+The 2015 DQN paper (Mnih et al.) introduced two key techniques to stabilize Q-learning with neural networks:
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="p-4 bg-gradient-to-br from-blue-900/30 to-blue-800/10 rounded-lg border border-blue-700/50">
+    <h4 className="font-semibold text-blue-400 mb-2">Experience Replay</h4>
+    <p className="text-slate-400 text-sm mb-2">Store transitions in a buffer and sample randomly for updates.</p>
+    <ul className="text-slate-400 text-sm space-y-1">
+      <li>Breaks correlations in sequential data</li>
+      <li>Makes data distribution more stable</li>
+      <li>Improves sample efficiency</li>
+    </ul>
+  </div>
+  <div className="p-4 bg-gradient-to-br from-purple-900/30 to-purple-800/10 rounded-lg border border-purple-700/50">
+    <h4 className="font-semibold text-purple-400 mb-2">Target Networks</h4>
+    <p className="text-slate-400 text-sm mb-2">Use a separate, slowly-updated network for TD targets.</p>
+    <ul className="text-slate-400 text-sm space-y-1">
+      <li>Reduces oscillation in targets</li>
+      <li>Prevents chasing a moving target</li>
+      <li>Adds stability to bootstrapping</li>
+    </ul>
+  </div>
+</div>
+
+<Note>
+We'll explore these techniques in detail in the Deep Q-Networks chapter. The key insight is that they work around the deadly triad by reducing correlation and stabilizing the learning target.
+</Note>
+
+## Maximization Bias
+
+Even in tabular settings, Q-learning has a subtle issue: **maximization bias**.
+
+<Definition title="Maximization Bias">
+The tendency of Q-learning to overestimate Q-values because the max operator systematically selects values that are overestimated due to noise. Even unbiased noise in estimates leads to biased maxima.
+</Definition>
+
+<Intuition>
+
+Imagine you're estimating the value of 3 actions, and your estimates have some noise:
+
+- True values: [1.0, 1.0, 1.0]
+- Noisy estimates: [1.2, 0.8, 1.1]
+- $\max$ = 1.2
+
+The max picks the action that happened to be overestimated. Over many updates, this bias compounds—we're always using inflated estimates as our targets.
+
+</Intuition>
+
+<Mathematical>
+
+Let $Q(s, a) = Q^*(s, a) + \epsilon_a$ where $\epsilon_a$ is zero-mean noise.
+
+Then:
+$$\mathbb{E}\left[\max_a Q(s, a)\right] \geq \max_a \mathbb{E}\left[Q(s, a)\right] = \max_a Q^*(s, a)$$
+
+The expected max is greater than or equal to the max of expectations. With symmetric noise, the inequality is strict when there are multiple actions.
+
+</Mathematical>
+
+<Example>
+**Maximization Bias in Action**
+
+Consider a state with two actions, both with true value 0. But our estimates are noisy:
+- $Q(s, a_1) \sim N(0, 1)$ (normal with mean 0, std 1)
+- $Q(s, a_2) \sim N(0, 1)$
+
+The expected max of two standard normals is approximately 0.56, not 0. Every time we use this max as a target, we're aiming too high.
+</Example>
+
+## Double Q-Learning
+
+**Double Q-Learning** (van Hasselt, 2010) addresses maximization bias by using two Q-functions:
+
+<Intuition>
+
+The idea is simple: use one Q-function to select the best action, and the other to evaluate it.
+
+- If $Q_1$ overestimates action $a$, it might select $a$ as best
+- But $Q_2$ (which has independent noise) evaluates $a$, giving an unbiased estimate
+- The overestimation in selection doesn't propagate to the target
+
+</Intuition>
+
+<Mathematical>
+
+**Standard Q-learning target:**
+$$Y = R + \gamma \max_{a'} Q(S', a')$$
+
+**Double Q-learning target:**
+$$Y = R + \gamma Q_2(S', \arg\max_{a'} Q_1(S', a'))$$
+
+We use $Q_1$ to select the action and $Q_2$ to evaluate it (or vice versa, alternating randomly).
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+from collections import defaultdict
+
+class DoubleQLearning:
+    """Double Q-learning to address maximization bias."""
+
+    def __init__(self, n_actions, alpha=0.1, gamma=0.99, epsilon=0.1):
+        self.n_actions = n_actions
+        self.alpha = alpha
+        self.gamma = gamma
+        self.epsilon = epsilon
+
+        # Two independent Q-tables
+        self.Q1 = defaultdict(lambda: np.zeros(n_actions))
+        self.Q2 = defaultdict(lambda: np.zeros(n_actions))
+
+    def select_action(self, state):
+        """Epsilon-greedy using sum of both Q-functions."""
+        if np.random.random() < self.epsilon:
+            return np.random.randint(self.n_actions)
+        # Use average of Q1 and Q2 for action selection
+        q_combined = self.Q1[state] + self.Q2[state]
+        return np.argmax(q_combined)
+
+    def update(self, state, action, reward, next_state, done):
+        """Double Q-learning update."""
+        # Randomly choose which Q to update
+        if np.random.random() < 0.5:
+            # Update Q1, use Q2 for evaluation
+            if done:
+                target = reward
+            else:
+                # Select best action according to Q1
+                best_action = np.argmax(self.Q1[next_state])
+                # Evaluate using Q2
+                target = reward + self.gamma * self.Q2[next_state][best_action]
+
+            td_error = target - self.Q1[state][action]
+            self.Q1[state][action] += self.alpha * td_error
+        else:
+            # Update Q2, use Q1 for evaluation
+            if done:
+                target = reward
+            else:
+                # Select best action according to Q2
+                best_action = np.argmax(self.Q2[next_state])
+                # Evaluate using Q1
+                target = reward + self.gamma * self.Q1[next_state][best_action]
+
+            td_error = target - self.Q2[state][action]
+            self.Q2[state][action] += self.alpha * td_error
+
+        return td_error
+
+    def get_q_values(self, state):
+        """Return averaged Q-values."""
+        return (self.Q1[state] + self.Q2[state]) / 2
+```
+
+</Implementation>
+
+## Demonstrating Maximization Bias
+
+<Implementation>
+
+```python
+def maximization_bias_experiment():
+    """
+    The 'maximization bias example' from Sutton & Barto.
+
+    A simple MDP where maximization bias is clearly visible:
+    - State A has two actions: LEFT (goes to terminal, reward 0)
+                              RIGHT (goes to state B, reward 0)
+    - State B has many actions, all leading to terminal with
+      reward ~ N(-0.1, 1) (mean -0.1, std 1)
+
+    The optimal policy is to go LEFT (expected value 0).
+    Going RIGHT has expected value -0.1 (the mean of B's rewards).
+
+    Q-learning often learns to go RIGHT because it overestimates
+    the value of B (maximization bias).
+    Double Q-learning correctly learns to go LEFT.
+    """
+    n_actions_B = 10  # Many actions in state B
+
+    # Run experiment
+    n_runs = 1000
+    n_episodes = 300
+
+    qlearning_left_pct = np.zeros(n_episodes)
+    double_left_pct = np.zeros(n_episodes)
+
+    for run in range(n_runs):
+        Q_standard = {'A': np.zeros(2), 'B': np.zeros(n_actions_B)}
+        Q1_double = {'A': np.zeros(2), 'B': np.zeros(n_actions_B)}
+        Q2_double = {'A': np.zeros(2), 'B': np.zeros(n_actions_B)}
+
+        for ep in range(n_episodes):
+            # Track if agents choose LEFT in state A
+            # Standard Q-learning
+            if np.random.random() < 0.1:
+                action_A = np.random.randint(2)
+            else:
+                action_A = np.argmax(Q_standard['A'])
+
+            qlearning_left_pct[ep] += (action_A == 0)
+
+            # Execute and update
+            if action_A == 0:  # LEFT -> terminal
+                Q_standard['A'][0] += 0.1 * (0 - Q_standard['A'][0])
+            else:  # RIGHT -> B
+                action_B = np.random.randint(n_actions_B)
+                reward_B = np.random.normal(-0.1, 1)
+                Q_standard['B'][action_B] += 0.1 * (reward_B - Q_standard['B'][action_B])
+                Q_standard['A'][1] += 0.1 * (np.max(Q_standard['B']) - Q_standard['A'][1])
+
+            # Double Q-learning (similar logic, alternating updates)
+            # ... (implementation details)
+
+    qlearning_left_pct /= n_runs
+    double_left_pct /= n_runs
+
+    return qlearning_left_pct, double_left_pct
+```
+
+</Implementation>
+
+## Practical Recommendations
+
+<Tip>
+**For tabular Q-learning:**
+- Use a decaying learning rate if you need guarantees
+- Constant $\alpha = 0.1$ to $0.5$ often works well in practice
+- Ensure sufficient exploration (don't decay $\varepsilon$ too fast)
+- Consider Double Q-learning if you see signs of overestimation
+</Tip>
+
+<Tip>
+**For Q-learning with function approximation:**
+- Use experience replay to break correlations
+- Use target networks to stabilize bootstrapping
+- Consider Double DQN to reduce maximization bias
+- Monitor for signs of divergence (exploding Q-values)
+- Gradient clipping can help prevent instability
+</Tip>
+
+## Summary
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| **No convergence** | Insufficient exploration | Ensure $\varepsilon > 0$ always or decay slowly |
+| **Oscillation** | Learning rate too high | Reduce $\alpha$ or use decay |
+| **Maximization bias** | Max operator + noise | Double Q-learning |
+| **Deadly triad** | Off-policy + FA + bootstrap | Experience replay, target networks |
+| **Divergence** | Function approximation errors | Regularization, gradient clipping |
+
+Q-learning is powerful, but it requires understanding its limitations:
+
+1. **Tabular + exploration + decaying $\alpha$** = guaranteed convergence to $Q^*$
+2. **Add function approximation** = potential instability (deadly triad)
+3. **Maximization bias** exists even in tabular settings
+4. **Double Q-learning** addresses maximization bias
+5. **Experience replay + target networks** address the deadly triad
+
+Understanding these issues prepares you for Deep Q-Networks and beyond, where these challenges become central to making algorithms work.

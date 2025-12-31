@@ -1,0 +1,457 @@
+---
+title: "Independent Learning"
+slug: "independent-learning"
+section: "Advanced Topics"
+description: "Each agent learns on its own"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Independent Learning
+
+The simplest approach to multi-agent RL: give each agent its own Q-table or policy network, and let them learn independently as if the other agents were just part of the environment. It's easy to implement and sometimes works surprisingly well—but it has fundamental problems.
+
+## The Naive Approach
+
+<Definition title="Independent Learning">
+A multi-agent learning approach where each agent learns its own policy independently, treating other agents as part of the environment. Each agent ignores the fact that other agents are also learning and adapting.
+</Definition>
+
+<Intuition>
+
+Imagine trying to learn a dance routine, but your partner is also learning and changing their moves every day. What was the right step yesterday might be wrong today. You both keep adapting, but the target keeps moving.
+
+That's the core problem with independent learning: from each agent's perspective, the environment is non-stationary because it includes other changing agents.
+
+</Intuition>
+
+## Independent Q-Learning (IQL)
+
+The simplest instantiation: each agent runs Q-learning independently, ignoring other agents.
+
+<Mathematical>
+
+Agent $i$'s Q-learning update:
+
+$$Q_i(s, a_i) \leftarrow Q_i(s, a_i) + \alpha\left[r_i + \gamma \max_{a'_i} Q_i(s', a'_i) - Q_i(s, a_i)\right]$$
+
+Notice what's missing: there's no dependence on other agents' actions $a_j$ for $j \neq i$. Agent $i$ learns $Q_i(s, a_i)$, not $Q_i(s, a_1, ..., a_N)$.
+
+**The problem**: The true value $Q_i(s, a_i)$ actually depends on what other agents do:
+
+$$Q_i^*(s, a_i) = \mathbb{E}_{a_{-i} \sim \pi_{-i}}\left[ r_i + \gamma \max_{a'_i} Q_i^*(s', a'_i) \right]$$
+
+As other agents' policies $\pi_{-i}$ change through learning, the "true" Q-values change. The target is moving.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class IndependentQLearning:
+    """
+    Independent Q-learning for multi-agent environments.
+
+    Each agent has its own Q-table and ignores other agents.
+    """
+
+    def __init__(self, n_agents, n_states, n_actions,
+                 alpha=0.1, gamma=0.99, epsilon=0.1):
+        self.n_agents = n_agents
+        self.n_states = n_states
+        self.n_actions = n_actions
+        self.alpha = alpha
+        self.gamma = gamma
+        self.epsilon = epsilon
+
+        # Separate Q-table for each agent
+        self.Q = [np.zeros((n_states, n_actions)) for _ in range(n_agents)]
+
+    def select_actions(self, state):
+        """Each agent selects action independently."""
+        actions = []
+        for i in range(self.n_agents):
+            if np.random.random() < self.epsilon:
+                actions.append(np.random.randint(self.n_actions))
+            else:
+                actions.append(np.argmax(self.Q[i][state]))
+        return actions
+
+    def update(self, state, actions, rewards, next_state, done):
+        """Update each agent's Q-table independently."""
+        for i in range(self.n_agents):
+            if done:
+                target = rewards[i]
+            else:
+                target = rewards[i] + self.gamma * np.max(self.Q[i][next_state])
+
+            # Standard Q-learning update
+            self.Q[i][state, actions[i]] += self.alpha * (
+                target - self.Q[i][state, actions[i]]
+            )
+
+
+def train_iql(env, agents, episodes=1000):
+    """Training loop for independent Q-learning."""
+    returns_history = [[] for _ in range(agents.n_agents)]
+
+    for episode in range(episodes):
+        observations = env.reset()
+        episode_returns = [0.0] * agents.n_agents
+        done = False
+
+        # Convert observation to state index (for tabular case)
+        state = observations_to_state(observations)
+
+        while not done:
+            # Each agent selects action independently
+            actions = agents.select_actions(state)
+
+            # Environment step
+            next_observations, rewards, done, _ = env.step(actions)
+            next_state = observations_to_state(next_observations)
+
+            # Each agent updates independently
+            agents.update(state, actions, rewards, next_state, done)
+
+            for i, r in enumerate(rewards):
+                episode_returns[i] += r
+            state = next_state
+
+        for i, ret in enumerate(episode_returns):
+            returns_history[i].append(ret)
+
+    return returns_history
+
+
+def observations_to_state(observations):
+    """Convert observations to a single state index (implementation-specific)."""
+    # This is a placeholder - actual implementation depends on observation structure
+    return hash(str(observations)) % 10000
+```
+
+</Implementation>
+
+## The Non-Stationarity Problem
+
+<Warning title="Why Independent Learning Can Fail">
+
+Q-learning assumes a stationary environment: the same action in the same state should (in expectation) give the same next state and reward. But in multi-agent settings:
+
+- Other agents are learning and changing their policies
+- The "environment" (which includes other agents) is non-stationary
+- Q-values that were accurate yesterday may be wrong today
+- Convergence guarantees don't apply
+
+</Warning>
+
+<Intuition>
+
+Consider a simple coordination game. Two agents must choose "left" or "right" simultaneously. They get reward +1 if they match, 0 otherwise.
+
+With independent Q-learning:
+1. Initially, both explore randomly. Sometimes they match, sometimes not.
+2. Agent 1 learns "left seems good" (happened to work recently)
+3. Agent 2 learns "right seems good" (different random history)
+4. They keep miscoordinating
+5. Agent 1's Q-values become wrong as Agent 2 shifts to "right"
+6. Agent 1 updates, now preferring "right"
+7. But Agent 2 has shifted to "left"
+8. Oscillation continues...
+
+The agents are chasing each other's changing policies, never settling on a consistent joint strategy.
+
+</Intuition>
+
+<Mathematical>
+
+Formally, Q-learning convergence requires:
+1. Every state-action pair visited infinitely often
+2. Decreasing learning rate satisfying certain conditions
+3. **Stationary transition and reward distributions**
+
+Condition 3 is violated in multi-agent settings. The transition probability:
+
+$$P(s' | s, a_i) = \sum_{a_{-i}} P(s' | s, a_i, a_{-i}) \pi_{-i}(a_{-i} | s)$$
+
+depends on other agents' policies $\pi_{-i}$, which change as they learn.
+
+</Mathematical>
+
+## When Does Independent Learning Work?
+
+Despite its theoretical problems, independent learning sometimes works well in practice. Here's when:
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="bg-emerald-900/20 border border-emerald-700/50 rounded-lg p-4">
+    <div className="text-emerald-400 font-bold mb-2">IQL Works Well When:</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>Agents are loosely coupled (actions don't strongly affect others)</li>
+      <li>The game has a unique or dominant equilibrium</li>
+      <li>Learning rates are slow enough for implicit coordination</li>
+      <li>There's enough exploration to try different joint strategies</li>
+    </ul>
+  </div>
+  <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-4">
+    <div className="text-red-400 font-bold mb-2">IQL Struggles When:</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>Tight coordination is required</li>
+      <li>Multiple equilibria exist (which one to pick?)</li>
+      <li>Zero-sum competition (opponent adapts to exploit you)</li>
+      <li>Credit assignment is difficult</li>
+    </ul>
+  </div>
+</div>
+
+<Example title="IQL Success: Traffic Flow">
+
+In some traffic simulations, independent Q-learning agents can learn reasonable driving policies. Why?
+
+- Agents are loosely coupled: your actions mostly affect nearby cars, not cars miles away
+- There's a natural equilibrium: follow traffic rules, maintain safe distances
+- Most interactions are transient: you pass a car and never see it again
+
+The non-stationarity matters less because each agent's experience is dominated by the physical constraints of driving rather than strategic interactions.
+
+</Example>
+
+## Independent Policy Gradients
+
+We can also apply policy gradient methods independently:
+
+<Mathematical>
+
+Each agent $i$ learns its own policy $\pi_{\theta_i}$ using policy gradient:
+
+$$\nabla_{\theta_i} J_i = \mathbb{E}\left[ \nabla_{\theta_i} \log \pi_{\theta_i}(a_i | s) \cdot G_i \right]$$
+
+where $G_i$ is agent $i$'s return. The same non-stationarity problem applies: the expected return depends on other agents' policies, which are changing.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+class PolicyNetwork(nn.Module):
+    """Simple policy network for one agent."""
+
+    def __init__(self, obs_dim, n_actions, hidden_dim=64):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, n_actions)
+        )
+
+    def forward(self, obs):
+        logits = self.net(obs)
+        return torch.softmax(logits, dim=-1)
+
+
+class IndependentPolicyGradient:
+    """
+    Independent policy gradient for multi-agent settings.
+
+    Each agent has its own policy network and learns independently.
+    """
+
+    def __init__(self, n_agents, obs_dim, n_actions, lr=1e-3, gamma=0.99):
+        self.n_agents = n_agents
+        self.gamma = gamma
+
+        # Separate policy for each agent
+        self.policies = [PolicyNetwork(obs_dim, n_actions) for _ in range(n_agents)]
+        self.optimizers = [optim.Adam(p.parameters(), lr=lr) for p in self.policies]
+
+        # Episode storage
+        self.episode_log_probs = [[] for _ in range(n_agents)]
+        self.episode_rewards = [[] for _ in range(n_agents)]
+
+    def select_actions(self, observations):
+        """Each agent selects action from its policy."""
+        actions = []
+        for i, obs in enumerate(observations):
+            obs_tensor = torch.FloatTensor(obs).unsqueeze(0)
+            probs = self.policies[i](obs_tensor)
+            dist = torch.distributions.Categorical(probs)
+            action = dist.sample()
+
+            # Store log prob for training
+            self.episode_log_probs[i].append(dist.log_prob(action))
+            actions.append(action.item())
+
+        return actions
+
+    def store_rewards(self, rewards):
+        """Store rewards for each agent."""
+        for i, r in enumerate(rewards):
+            self.episode_rewards[i].append(r)
+
+    def update(self):
+        """Update each agent's policy independently using REINFORCE."""
+        for i in range(self.n_agents):
+            # Compute returns
+            returns = []
+            G = 0
+            for r in reversed(self.episode_rewards[i]):
+                G = r + self.gamma * G
+                returns.insert(0, G)
+            returns = torch.tensor(returns)
+
+            # Normalize returns
+            if len(returns) > 1:
+                returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+
+            # Policy gradient loss
+            log_probs = torch.stack(self.episode_log_probs[i])
+            loss = -(log_probs * returns).mean()
+
+            # Update
+            self.optimizers[i].zero_grad()
+            loss.backward()
+            self.optimizers[i].step()
+
+        # Clear episode storage
+        self.episode_log_probs = [[] for _ in range(self.n_agents)]
+        self.episode_rewards = [[] for _ in range(self.n_agents)]
+```
+
+</Implementation>
+
+## The Moving Target Effect Visualized
+
+<Intuition>
+
+Here's what happens when two agents use independent Q-learning in a coordination game:
+
+```
+Episode 1-100: Both explore randomly
+  Agent 1: "Left looks slightly better"
+  Agent 2: "Right looks slightly better"
+  Result: Frequent miscoordination
+
+Episode 100-200: Agents exploit their Q-values
+  Agent 1 plays Left, Agent 2 plays Right
+  Both get 0 reward consistently
+  Q-values start shifting...
+
+Episode 200-300: Agent 1 switches
+  Agent 1: "Right now seems better"
+  Agent 2 still likes Right
+  Finally coordinating on (Right, Right)!
+
+Episode 300-400: Stability... temporarily
+  Q-values settle, both play Right
+  But any perturbation could restart the cycle
+
+Episode 400+: Random event triggers oscillation
+  Agent 1 explores, plays Left, gets 0
+  Agent 1's Q-values shift slightly
+  Eventually both switch, now stuck on (Left, Left)
+  Or start oscillating again...
+```
+
+This is the "shadowing" phenomenon: agents learn to predict what others *were* doing, not what they *will* do.
+
+</Intuition>
+
+## Improving Independent Learning
+
+Several techniques can help stabilize independent learning:
+
+### 1. Experience Replay with Importance Sampling
+
+<Implementation>
+
+```python
+class StabilizedIQL:
+    """
+    IQL with techniques to handle non-stationarity.
+    """
+
+    def __init__(self, n_agents, n_states, n_actions, buffer_size=10000):
+        self.n_agents = n_agents
+        self.Q = [np.zeros((n_states, n_actions)) for _ in range(n_agents)]
+
+        # Importance sampling to weight old experiences
+        self.buffer = []
+        self.buffer_size = buffer_size
+        self.old_policies = [np.ones(n_actions) / n_actions for _ in range(n_agents)]
+
+    def update_with_replay(self, batch_size=32, alpha=0.1, gamma=0.99):
+        """Update with importance-weighted replay."""
+        if len(self.buffer) < batch_size:
+            return
+
+        # Sample batch
+        indices = np.random.choice(len(self.buffer), batch_size, replace=False)
+        batch = [self.buffer[i] for i in indices]
+
+        for i in range(self.n_agents):
+            for experience in batch:
+                state, actions, rewards, next_state, old_probs = experience
+
+                # Importance weight: current policy / old policy
+                current_probs = self.get_action_probs(i, state)
+                weight = current_probs[actions[i]] / (old_probs[i][actions[i]] + 1e-8)
+                weight = np.clip(weight, 0.1, 10.0)  # Clip for stability
+
+                # Weighted Q-learning update
+                target = rewards[i] + gamma * np.max(self.Q[i][next_state])
+                td_error = target - self.Q[i][state, actions[i]]
+                self.Q[i][state, actions[i]] += alpha * weight * td_error
+
+    def get_action_probs(self, agent_id, state, epsilon=0.1):
+        """Get current action probabilities for importance sampling."""
+        probs = np.ones(self.Q[agent_id].shape[1]) * epsilon / self.Q[agent_id].shape[1]
+        best_action = np.argmax(self.Q[agent_id][state])
+        probs[best_action] += 1 - epsilon
+        return probs
+```
+
+</Implementation>
+
+### 2. Hysteretic Q-Learning
+
+<Mathematical>
+
+Use different learning rates for positive and negative TD errors:
+
+$$\alpha_{\text{update}} = \begin{cases} \alpha & \text{if TD error} > 0 \\ \beta < \alpha & \text{if TD error} < 0 \end{cases}$$
+
+The idea: be optimistic. Learn quickly from good outcomes, slowly from bad ones. This encourages coordination by making agents "forgive" partners' mistakes.
+
+</Mathematical>
+
+### 3. Lenient Learning
+
+<Intuition>
+
+Be lenient: instead of using the actual reward, use a high percentile of recent rewards for that state-action pair. This filters out "bad luck" from partner miscoordination and helps agents find mutually beneficial strategies.
+
+</Intuition>
+
+## Summary
+
+Independent learning is the simplest approach to multi-agent RL:
+
+- **Simple**: Just run single-agent algorithms in parallel
+- **Scalable**: No joint action space explosion
+- **Practical**: Often works surprisingly well
+
+But it has fundamental issues:
+
+- **Non-stationarity**: Other agents change, violating learning assumptions
+- **No coordination mechanism**: Agents can't explicitly coordinate
+- **Oscillation**: Policies may cycle instead of converging
+
+In the next section, we'll see how **Centralized Training with Decentralized Execution** addresses these problems by allowing information sharing during training while maintaining independent execution.

@@ -1,0 +1,408 @@
+---
+title: "Iterative Policy Evaluation"
+slug: "iterative-evaluation"
+section: "Dynamic Programming"
+description: "Repeatedly applying Bellman until convergence"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Iterative Policy Evaluation
+
+The iterative policy evaluation algorithm is beautifully simple: initialize values, apply the Bellman equation everywhere, and repeat until nothing changes. Yet this simple procedure is guaranteed to find the true value function $V^\pi$ for any policy.
+
+## The Algorithm
+
+<Definition title="Iterative Policy Evaluation">
+An algorithm that computes $V^\pi$ by repeatedly applying Bellman expectation updates to all states until the values converge to the unique fixed point.
+</Definition>
+
+<Intuition>
+
+Think of it like ripples spreading across a pond. Initially, we know nothing about the values, so we guess zeros everywhere. Then we propagate information: states near rewards learn their values first. With each sweep, value information spreads further through the MDP until it reaches equilibrium.
+
+The key insight is that we do not need to solve the Bellman equations directly. Instead, we iterate towards the solution.
+
+</Intuition>
+
+The algorithm has three phases:
+
+1. **Initialize**: Set all state values to some arbitrary starting point (typically zero)
+2. **Sweep**: Update every state's value using the Bellman expectation equation
+3. **Repeat**: Keep sweeping until the values stop changing significantly
+
+## The Update Rule
+
+At each iteration $k$, we compute new values for all states:
+
+<Mathematical>
+
+$$V_{k+1}(s) = \sum_a \pi(a|s) \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V_k(s') \right]$$
+
+Let us break this down:
+
+- $\pi(a|s)$ is the probability of taking action $a$ in state $s$ under our policy
+- $R(s,a)$ is the expected immediate reward for taking action $a$ in state $s$
+- $P(s'|s,a)$ is the probability of transitioning to state $s'$
+- $V_k(s')$ is our current estimate of the value of state $s'$
+- $\gamma$ is the discount factor
+
+The outer sum averages over all actions according to the policy. For each action, we compute the expected reward plus the discounted expected value of the next state.
+
+</Mathematical>
+
+<Intuition>
+
+The update asks: "If I am in state $s$ and I follow policy $\pi$, what return do I expect?"
+
+We compute this by looking one step ahead. We know the immediate reward, and we use our current value estimates to approximate the rest. The genius is that even if our current estimates are wrong, repeating this process eventually makes them right.
+
+</Intuition>
+
+## A Worked Example
+
+<Example title="3-State MDP">
+
+Consider a simple MDP with three states: A, B, and C. State C is terminal. The agent always moves right. All transitions are deterministic with reward -1 except reaching C which gives reward +10.
+
+```
+     -1        -1       +10
+[A] -----> [B] -----> [C] (terminal)
+```
+
+Let us evaluate this policy with $\gamma = 0.9$.
+
+**Iteration 0 (Initialization):**
+- $V_0(A) = 0$
+- $V_0(B) = 0$
+- $V_0(C) = 0$
+
+**Iteration 1:**
+- $V_1(C) = 0$ (terminal state, no future)
+- $V_1(B) = -1 + 0.9 \times V_0(C) = -1 + 0.9 \times 0 = -1$
+- $V_1(A) = -1 + 0.9 \times V_0(B) = -1 + 0.9 \times 0 = -1$
+
+**Iteration 2:**
+- $V_2(C) = 0$
+- $V_2(B) = -1 + 0.9 \times V_1(C) = -1 + 0 = -1$
+
+Wait, we are computing this wrong! Let us reconsider. State B transitions to C with reward +10:
+
+- $V_1(B) = 10 + 0.9 \times V_0(C) = 10 + 0 = 10$
+- $V_1(A) = -1 + 0.9 \times V_0(B) = -1 + 0 = -1$
+
+**Iteration 2:**
+- $V_2(B) = 10 + 0.9 \times V_1(C) = 10$
+- $V_2(A) = -1 + 0.9 \times V_1(B) = -1 + 0.9 \times 10 = 8$
+
+**Iteration 3:**
+- $V_3(B) = 10$
+- $V_3(A) = -1 + 0.9 \times V_2(B) = -1 + 9 = 8$
+
+The values have converged! The true values are $V^\pi(A) = 8$, $V^\pi(B) = 10$, and $V^\pi(C) = 0$.
+
+</Example>
+
+<Tip>
+In this simple example, information about the reward at C reached state A in just two iterations. In general, information propagates one step per iteration, so convergence takes roughly as many iterations as the longest path to rewards.
+</Tip>
+
+## Synchronous vs Asynchronous Updates
+
+There are two ways to apply the updates:
+
+### Synchronous (Two-Array) Updates
+
+Store the old values in one array and compute new values in a separate array. Only after computing all new values do you swap them in.
+
+<Implementation>
+
+```python
+import numpy as np
+
+def policy_evaluation_sync(mdp, policy, gamma=0.99, theta=1e-6):
+    """
+    Synchronous policy evaluation using two arrays.
+
+    Args:
+        mdp: MDP with states, actions(s), transitions(s, a), rewards(s, a)
+        policy: dict mapping state -> action probabilities
+        gamma: discount factor
+        theta: convergence threshold
+
+    Returns:
+        V: dict mapping state -> value
+    """
+    # Initialize values to zero
+    V = {s: 0.0 for s in mdp.states}
+
+    iteration = 0
+    while True:
+        V_new = {}
+        delta = 0
+
+        for s in mdp.states:
+            # Compute new value using OLD values only
+            new_value = 0.0
+            for a in mdp.actions(s):
+                action_prob = policy[s].get(a, 0.0)
+                action_value = 0.0
+                for s_next, prob, reward in mdp.transitions(s, a):
+                    action_value += prob * (reward + gamma * V[s_next])
+                new_value += action_prob * action_value
+
+            V_new[s] = new_value
+            delta = max(delta, abs(V[s] - new_value))
+
+        V = V_new
+        iteration += 1
+
+        if delta < theta:
+            print(f"Converged after {iteration} iterations")
+            break
+
+    return V
+```
+
+</Implementation>
+
+### Asynchronous (In-Place) Updates
+
+Update values immediately and use the new values within the same sweep. This often converges faster and uses half the memory.
+
+<Implementation>
+
+```python
+def policy_evaluation_async(mdp, policy, gamma=0.99, theta=1e-6):
+    """
+    Asynchronous (in-place) policy evaluation.
+
+    Updates values immediately, using new values within the same sweep.
+    Often converges faster than synchronous updates.
+    """
+    V = {s: 0.0 for s in mdp.states}
+
+    iteration = 0
+    while True:
+        delta = 0
+
+        for s in mdp.states:
+            old_value = V[s]
+
+            # Compute new value using CURRENT values (some already updated)
+            new_value = 0.0
+            for a in mdp.actions(s):
+                action_prob = policy[s].get(a, 0.0)
+                action_value = 0.0
+                for s_next, prob, reward in mdp.transitions(s, a):
+                    action_value += prob * (reward + gamma * V[s_next])
+                new_value += action_prob * action_value
+
+            # Update immediately
+            V[s] = new_value
+            delta = max(delta, abs(old_value - new_value))
+
+        iteration += 1
+
+        if delta < theta:
+            print(f"Converged after {iteration} iterations")
+            break
+
+    return V
+```
+
+</Implementation>
+
+<Note>
+Both methods converge to the same answer. The choice depends on your priorities:
+
+- **Synchronous**: Easier to parallelize since all updates are independent
+- **Asynchronous**: Often faster in practice, uses less memory
+
+Most implementations use asynchronous updates for efficiency.
+</Note>
+
+## GridWorld Example
+
+Let us trace through policy evaluation on a 4x4 GridWorld, one of the most common examples in RL.
+
+<Example title="4x4 GridWorld with Random Policy">
+
+Consider a 4x4 grid where the agent starts in the top-left corner and wants to reach the bottom-right corner. Under a **random policy**, the agent picks uniformly among the four directions (up, down, left, right) at each step.
+
+The reward is -1 for each step (encouraging efficiency) and 0 for reaching the goal. The discount factor is $\gamma = 1$ (no discounting).
+
+**Grid layout:**
+
+```
+ S  .  .  .      S = Start
+ .  .  .  .      G = Goal
+ .  .  .  .      . = Empty cell
+ .  .  .  G
+```
+
+**Iteration 0:** All values = 0
+
+**After several iterations, values emerge:**
+
+The states near the goal have small negative values (they need few steps). The start state has a large negative value (it needs many steps on average under the random policy).
+
+```
+-14  -20  -22  -14
+-20  -18  -14  -10
+-22  -14   -8   -4
+-14  -10   -4    0
+```
+
+These values tell us: from each state, following the random policy leads to an expected total penalty shown in the cell. The corner states have similar values due to symmetry.
+
+</Example>
+
+## The Full Algorithm
+
+Here is the complete iterative policy evaluation algorithm as pseudocode:
+
+<Mathematical>
+
+**Algorithm: Iterative Policy Evaluation**
+
+**Input:** Policy $\pi$, MDP $(S, A, P, R, \gamma)$, threshold $\theta$
+
+**Output:** Value function $V^\pi$
+
+1. Initialize $V(s) = 0$ for all $s \in S$
+2. Repeat:
+   - $\Delta \leftarrow 0$
+   - For each state $s \in S$:
+     - $v \leftarrow V(s)$
+     - $V(s) \leftarrow \sum_a \pi(a|s) \sum_{s'} P(s'|s,a) \left[ R(s,a,s') + \gamma V(s') \right]$
+     - $\Delta \leftarrow \max(\Delta, |v - V(s)|)$
+   - Until $\Delta < \theta$
+3. Return $V$
+
+</Mathematical>
+
+<Implementation>
+
+Here is a complete, production-ready implementation:
+
+```python
+class SimpleMDP:
+    """A simple MDP for demonstration."""
+
+    def __init__(self):
+        # 4 states: 0, 1, 2, 3 (3 is terminal)
+        self.states = [0, 1, 2, 3]
+        self.terminal_states = {3}
+
+    def actions(self, s):
+        if s in self.terminal_states:
+            return []  # No actions in terminal state
+        return ['right']  # Only one action for simplicity
+
+    def transitions(self, s, a):
+        """Return list of (next_state, probability, reward) tuples."""
+        if s == 0 and a == 'right':
+            return [(1, 1.0, -1)]  # Deterministic move to state 1
+        elif s == 1 and a == 'right':
+            return [(2, 1.0, -1)]  # Move to state 2
+        elif s == 2 and a == 'right':
+            return [(3, 1.0, 10)]  # Reach goal with reward 10
+        return []
+
+
+def policy_evaluation(mdp, policy, gamma=0.99, theta=1e-8, max_iterations=10000):
+    """
+    Evaluate a policy using iterative policy evaluation.
+
+    Args:
+        mdp: MDP object with states, actions(s), transitions(s, a)
+        policy: dict mapping state -> {action: probability}
+        gamma: discount factor (0 to 1)
+        theta: convergence threshold
+        max_iterations: safety limit on iterations
+
+    Returns:
+        V: dict mapping state -> value
+        iterations: number of iterations until convergence
+    """
+    # Initialize all values to zero
+    V = {s: 0.0 for s in mdp.states}
+
+    for iteration in range(max_iterations):
+        delta = 0.0
+
+        for s in mdp.states:
+            if s in mdp.terminal_states:
+                continue  # Terminal states have value 0
+
+            old_value = V[s]
+            new_value = 0.0
+
+            # Sum over actions
+            for a in mdp.actions(s):
+                action_prob = policy.get(s, {}).get(a, 0.0)
+
+                # Sum over next states
+                for s_next, trans_prob, reward in mdp.transitions(s, a):
+                    new_value += action_prob * trans_prob * (
+                        reward + gamma * V[s_next]
+                    )
+
+            V[s] = new_value
+            delta = max(delta, abs(old_value - new_value))
+
+        if delta < theta:
+            return V, iteration + 1
+
+    print(f"Warning: Did not converge in {max_iterations} iterations")
+    return V, max_iterations
+
+
+# Example usage
+if __name__ == "__main__":
+    mdp = SimpleMDP()
+
+    # Policy: always go right with probability 1
+    policy = {
+        0: {'right': 1.0},
+        1: {'right': 1.0},
+        2: {'right': 1.0},
+    }
+
+    V, iters = policy_evaluation(mdp, policy, gamma=0.9)
+
+    print(f"Converged in {iters} iterations")
+    for s in sorted(V.keys()):
+        print(f"V({s}) = {V[s]:.4f}")
+```
+
+</Implementation>
+
+## Key Insights
+
+<Tip>
+**Why can we start with any initial values?**
+
+The Bellman operator is a contraction (we will prove this in the next section). This means no matter where you start, repeated applications bring you closer to the fixed point. The fixed point is $V^\pi$, so you always end up there.
+
+Starting with zeros is convenient but not required. You could start with random values, previous estimates, or domain-specific guesses. All roads lead to $V^\pi$.
+</Tip>
+
+<Warning>
+**Common Mistake: Forgetting Terminal States**
+
+Terminal states should have value 0 (or the terminal reward, depending on convention). A common bug is to apply the Bellman update to terminal states, which gives wrong answers.
+
+Always check: `if s in terminal_states: V[s] = 0` or skip the update entirely.
+</Warning>
+
+## What is Next
+
+We now have an algorithm that computes $V^\pi$. But two questions remain:
+
+1. **Why does this work?** What guarantees convergence? (Next section: Convergence)
+2. **When do we stop?** How do we choose the threshold $\theta$? (Next section: Stopping Criteria)
+
+The next section dives into the mathematics of convergence and practical considerations for stopping.

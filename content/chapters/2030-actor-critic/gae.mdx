@@ -1,0 +1,434 @@
+---
+title: "Generalized Advantage Estimation"
+slug: "gae"
+section: "Policy Gradient Methods"
+description: "Balancing bias and variance in advantage estimation"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Generalized Advantage Estimation (GAE)
+
+GAE provides a principled way to blend different advantage estimates, giving you smooth control over the bias-variance tradeoff. It's a key component of PPO and other modern algorithms.
+
+## The Bias-Variance Tradeoff
+
+<Intuition>
+
+When estimating advantages, we face a fundamental choice:
+
+**TD (1-step)**: $\hat{A}_t = r_t + \gamma V(s_{t+1}) - V(s_t)$
+- Uses one real reward, then trusts the value function
+- Low variance (only one step of randomness)
+- High bias (value function may be wrong)
+
+**Monte Carlo**: $\hat{A}_t = G_t - V(s_t)$
+- Uses all actual rewards until episode end
+- High variance (many steps of randomness accumulate)
+- Low bias (actual returns, not estimates)
+
+Neither extreme is ideal. GAE smoothly interpolates between them.
+
+</Intuition>
+
+## N-Step Returns: The Spectrum
+
+<Mathematical>
+
+Before GAE, let's understand n-step returns:
+
+$$G_t^{(1)} = r_t + \gamma V(s_{t+1})$$
+$$G_t^{(2)} = r_t + \gamma r_{t+1} + \gamma^2 V(s_{t+2})$$
+$$G_t^{(n)} = \sum_{k=0}^{n-1} \gamma^k r_{t+k} + \gamma^n V(s_{t+n})$$
+$$G_t^{(\infty)} = \sum_{k=0}^{\infty} \gamma^k r_{t+k} = G_t \text{ (Monte Carlo)}$$
+
+Each n gives a different bias-variance point:
+
+| N | Bias | Variance | Description |
+|---|------|----------|-------------|
+| 1 | High | Low | TD(0) |
+| 5 | Medium | Medium | Short-term |
+| 20 | Low-ish | High-ish | Long-term |
+| Inf | None | High | Monte Carlo |
+
+</Mathematical>
+
+<Intuition>
+
+Think of n as "how many steps to trust reality before falling back to estimates":
+
+- **n=1**: "Look one step ahead, then use your prediction"
+- **n=5**: "Look five steps ahead, then use your prediction"
+- **n=infinity**: "Look all the way to the end, don't use predictions"
+
+More reality = more accurate on average (less bias), but noisier (more variance).
+
+</Intuition>
+
+## GAE: Blending All Estimates
+
+<Definition title="Generalized Advantage Estimation (GAE)">
+
+GAE computes an exponentially-weighted average of n-step advantage estimates:
+
+$$\hat{A}_t^{GAE(\gamma, \lambda)} = \sum_{l=0}^{\infty} (\gamma \lambda)^l \delta_{t+l}$$
+
+where $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$ is the TD error.
+
+The parameter $\lambda \in [0, 1]$ controls the bias-variance tradeoff:
+- $\lambda = 0$: Pure TD (1-step)
+- $\lambda = 1$: Pure Monte Carlo
+- $\lambda \in (0, 1)$: Smooth blend
+
+</Definition>
+
+<Mathematical>
+
+**Derivation**: GAE can be derived as an exponentially-weighted sum of n-step advantages.
+
+The n-step advantage estimate is:
+$$\hat{A}_t^{(n)} = \sum_{l=0}^{n-1} \gamma^l \delta_{t+l}$$
+
+GAE weights these by $(1-\lambda)\lambda^{n-1}$:
+$$\hat{A}_t^{GAE} = (1-\lambda) \sum_{n=1}^{\infty} \lambda^{n-1} \hat{A}_t^{(n)}$$
+
+After simplification:
+$$\hat{A}_t^{GAE} = \sum_{l=0}^{\infty} (\gamma \lambda)^l \delta_{t+l}$$
+
+This elegant form shows that GAE just sums TD errors with exponentially decaying weights.
+
+</Mathematical>
+
+<Intuition>
+
+GAE asks: "How much should I trust what happened l steps in the future?"
+
+- Immediate TD error ($l=0$): Weight = 1
+- Next TD error ($l=1$): Weight = $\gamma \lambda$
+- Two steps out ($l=2$): Weight = $(\gamma \lambda)^2$
+- And so on...
+
+With $\gamma = 0.99$ and $\lambda = 0.95$:
+- l=0: weight 1.0
+- l=5: weight 0.77
+- l=10: weight 0.60
+- l=20: weight 0.36
+
+Recent TD errors matter most; distant ones are heavily discounted.
+
+</Intuition>
+
+## Computing GAE Efficiently
+
+<Implementation>
+
+```python
+import torch
+import numpy as np
+
+
+def compute_gae(rewards, values, dones, next_value, gamma=0.99, lam=0.95):
+    """
+    Compute Generalized Advantage Estimation.
+
+    Args:
+        rewards: List or array of rewards [r_0, r_1, ..., r_{T-1}]
+        values: List or array of value estimates [V(s_0), ..., V(s_{T-1})]
+        dones: List or array of done flags [d_0, ..., d_{T-1}]
+        next_value: V(s_T) - value of the state after the last step
+        gamma: Discount factor
+        lam: GAE lambda parameter (0 = TD, 1 = MC)
+
+    Returns:
+        advantages: GAE advantages for each timestep
+        returns: Advantage + value (targets for value function)
+    """
+    T = len(rewards)
+    advantages = np.zeros(T, dtype=np.float32)
+    last_gae = 0
+
+    # Work backwards from the end
+    for t in reversed(range(T)):
+        if dones[t]:
+            # Episode ended - no bootstrap
+            next_val = 0
+            last_gae = 0
+        elif t == T - 1:
+            # Last step of rollout - bootstrap with next_value
+            next_val = next_value
+        else:
+            next_val = values[t + 1]
+
+        # TD error
+        delta = rewards[t] + gamma * next_val - values[t]
+
+        # GAE recursive formula: A_t = delta_t + gamma * lambda * A_{t+1}
+        last_gae = delta + gamma * lam * last_gae * (1 - dones[t])
+        advantages[t] = last_gae
+
+    returns = advantages + np.array(values)
+    return advantages, returns
+
+
+def compute_gae_pytorch(rewards, values, dones, next_value, gamma=0.99, lam=0.95):
+    """
+    PyTorch version of GAE computation.
+    """
+    T = len(rewards)
+    advantages = torch.zeros(T)
+    last_gae = 0
+
+    # Append next_value to values for easy indexing
+    values_extended = torch.cat([values, torch.tensor([next_value])])
+
+    for t in reversed(range(T)):
+        if dones[t]:
+            next_val = 0
+            last_gae = 0
+        else:
+            next_val = values_extended[t + 1]
+
+        delta = rewards[t] + gamma * next_val - values[t]
+        last_gae = delta + gamma * lam * last_gae
+        advantages[t] = last_gae
+
+    returns = advantages + values
+    return advantages, returns
+```
+
+</Implementation>
+
+## The Lambda Parameter
+
+<Mathematical>
+
+Lambda ($\lambda$) controls the bias-variance tradeoff:
+
+**$\lambda = 0$** (pure TD):
+$$\hat{A}_t = \delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$$
+- Maximum bias (relies entirely on value function)
+- Minimum variance (only one step of randomness)
+
+**$\lambda = 1$** (pure MC):
+$$\hat{A}_t = \sum_{l=0}^{\infty} \gamma^l \delta_{t+l} = G_t - V(s_t)$$
+- Minimum bias (uses actual returns)
+- Maximum variance (all future randomness)
+
+**$\lambda = 0.95$** (typical):
+- Moderate bias
+- Moderate variance
+- Usually works well in practice
+
+</Mathematical>
+
+<Intuition>
+
+Lambda is like a "trust horizon":
+
+- **$\lambda = 0$**: "I only trust the next step, then use my estimate"
+- **$\lambda = 1$**: "I trust actual experience all the way to the end"
+- **$\lambda = 0.95$**: "I trust actual experience but gradually rely more on estimates for distant future"
+
+Higher lambda = more trust in actual experience = less bias but more variance.
+
+</Intuition>
+
+<Tip>
+
+**Choosing lambda in practice:**
+
+| Situation | Lambda | Reasoning |
+|-----------|--------|-----------|
+| Good value function | 0.90-0.95 | Can trust V more |
+| Poor value function | 0.97-0.99 | Rely more on actual returns |
+| Short episodes | 0.95 | Less variance anyway |
+| Long episodes | 0.90 | Control variance |
+| Noisy rewards | 0.90-0.95 | Reduce variance |
+
+Default: Start with $\lambda = 0.95$. This works well for most problems.
+
+</Tip>
+
+## GAE in Practice
+
+### PPO with GAE
+
+<Implementation>
+
+```python
+class PPOWithGAE:
+    """PPO implementation using GAE for advantage estimation."""
+
+    def __init__(self, state_dim, n_actions, lr=3e-4, gamma=0.99,
+                 lam=0.95, clip_ratio=0.2):
+        self.gamma = gamma
+        self.lam = lam
+        self.clip_ratio = clip_ratio
+
+        self.network = ActorCriticNetwork(state_dim, n_actions)
+        self.optimizer = torch.optim.Adam(self.network.parameters(), lr=lr)
+
+    def collect_rollout(self, env, n_steps):
+        """Collect experience for training."""
+        states, actions, rewards, dones, log_probs, values = [], [], [], [], [], []
+
+        state, _ = env.reset()
+
+        for _ in range(n_steps):
+            state_t = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+
+            with torch.no_grad():
+                action_logits, value = self.network(state_t)
+                dist = torch.distributions.Categorical(logits=action_logits)
+                action = dist.sample()
+                log_prob = dist.log_prob(action)
+
+            next_state, reward, terminated, truncated, _ = env.step(action.item())
+            done = terminated or truncated
+
+            states.append(state_t.squeeze(0))
+            actions.append(action.item())
+            rewards.append(reward)
+            dones.append(done)
+            log_probs.append(log_prob)
+            values.append(value.squeeze())
+
+            state = next_state
+            if done:
+                state, _ = env.reset()
+
+        # Get value of final state for bootstrapping
+        with torch.no_grad():
+            _, next_value = self.network(
+                torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+            )
+            next_value = next_value.item()
+            if dones[-1]:
+                next_value = 0
+
+        return {
+            'states': torch.stack(states),
+            'actions': torch.tensor(actions),
+            'rewards': rewards,
+            'dones': dones,
+            'log_probs': torch.stack(log_probs).squeeze(),
+            'values': torch.stack(values).squeeze(),
+            'next_value': next_value
+        }
+
+    def compute_advantages(self, rollout):
+        """Compute GAE advantages from rollout."""
+        rewards = rollout['rewards']
+        values = rollout['values'].detach().numpy()
+        dones = rollout['dones']
+        next_value = rollout['next_value']
+
+        advantages, returns = compute_gae(
+            rewards, values, dones, next_value,
+            gamma=self.gamma, lam=self.lam
+        )
+
+        return torch.tensor(advantages), torch.tensor(returns)
+```
+
+</Implementation>
+
+### Vectorized GAE
+
+For parallel environments, we need vectorized GAE computation:
+
+<Implementation>
+
+```python
+def compute_gae_vectorized(rewards, values, dones, next_values,
+                           gamma=0.99, lam=0.95):
+    """
+    Compute GAE for multiple parallel environments.
+
+    Args:
+        rewards: Tensor [T, num_envs] of rewards
+        values: Tensor [T, num_envs] of value estimates
+        dones: Tensor [T, num_envs] of done flags
+        next_values: Tensor [num_envs] of bootstrap values
+        gamma: Discount factor
+        lam: GAE lambda
+
+    Returns:
+        advantages: Tensor [T, num_envs]
+        returns: Tensor [T, num_envs]
+    """
+    T, num_envs = rewards.shape
+    advantages = torch.zeros_like(rewards)
+    last_gae = torch.zeros(num_envs)
+
+    # Append next_values
+    values_extended = torch.cat([values, next_values.unsqueeze(0)], dim=0)
+
+    for t in reversed(range(T)):
+        # Handle episode boundaries
+        not_done = 1.0 - dones[t]
+
+        # TD error for all environments
+        delta = rewards[t] + gamma * values_extended[t + 1] * not_done - values[t]
+
+        # GAE update
+        last_gae = delta + gamma * lam * last_gae * not_done
+        advantages[t] = last_gae
+
+    returns = advantages + values
+    return advantages, returns
+```
+
+</Implementation>
+
+## Comparison: A2C vs GAE
+
+<Intuition>
+
+**A2C (n-step returns)**:
+- Uses fixed n-step returns
+- Hard cutoff at n steps
+- Simple but inflexible
+
+**GAE**:
+- Exponentially-weighted blend of all n-step returns
+- Smooth decay of influence
+- Principled bias-variance control
+
+Example with n=5 A2C vs GAE($\lambda=0.95$):
+
+| Step | A2C Weight | GAE Weight |
+|------|------------|------------|
+| 1 | 1.0 | 1.0 |
+| 2 | 1.0 | 0.95 |
+| 3 | 1.0 | 0.90 |
+| 4 | 1.0 | 0.86 |
+| 5 | 1.0 | 0.81 |
+| 6 | 0.0 (bootstrap) | 0.77 |
+| 7 | 0.0 | 0.74 |
+
+A2C has a hard cutoff; GAE smoothly decays.
+
+</Intuition>
+
+## Summary
+
+GAE is a powerful technique for advantage estimation:
+
+- **Blends TD and MC**: Smooth interpolation via $\lambda$
+- **Bias-variance control**: $\lambda=0$ is TD, $\lambda=1$ is MC
+- **Efficient computation**: Simple backward recursion
+- **Widely used**: Key component of PPO, TRPO, and other algorithms
+
+<Tip>
+
+**Default settings that work well:**
+- $\gamma = 0.99$
+- $\lambda = 0.95$
+
+These values are used in the original PPO paper and work across many domains.
+
+</Tip>
+
+The combination of actor-critic with GAE provides stable, efficient learning. The final piece is controlling policy updates to prevent catastrophic forgetting - that's where PPO comes in.

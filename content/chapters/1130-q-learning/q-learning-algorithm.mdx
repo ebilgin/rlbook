@@ -1,0 +1,434 @@
+---
+title: "The Q-Learning Algorithm"
+slug: "q-learning-algorithm"
+section: "Temporal Difference Learning"
+description: "The most famous RL algorithm"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# The Q-Learning Algorithm
+
+Q-learning is arguably the most important algorithm in reinforcement learning. It's simple to implement, powerful in practice, and forms the foundation for modern deep RL methods like DQN. Let's understand it completely.
+
+## The Q-Learning Update Rule
+
+<Definition title="Q-Learning Update">
+The Q-learning algorithm updates action values using the maximum over next-state actions:
+
+$$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha \left[ R_{t+1} + \gamma \max_{a'} Q(S_{t+1}, a') - Q(S_t, A_t) \right]$$
+</Definition>
+
+<Intuition>
+
+Let's break down each component:
+
+1. **$Q(S_t, A_t)$**: Our current estimate of how good it is to take action $A_t$ in state $S_t$
+2. **$R_{t+1}$**: The reward we just received
+3. **$\max_{a'} Q(S_{t+1}, a')$**: The value of the best action in the next state
+4. **$R_{t+1} + \gamma \max_{a'} Q(S_{t+1}, a')$**: The **TD target** — our new estimate of what $Q(S_t, A_t)$ should be
+5. **$\alpha$**: Learning rate — how much to trust the new information
+
+The update moves our estimate a fraction $\alpha$ toward the TD target.
+
+</Intuition>
+
+<Mathematical>
+
+**TD Error for Q-Learning:**
+
+$$\delta_t = R_{t+1} + \gamma \max_{a'} Q(S_{t+1}, a') - Q(S_t, A_t)$$
+
+The TD error measures the "surprise"—the difference between our prediction and our revised estimate.
+
+**The update in terms of TD error:**
+
+$$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha \cdot \delta_t$$
+
+**Optimal Policy Extraction:**
+
+Once we have $Q^*$, the optimal policy is simply:
+
+$$\pi^*(s) = \arg\max_a Q^*(s, a)$$
+
+</Mathematical>
+
+## The Complete Algorithm
+
+Here's the full Q-learning algorithm:
+
+```
+Algorithm: Q-Learning (Off-Policy TD Control)
+──────────────────────────────────────────────
+Parameters: step size α ∈ (0, 1], discount γ, exploration ε
+
+Initialize Q(s, a) arbitrarily for all s, a
+Initialize Q(terminal, ·) = 0
+
+Loop for each episode:
+    Initialize S
+
+    Loop for each step of episode:
+        Choose A from S using policy derived from Q (e.g., ε-greedy)
+        Take action A, observe R, S'
+        Q(S, A) ← Q(S, A) + α[R + γ max_a Q(S', a) - Q(S, A)]
+        S ← S'
+    until S is terminal
+```
+
+<Note>
+Notice the key difference from SARSA: we don't need to choose the next action $A'$ before updating. Q-learning uses $\max_{a'} Q(S', a')$—we consider all possible next actions, not just the one we'll actually take.
+</Note>
+
+## Comparison with SARSA
+
+| Aspect | SARSA | Q-Learning |
+|--------|-------|------------|
+| **Next-state value** | $Q(S', A')$ | $\max_{a'} Q(S', a')$ |
+| **Needs next action?** | Yes (before update) | No |
+| **Policy learned** | $Q^\pi$ (current policy) | $Q^*$ (optimal) |
+| **Type** | On-policy | Off-policy |
+
+<Example>
+**Why Q-Learning Doesn't Need A'**
+
+In SARSA, the episode loop looks like:
+```
+Choose A from S
+Loop:
+    Take action A, observe R, S'
+    Choose A' from S'
+    Update Q(S, A) using Q(S', A')
+    S ← S', A ← A'
+```
+
+In Q-learning, it's simpler:
+```
+Loop:
+    Choose A from S
+    Take action A, observe R, S'
+    Update Q(S, A) using max Q(S', *)
+    S ← S'
+```
+
+Q-learning doesn't need to know what action we'll take next—it considers all actions via max.
+</Example>
+
+## Complete Implementation
+
+<Implementation>
+
+```python
+import numpy as np
+from collections import defaultdict
+
+class QLearningAgent:
+    """Q-learning agent for discrete state-action spaces."""
+
+    def __init__(self, n_actions, alpha=0.1, gamma=0.99, epsilon=0.1):
+        """
+        Initialize Q-learning agent.
+
+        Args:
+            n_actions: Number of available actions
+            alpha: Learning rate
+            gamma: Discount factor
+            epsilon: Exploration rate for epsilon-greedy
+        """
+        self.n_actions = n_actions
+        self.alpha = alpha
+        self.gamma = gamma
+        self.epsilon = epsilon
+
+        # Q-table: maps state to array of action values
+        self.Q = defaultdict(lambda: np.zeros(n_actions))
+
+    def select_action(self, state):
+        """Select action using epsilon-greedy policy."""
+        if np.random.random() < self.epsilon:
+            return np.random.randint(self.n_actions)
+        else:
+            return np.argmax(self.Q[state])
+
+    def update(self, state, action, reward, next_state, done):
+        """
+        Perform Q-learning update.
+
+        Args:
+            state: Current state
+            action: Action taken
+            reward: Reward received
+            next_state: Next state
+            done: Whether episode ended
+
+        Returns:
+            td_error: The TD error for this transition
+        """
+        # Key difference from SARSA: use max over all next actions
+        if done:
+            td_target = reward
+        else:
+            td_target = reward + self.gamma * np.max(self.Q[next_state])
+
+        td_error = td_target - self.Q[state][action]
+        self.Q[state][action] += self.alpha * td_error
+
+        return td_error
+
+    def get_greedy_policy(self):
+        """Return the current greedy policy."""
+        policy = {}
+        for state in self.Q:
+            policy[state] = np.argmax(self.Q[state])
+        return policy
+
+
+def train_qlearning_episode(env, agent):
+    """
+    Train one episode with Q-learning.
+
+    Returns:
+        total_reward: Sum of rewards in the episode
+        steps: Number of steps taken
+    """
+    state = env.reset()
+    total_reward = 0
+    steps = 0
+    done = False
+
+    while not done:
+        # Choose action
+        action = agent.select_action(state)
+
+        # Take action, observe result
+        next_state, reward, done, _ = env.step(action)
+        total_reward += reward
+        steps += 1
+
+        # Q-learning update (note: no next_action needed!)
+        agent.update(state, action, reward, next_state, done)
+
+        # Move to next state
+        state = next_state
+
+    return total_reward, steps
+
+
+def train_qlearning(env, agent, num_episodes=1000, verbose=True):
+    """Train Q-learning agent for multiple episodes."""
+    rewards = []
+    steps_list = []
+
+    for episode in range(num_episodes):
+        total_reward, steps = train_qlearning_episode(env, agent)
+        rewards.append(total_reward)
+        steps_list.append(steps)
+
+        if verbose and episode % 100 == 0:
+            avg_reward = np.mean(rewards[-100:]) if rewards else 0
+            print(f"Episode {episode}, Avg Reward: {avg_reward:.2f}")
+
+    return rewards, steps_list
+```
+
+</Implementation>
+
+## A Worked Example
+
+<Example>
+**Q-Learning in GridWorld**
+
+Consider a 3x3 grid with goal at $(2,2)$. Initial Q-values are zero.
+
+**Step 1**: State $S = (0,0)$, choose $A = $ RIGHT (epsilon-greedy, exploring)
+- Observe: $R = -1$, $S' = (0,1)$
+- TD target: $-1 + 0.99 \times \max_a Q((0,1), a) = -1 + 0.99 \times 0 = -1$
+- TD error: $-1 - 0 = -1$
+- Update: $Q((0,0), RIGHT) \leftarrow 0 + 0.1 \times (-1) = -0.1$
+
+**Step 2**: State $S = (0,1)$, choose $A = $ DOWN (epsilon-greedy)
+- Observe: $R = -1$, $S' = (1,1)$
+- TD target: $-1 + 0.99 \times \max_a Q((1,1), a) = -1 + 0.99 \times 0 = -1$
+- Update: $Q((0,1), DOWN) \leftarrow 0 + 0.1 \times (-1) = -0.1$
+
+**Eventually reaching goal**:
+- State $S = (2,1)$, choose $A = $ RIGHT
+- Observe: $R = +10$, $S' = (2,2)$ (terminal)
+- TD target: $10$ (no future value for terminal)
+- Update: $Q((2,1), RIGHT) \leftarrow 0 + 0.1 \times 10 = 1.0$
+
+Now there's a positive Q-value! In future episodes, this will propagate backward.
+
+**Key insight**: Even though we explored randomly, the Q-values are converging toward optimal because we always use max in the target.
+</Example>
+
+## Epsilon-Greedy Exploration
+
+Like SARSA, Q-learning typically uses epsilon-greedy for the behavior policy:
+
+<Implementation>
+
+```python
+def epsilon_greedy(Q, state, epsilon, n_actions):
+    """
+    Epsilon-greedy action selection.
+
+    With probability epsilon: random action
+    With probability 1-epsilon: greedy action
+    """
+    if np.random.random() < epsilon:
+        return np.random.randint(n_actions)
+    else:
+        # Break ties randomly
+        q_values = Q[state]
+        max_q = np.max(q_values)
+        best_actions = np.where(q_values == max_q)[0]
+        return np.random.choice(best_actions)
+```
+
+</Implementation>
+
+<Tip>
+**Choosing Hyperparameters:**
+
+- **$\alpha$ (learning rate)**: Start with 0.1. Too high causes oscillation; too low causes slow learning.
+- **$\gamma$ (discount)**: 0.99 is standard. Lower values make the agent more short-sighted.
+- **$\epsilon$ (exploration)**: 0.1 is common. Consider decaying it: high early (explore), low later (exploit).
+</Tip>
+
+## Epsilon Decay
+
+<Implementation>
+
+```python
+class DecayingEpsilonQLearning(QLearningAgent):
+    """Q-learning with decaying exploration."""
+
+    def __init__(self, n_actions, alpha=0.1, gamma=0.99,
+                 epsilon_start=1.0, epsilon_end=0.01, epsilon_decay=0.995):
+        super().__init__(n_actions, alpha, gamma, epsilon_start)
+        self.epsilon_start = epsilon_start
+        self.epsilon_end = epsilon_end
+        self.epsilon_decay = epsilon_decay
+
+    def decay_epsilon(self):
+        """Call after each episode to decay epsilon."""
+        self.epsilon = max(
+            self.epsilon_end,
+            self.epsilon * self.epsilon_decay
+        )
+
+
+# Usage
+agent = DecayingEpsilonQLearning(n_actions=4)
+for episode in range(1000):
+    train_qlearning_episode(env, agent)
+    agent.decay_epsilon()
+    # epsilon goes: 1.0 → 0.995 → 0.990 → ... → 0.01
+```
+
+</Implementation>
+
+## Why Does Q-Learning Work?
+
+<Intuition>
+
+Q-learning works because of a clever property: **the max operator is a contraction**.
+
+Every update moves Q toward the Bellman optimality equation:
+$$Q^*(s,a) = \mathbb{E}\left[R + \gamma \max_{a'} Q^*(s', a')\right]$$
+
+As long as we:
+1. Visit all state-action pairs enough times
+2. Decrease the learning rate appropriately (or keep it small)
+
+...we're guaranteed to converge to $Q^*$. The max operation ensures we're always aiming for optimal, not just following our current behavior.
+
+</Intuition>
+
+## Visualizing Q-Values
+
+<Implementation>
+
+```python
+import matplotlib.pyplot as plt
+
+def visualize_q_values(agent, grid_size, action_names=['UP', 'DOWN', 'LEFT', 'RIGHT']):
+    """Visualize Q-values as a heatmap with best actions."""
+    fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+
+    for action_idx, (ax, action_name) in enumerate(zip(axes.flat, action_names)):
+        # Create Q-value grid for this action
+        q_grid = np.zeros((grid_size, grid_size))
+        for row in range(grid_size):
+            for col in range(grid_size):
+                q_grid[row, col] = agent.Q[(row, col)][action_idx]
+
+        im = ax.imshow(q_grid, cmap='RdYlGn', aspect='equal')
+        ax.set_title(f'Q-values for {action_name}')
+        ax.set_xlabel('Column')
+        ax.set_ylabel('Row')
+        plt.colorbar(im, ax=ax)
+
+        # Add value annotations
+        for row in range(grid_size):
+            for col in range(grid_size):
+                ax.text(col, row, f'{q_grid[row, col]:.1f}',
+                       ha='center', va='center', fontsize=8)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def visualize_policy(agent, grid_size):
+    """Visualize the greedy policy as arrows."""
+    arrow_chars = {0: '^', 1: 'v', 2: '<', 3: '>'}
+
+    print("Learned Policy:")
+    for row in range(grid_size):
+        row_str = ""
+        for col in range(grid_size):
+            best_action = np.argmax(agent.Q[(row, col)])
+            row_str += arrow_chars[best_action] + " "
+        print(row_str)
+```
+
+</Implementation>
+
+## Common Mistakes to Avoid
+
+<Warning>
+**Mistake 1: Forgetting terminal states**
+
+When $S'$ is terminal, there's no future value:
+```python
+if done:
+    td_target = reward  # NOT reward + gamma * max(Q[next_state])
+```
+
+**Mistake 2: Using the actual next action**
+
+Q-learning uses $\max_a Q(s', a)$, not $Q(s', a')$. Using the actual next action makes it SARSA!
+
+**Mistake 3: Not exploring enough**
+
+Q-learning converges to $Q^*$ only if all state-action pairs are visited. Make sure $\epsilon$ doesn't decay too fast.
+
+**Mistake 4: Learning rate too high**
+
+High $\alpha$ can cause Q-values to oscillate. Start with $\alpha = 0.1$ and decrease if unstable.
+</Warning>
+
+## Summary
+
+Q-learning is remarkably simple:
+
+1. **Observe** state $S$, choose action $A$ (epsilon-greedy)
+2. **Take action**, observe reward $R$ and next state $S'$
+3. **Update**: $Q(S, A) \leftarrow Q(S, A) + \alpha[R + \gamma \max_{a'} Q(S', a') - Q(S, A)]$
+4. **Move to next state**: $S \leftarrow S'$
+
+The key insight: by using $\max$, we learn about optimal behavior regardless of how we actually behave.
+
+In the next section, we'll compare SARSA and Q-learning head-to-head on the Cliff Walking environment—the canonical example that shows their different behaviors.

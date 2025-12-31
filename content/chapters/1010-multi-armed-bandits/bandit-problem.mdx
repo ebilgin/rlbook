@@ -1,0 +1,335 @@
+---
+title: "The Bandit Problem"
+slug: "bandit-problem"
+section: "Bandit Problems"
+description: "Slot machines and the exploration dilemma"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# The Bandit Problem
+
+Picture yourself walking into a casino with a row of k slot machines in front of you. Each machine has a different (unknown) payout rate. You have 1000 coins to play. How do you maximize your winnings?
+
+This is the **multi-armed bandit problem**—named after the old slang for slot machines ("one-armed bandits"). It's the simplest setting in reinforcement learning, yet it captures the fundamental challenge that makes learning hard: **exploration vs exploitation**.
+
+## The Setup
+
+<Definition title="Multi-Armed Bandit">
+A sequential decision problem with k actions (arms), each with an unknown reward distribution. At each step, the agent selects an arm and receives a reward drawn from that arm's distribution.
+</Definition>
+
+<Intuition>
+
+Here's the scenario:
+- You face **k slot machines** (arms)
+- Each arm has a **true average payout** $\mu_a$ that you don't know
+- When you pull arm $a$, you receive a **random reward** centered around $\mu_a$
+- Your goal: **maximize total reward** over many pulls
+
+The challenge is immediate: if you don't know which arm is best, how do you find out? And how do you balance learning (trying different arms) with earning (playing the arm that seems best)?
+
+</Intuition>
+
+<Example title="A Concrete Example">
+
+Suppose you have 3 slot machines with these true (unknown to you) payout probabilities:
+- **Arm 1**: Pays $1 with probability 0.2, $0 otherwise. Mean: $0.20
+- **Arm 2**: Pays $1 with probability 0.5, $0 otherwise. Mean: $0.50
+- **Arm 3**: Pays $1 with probability 0.8, $0 otherwise. Mean: $0.80
+
+Arm 3 is clearly best, but you don't know this! After a few pulls, you might have:
+- Arm 1: 2 wins out of 5 pulls (observed rate: 40%)
+- Arm 2: 1 win out of 3 pulls (observed rate: 33%)
+- Arm 3: 0 wins out of 2 pulls (observed rate: 0%)
+
+Based on these observations, Arm 1 looks best—but that's just noise. The true best arm (Arm 3) has been unlucky so far. Should you keep trying it?
+
+</Example>
+
+## Action Values
+
+The first concept we need is a way to estimate how good each arm is based on our experience.
+
+<Definition title="Action Value">
+The action value $Q(a)$ is the expected reward from choosing action $a$. This is what we're trying to learn.
+</Definition>
+
+<Intuition>
+
+We don't know the true action values, so we estimate them from experience. The simplest estimate? **The sample average** of rewards we've received from that arm.
+
+$$Q_t(a) \approx \text{average of rewards from arm } a \text{ so far}$$
+
+If we've pulled arm 2 five times and received rewards of 1, 0, 1, 1, 0, our estimate is:
+
+$$Q_t(2) = \frac{1 + 0 + 1 + 1 + 0}{5} = 0.6$$
+
+</Intuition>
+
+<Mathematical>
+
+More formally, let $N_t(a)$ be the number of times arm $a$ has been selected before time $t$, and let $R_1, R_2, \ldots, R_{N_t(a)}$ be the rewards received from those selections. The sample average estimate is:
+
+$$Q_t(a) = \frac{1}{N_t(a)} \sum_{i=1}^{N_t(a)} R_i$$
+
+By the law of large numbers, as $N_t(a) \to \infty$, this estimate converges to the true value:
+
+$$Q_t(a) \to \mu_a$$
+
+The challenge is that we can't pull all arms infinitely often. We need to decide *which* arms to learn about.
+
+</Mathematical>
+
+## The Incremental Update Rule
+
+Recomputing the average from scratch every time is wasteful. There's a more efficient approach.
+
+<Intuition>
+
+When you get a new reward, you can update your estimate incrementally:
+
+1. Calculate the **error**: how different was the reward from your estimate?
+2. **Nudge your estimate** toward the observed reward
+
+This is expressed as:
+
+$$Q_{n+1} = Q_n + \frac{1}{n}(R_n - Q_n)$$
+
+Read this as: "New estimate = old estimate + step size times error"
+
+</Intuition>
+
+<Mathematical>
+
+Let's derive this. The sample average after $n$ rewards is:
+
+$$Q_n = \frac{1}{n}\sum_{i=1}^{n} R_i$$
+
+After receiving the $(n+1)$-th reward $R_{n+1}$:
+
+$$Q_{n+1} = \frac{1}{n+1}\sum_{i=1}^{n+1} R_i = \frac{1}{n+1}\left(R_{n+1} + \sum_{i=1}^{n} R_i\right)$$
+
+Since $\sum_{i=1}^{n} R_i = n \cdot Q_n$:
+
+$$Q_{n+1} = \frac{1}{n+1}(R_{n+1} + n \cdot Q_n) = Q_n + \frac{1}{n+1}(R_{n+1} - Q_n)$$
+
+This update takes constant time regardless of how many rewards we've seen.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+def update_q_incrementally(Q, N, action, reward):
+    """
+    Update action-value estimate using incremental update.
+
+    Args:
+        Q: Array of current value estimates for each arm
+        N: Array of pull counts for each arm
+        action: The arm that was pulled
+        reward: The reward received
+
+    Returns:
+        Updated Q and N arrays
+    """
+    N[action] += 1
+    # Step size is 1/n for the sample average
+    step_size = 1.0 / N[action]
+    # Update estimate toward observed reward
+    Q[action] += step_size * (reward - Q[action])
+    return Q, N
+
+
+# Example usage
+n_arms = 10
+Q = np.zeros(n_arms)  # Initial estimates
+N = np.zeros(n_arms)  # Pull counts
+
+# Simulate some pulls
+for _ in range(100):
+    action = np.random.randint(n_arms)  # Random for now
+    reward = np.random.randn()  # Fake reward
+    Q, N = update_q_incrementally(Q, N, action, reward)
+```
+
+</Implementation>
+
+## Regret: The Performance Metric
+
+How do we measure how well a bandit algorithm performs? We can't just look at total reward—that depends on how good the arms are. Instead, we measure how much we *lost* compared to always playing the best arm.
+
+<Definition title="Regret">
+The regret at time $T$ is the difference between the reward we could have gotten by always playing the optimal arm and the reward we actually received.
+</Definition>
+
+<Intuition>
+
+Imagine you eventually discover which arm is best and realize it has mean reward $\mu^*$. Looking back, you wish you'd played that arm every single time. Regret measures this gap:
+
+$$\text{Regret}(T) = T \cdot \mu^* - \sum_{t=1}^T R_t$$
+
+Or equivalently, thinking about per-step loss:
+
+$$\text{Regret}(T) = \sum_{t=1}^T (\mu^* - \mu_{A_t})$$
+
+Each time you play a suboptimal arm, you accumulate regret equal to how much worse that arm is.
+
+</Intuition>
+
+<Mathematical>
+
+Let $\mu^* = \max_a \mu_a$ be the expected reward of the optimal arm. The expected regret after $T$ steps is:
+
+$$\mathbb{E}[\text{Regret}(T)] = \sum_{t=1}^T (\mu^* - \mathbb{E}[\mu_{A_t}]) = \sum_{a: \mu_a < \mu^*} \Delta_a \cdot \mathbb{E}[N_T(a)]$$
+
+where $\Delta_a = \mu^* - \mu_a$ is the "gap" for arm $a$.
+
+Key insight: regret accumulates from pulling suboptimal arms. A good algorithm minimizes $\mathbb{E}[N_T(a)]$ for suboptimal arms while still learning which arms are suboptimal.
+
+The best possible regret is **sublinear** in $T$. In fact, it's been proven that no algorithm can do better than $O(\log T)$ regret in the worst case.
+
+</Mathematical>
+
+<Example title="Computing Regret">
+
+Continuing our 3-arm example with true means $\mu_1 = 0.2$, $\mu_2 = 0.5$, $\mu_3 = 0.8$:
+
+The optimal arm is Arm 3 with $\mu^* = 0.8$.
+
+If after 100 pulls we played:
+- Arm 1: 20 times (gap $\Delta_1 = 0.8 - 0.2 = 0.6$)
+- Arm 2: 30 times (gap $\Delta_2 = 0.8 - 0.5 = 0.3$)
+- Arm 3: 50 times (gap $\Delta_3 = 0$)
+
+Expected regret:
+$$\text{Regret} = 20 \times 0.6 + 30 \times 0.3 + 50 \times 0 = 12 + 9 + 0 = 21$$
+
+We "left 21 dollars on the table" compared to always playing Arm 3.
+
+</Example>
+
+## The Fundamental Tension
+
+Now we can articulate the core dilemma precisely:
+
+<Tip>
+**The Exploration-Exploitation Dilemma**
+
+- **Exploit**: Play the arm with the highest estimated value to maximize immediate reward
+- **Explore**: Play other arms to improve estimates and potentially find a better arm
+
+Pure exploitation risks never finding the best arm. Pure exploration wastes time on arms you know are bad.
+
+</Tip>
+
+<Warning>
+**Why Pure Greedy Fails**
+
+If you always play the arm with the highest current estimate, you might get stuck on a suboptimal arm forever. Here's why:
+
+1. Early rewards are noisy
+2. A suboptimal arm might look good by chance
+3. If you never try other arms, you never learn they're better
+4. You accumulate regret indefinitely
+
+Good exploration strategies balance learning with earning—exploring enough to find the best arm, then exploiting it.
+
+</Warning>
+
+## Bandit Environments
+
+<Implementation>
+
+Let's build a simple bandit environment for experimentation:
+
+```python
+import numpy as np
+from typing import List, Optional
+
+class MultiArmedBandit:
+    """
+    A k-armed bandit with Gaussian reward distributions.
+
+    Each arm has a mean reward drawn from N(0, 1).
+    When pulled, rewards are drawn from N(mean, 1).
+    """
+
+    def __init__(self, n_arms: int = 10, seed: Optional[int] = None):
+        self.n_arms = n_arms
+        self.rng = np.random.default_rng(seed)
+        # True arm means (unknown to the agent)
+        self.means = self.rng.standard_normal(n_arms)
+        self.optimal_arm = np.argmax(self.means)
+        self.optimal_value = self.means[self.optimal_arm]
+
+    def pull(self, arm: int) -> float:
+        """Pull an arm and receive a reward."""
+        return self.rng.normal(self.means[arm], 1.0)
+
+    def get_optimal_arm(self) -> int:
+        """Return the index of the optimal arm (for evaluation only)."""
+        return self.optimal_arm
+
+    def get_regret(self, arm: int) -> float:
+        """Return the instantaneous regret for pulling this arm."""
+        return self.optimal_value - self.means[arm]
+
+
+class BernoulliBandit:
+    """
+    A k-armed bandit with Bernoulli (0/1) rewards.
+
+    Each arm has a probability p of paying 1, else pays 0.
+    """
+
+    def __init__(self, probabilities: List[float], seed: Optional[int] = None):
+        self.probabilities = np.array(probabilities)
+        self.n_arms = len(probabilities)
+        self.rng = np.random.default_rng(seed)
+        self.optimal_arm = np.argmax(self.probabilities)
+        self.optimal_value = self.probabilities[self.optimal_arm]
+
+    def pull(self, arm: int) -> float:
+        """Pull an arm and receive a 0/1 reward."""
+        return float(self.rng.random() < self.probabilities[arm])
+
+    def get_optimal_arm(self) -> int:
+        return self.optimal_arm
+
+    def get_regret(self, arm: int) -> float:
+        return self.optimal_value - self.probabilities[arm]
+
+
+# Example usage
+bandit = MultiArmedBandit(n_arms=10, seed=42)
+print(f"Optimal arm: {bandit.optimal_arm} with mean {bandit.optimal_value:.3f}")
+
+# Pull each arm a few times
+for arm in range(bandit.n_arms):
+    rewards = [bandit.pull(arm) for _ in range(5)]
+    print(f"Arm {arm}: true mean = {bandit.means[arm]:.2f}, "
+          f"sample mean = {np.mean(rewards):.2f}")
+```
+
+</Implementation>
+
+## Summary
+
+We've established the multi-armed bandit problem:
+
+- **Setup**: k arms with unknown reward distributions
+- **Goal**: Maximize cumulative reward (minimize regret)
+- **Challenge**: Exploration vs exploitation
+- **Key quantity**: Action values $Q(a)$ estimated by sample averages
+- **Metric**: Regret measures how much we lost compared to optimal play
+
+In the next section, we'll see our first exploration strategies: greedy and epsilon-greedy methods.
+
+<Note>
+The bandit problem may seem simple, but it's the foundation for all of RL. The exploration strategies we develop here—epsilon-greedy, UCB, Thompson Sampling—appear throughout deep RL, from DQN to policy gradients. Master them here, and you'll recognize them everywhere.
+</Note>

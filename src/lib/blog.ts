@@ -99,9 +99,16 @@ export function getAuthorsFromPosts(posts: BlogPost[]): Author[] {
 
 /**
  * Format date for display
+ * Handles date strings without time component by parsing as local date
  */
 export function formatDate(dateString: string): string {
-  const date = new Date(dateString);
+  // Parse as local date to avoid timezone shifting
+  // If dateString is "2025-12-30", create date in local timezone
+  const parts = dateString.split('-');
+  const date = parts.length === 3
+    ? new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+    : new Date(dateString);
+
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',

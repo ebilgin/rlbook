@@ -1,0 +1,497 @@
+---
+title: "The REINFORCE Algorithm"
+slug: "reinforce-algorithm"
+section: "Policy Gradient Methods"
+description: "Monte Carlo policy gradients in action"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# The REINFORCE Algorithm
+
+REINFORCE (Williams, 1992) is the simplest policy gradient algorithm. It directly applies the policy gradient theorem using Monte Carlo sampling - collect complete episodes, compute returns, update the policy. Despite its simplicity, it contains all the essential ideas of policy gradient methods.
+
+## The Algorithm
+
+<Definition title="REINFORCE">
+
+REINFORCE is a Monte Carlo policy gradient algorithm:
+
+1. Sample a complete episode using the current policy
+2. Compute the return (reward-to-go) from each timestep
+3. Update the policy to increase the probability of high-return actions
+
+The update rule:
+$$\theta \leftarrow \theta + \alpha \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(a_t|s_t) \cdot G_t$$
+
+</Definition>
+
+<Intuition>
+
+REINFORCE follows a simple recipe:
+
+1. **Roll out**: Follow the policy and record what happens
+2. **Compute returns**: For each step, sum up the discounted future rewards
+3. **Update**: Push the policy toward actions that led to high returns
+
+That's it. No bootstrapping, no value functions, no replay buffers. Just sample, compute returns, and update.
+
+The "Monte Carlo" part means we use actual experienced returns, not estimates. We must wait until the episode ends to know what return each action achieved.
+
+</Intuition>
+
+## Step-by-Step Breakdown
+
+### Step 1: Sample an Episode
+
+<Implementation>
+
+```python
+def sample_episode(policy, env, max_steps=1000):
+    """
+    Sample a complete episode from the environment.
+
+    Args:
+        policy: Policy network with .sample(state) method
+        env: Gym-like environment
+        max_steps: Maximum episode length
+
+    Returns:
+        states: List of states visited
+        actions: List of actions taken
+        rewards: List of rewards received
+    """
+    states, actions, rewards = [], [], []
+
+    state, _ = env.reset()
+    done = False
+    step = 0
+
+    while not done and step < max_steps:
+        # Convert state to tensor
+        state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+
+        # Sample action from policy
+        action = policy.sample(state_tensor)
+
+        # Store transition
+        states.append(state_tensor.squeeze(0))
+        actions.append(action)
+
+        # Take step in environment
+        next_state, reward, terminated, truncated, _ = env.step(action)
+        done = terminated or truncated
+
+        rewards.append(reward)
+        state = next_state
+        step += 1
+
+    return states, actions, rewards
+```
+
+</Implementation>
+
+### Step 2: Compute Returns
+
+<Mathematical>
+
+For each timestep $t$, compute the reward-to-go:
+
+$$G_t = \sum_{k=t}^{T-1} \gamma^{k-t} r_{k+1} = r_{t+1} + \gamma r_{t+2} + \gamma^2 r_{t+3} + ...$$
+
+Working backwards from the end of the episode:
+- $G_{T-1} = r_T$
+- $G_{T-2} = r_{T-1} + \gamma G_{T-1}$
+- $G_t = r_{t+1} + \gamma G_{t+1}$
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def compute_returns(rewards, gamma=0.99):
+    """
+    Compute discounted returns for each timestep.
+
+    Args:
+        rewards: List of rewards [r_1, r_2, ..., r_T]
+        gamma: Discount factor
+
+    Returns:
+        Tensor of returns [G_0, G_1, ..., G_{T-1}]
+    """
+    returns = []
+    G = 0
+
+    # Work backwards through the episode
+    for reward in reversed(rewards):
+        G = reward + gamma * G
+        returns.insert(0, G)
+
+    return torch.tensor(returns, dtype=torch.float32)
+```
+
+</Implementation>
+
+### Step 3: Update the Policy
+
+<Mathematical>
+
+The policy gradient update:
+
+$$\theta \leftarrow \theta + \alpha \sum_{t=0}^{T-1} G_t \cdot \nabla_\theta \log \pi_\theta(a_t|s_t)$$
+
+In PyTorch, we minimize the negative of what we want to maximize:
+
+$$\text{loss} = -\sum_{t=0}^{T-1} G_t \cdot \log \pi_\theta(a_t|s_t)$$
+
+Calling `loss.backward()` computes the gradients, and the optimizer applies the update.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def reinforce_update(policy, optimizer, states, actions, rewards, gamma=0.99):
+    """
+    Perform a REINFORCE update on the policy.
+
+    Args:
+        policy: Policy network
+        optimizer: PyTorch optimizer
+        states: List of states from episode
+        actions: List of actions from episode
+        rewards: List of rewards from episode
+        gamma: Discount factor
+
+    Returns:
+        loss: The policy loss value
+    """
+    # Compute returns
+    returns = compute_returns(rewards, gamma)
+
+    # Stack states and convert actions to tensor
+    states_tensor = torch.stack(states)
+    actions_tensor = torch.tensor(actions, dtype=torch.long)
+
+    # Compute log probabilities
+    log_probs = policy.log_prob(states_tensor, actions_tensor)
+
+    # REINFORCE loss: -log_prob * return
+    loss = -(log_probs * returns).sum()
+
+    # Gradient descent step
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    return loss.item()
+```
+
+</Implementation>
+
+## Complete REINFORCE Implementation
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+import gymnasium as gym
+
+class PolicyNetwork(nn.Module):
+    """Simple policy network for discrete actions."""
+
+    def __init__(self, state_dim, n_actions, hidden_dim=128):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, n_actions)
+        )
+
+    def forward(self, state):
+        """Return action probabilities."""
+        logits = self.network(state)
+        return F.softmax(logits, dim=-1)
+
+    def sample(self, state):
+        """Sample an action from the policy."""
+        probs = self.forward(state)
+        dist = torch.distributions.Categorical(probs)
+        action = dist.sample()
+        return action.item()
+
+    def log_prob(self, states, actions):
+        """Compute log probability of actions."""
+        probs = self.forward(states)
+        dist = torch.distributions.Categorical(probs)
+        return dist.log_prob(actions)
+
+
+class REINFORCE:
+    """REINFORCE policy gradient algorithm."""
+
+    def __init__(self, state_dim, n_actions, lr=1e-3, gamma=0.99):
+        self.gamma = gamma
+        self.policy = PolicyNetwork(state_dim, n_actions)
+        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr)
+
+    def select_action(self, state):
+        """Select action for environment interaction."""
+        state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+        return self.policy.sample(state_tensor)
+
+    def compute_returns(self, rewards):
+        """Compute discounted returns."""
+        returns = []
+        G = 0
+        for r in reversed(rewards):
+            G = r + self.gamma * G
+            returns.insert(0, G)
+        return torch.tensor(returns, dtype=torch.float32)
+
+    def update(self, states, actions, rewards):
+        """Perform policy update from episode data."""
+        returns = self.compute_returns(rewards)
+
+        # Optional: normalize returns for stability
+        returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+
+        states_tensor = torch.stack(states)
+        actions_tensor = torch.tensor(actions, dtype=torch.long)
+
+        log_probs = self.policy.log_prob(states_tensor, actions_tensor)
+        loss = -(log_probs * returns).sum()
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        return loss.item()
+
+
+def train_reinforce(env_name='CartPole-v1', episodes=1000, gamma=0.99, lr=1e-3):
+    """Train REINFORCE on an environment."""
+
+    env = gym.make(env_name)
+    state_dim = env.observation_space.shape[0]
+    n_actions = env.action_space.n
+
+    agent = REINFORCE(state_dim, n_actions, lr=lr, gamma=gamma)
+
+    episode_rewards = []
+
+    for ep in range(episodes):
+        # Collect episode
+        states, actions, rewards = [], [], []
+        state, _ = env.reset()
+        done = False
+
+        while not done:
+            state_tensor = torch.tensor(state, dtype=torch.float32)
+            states.append(state_tensor)
+
+            action = agent.select_action(state)
+            actions.append(action)
+
+            state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+            rewards.append(reward)
+
+        # Update policy
+        loss = agent.update(states, actions, rewards)
+
+        # Track progress
+        total_reward = sum(rewards)
+        episode_rewards.append(total_reward)
+
+        if (ep + 1) % 100 == 0:
+            avg_reward = np.mean(episode_rewards[-100:])
+            print(f"Episode {ep + 1}, Avg Reward: {avg_reward:.2f}")
+
+    env.close()
+    return agent, episode_rewards
+
+
+# Train the agent
+if __name__ == "__main__":
+    agent, rewards = train_reinforce('CartPole-v1', episodes=500)
+```
+
+</Implementation>
+
+## Why "REINFORCE"?
+
+<Intuition>
+
+The name comes from the paper's title: "Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning" (Williams, 1992).
+
+But it also captures the algorithm's behavior: actions that lead to high rewards get **reinforced** (made more likely), while actions that lead to low rewards get suppressed.
+
+</Intuition>
+
+## Key Properties
+
+### On-Policy
+
+<Intuition>
+
+REINFORCE is **on-policy**: we can only learn from episodes generated by our current policy.
+
+Why? The policy gradient theorem tells us to take an expectation over trajectories from $\pi_\theta$. If we use trajectories from an old policy, our gradient estimate becomes biased.
+
+This means we can't reuse old experience - every update requires fresh samples. This is less sample-efficient than off-policy methods like Q-learning, but it avoids the complications of importance sampling.
+
+</Intuition>
+
+### Monte Carlo
+
+<Intuition>
+
+REINFORCE uses **Monte Carlo** returns - actual cumulative rewards from complete episodes.
+
+Advantages:
+- Unbiased: We use true returns, not estimates
+- Simple: No need for a value function
+
+Disadvantages:
+- High variance: Returns vary a lot between episodes
+- Full episodes required: Can't learn from incomplete episodes
+- Slow credit assignment: A good action early on gets the same credit as if it happened late
+
+</Intuition>
+
+### Gradient Ascent
+
+<Mathematical>
+
+REINFORCE performs stochastic gradient ascent on $J(\theta)$:
+
+$$\theta_{t+1} = \theta_t + \alpha \nabla_\theta J(\theta_t)$$
+
+Each episode provides one sample of the gradient. Averaging over many episodes, we climb toward better policies.
+
+The learning rate $\alpha$ controls step size. Too large and we overshoot; too small and learning is slow.
+
+</Mathematical>
+
+## Practical Considerations
+
+### Normalizing Returns
+
+<Tip>
+
+A common trick is to normalize returns within each batch:
+
+$$\tilde{G}_t = \frac{G_t - \mu_G}{\sigma_G + \epsilon}$$
+
+where $\mu_G$ and $\sigma_G$ are the mean and standard deviation of returns in the batch.
+
+This helps because:
+- Keeps gradient magnitudes consistent
+- Effectively centers returns around zero (acts like a simple baseline)
+- Improves numerical stability
+
+</Tip>
+
+<Implementation>
+
+```python
+def normalize_returns(returns):
+    """Normalize returns to have mean 0 and std 1."""
+    returns = torch.tensor(returns, dtype=torch.float32)
+    return (returns - returns.mean()) / (returns.std() + 1e-8)
+```
+
+</Implementation>
+
+### Learning Rate
+
+<Warning>
+
+REINFORCE is sensitive to learning rate:
+- Too high: Policy oscillates or diverges
+- Too low: Learning is very slow
+
+Typical values: 1e-4 to 1e-2. Start with 1e-3 and adjust based on learning curves.
+
+Because gradient variance is high, smaller learning rates are often safer than in supervised learning.
+
+</Warning>
+
+### Entropy Bonus
+
+<Intuition>
+
+Adding an entropy bonus encourages exploration:
+
+$$\text{loss} = -\sum_t G_t \log \pi(a_t|s_t) - \beta H(\pi(\cdot|s_t))$$
+
+where $H(\pi) = -\sum_a \pi(a) \log \pi(a)$ is the entropy and $\beta$ is a coefficient.
+
+Higher entropy means more randomness. The bonus prevents the policy from becoming deterministic too quickly, which can help avoid local optima.
+
+</Intuition>
+
+<Implementation>
+
+```python
+def reinforce_with_entropy(policy, states, actions, returns, entropy_coef=0.01):
+    """REINFORCE loss with entropy bonus."""
+    probs = policy(states)
+    dist = torch.distributions.Categorical(probs)
+
+    log_probs = dist.log_prob(actions)
+    entropy = dist.entropy()
+
+    policy_loss = -(log_probs * returns).sum()
+    entropy_loss = -entropy.sum()  # Negative because we want to maximize entropy
+
+    return policy_loss + entropy_coef * entropy_loss
+```
+
+</Implementation>
+
+## Limitations
+
+<Warning>
+
+REINFORCE has significant limitations:
+
+1. **High variance**: Gradient estimates are noisy because returns vary greatly
+2. **Sample inefficient**: On-policy learning requires many fresh episodes
+3. **Requires full episodes**: Can't update mid-episode
+4. **Slow credit assignment**: Early actions get same treatment as late actions
+5. **Sensitive to hyperparameters**: Learning rate choice is crucial
+
+These limitations motivate the improvements we'll see next: baselines (this chapter) and actor-critic methods (next chapter).
+
+</Warning>
+
+## Historical Note
+
+<Example>
+
+REINFORCE was introduced by Ronald Williams in 1992. It's one of the foundational algorithms in policy gradient methods.
+
+The key insight - that we can estimate policy gradients without knowing environment dynamics - enabled a whole family of algorithms. Modern methods like PPO and SAC are descendants of this idea.
+
+Williams' original paper also introduced baselines for variance reduction, which we cover in the next sections.
+
+</Example>
+
+## Summary
+
+REINFORCE is the simplest policy gradient algorithm:
+
+- **Sample** complete episodes from current policy
+- **Compute** reward-to-go returns
+- **Update** policy using: $\theta \leftarrow \theta + \alpha \sum_t G_t \nabla_\theta \log \pi_\theta(a_t|s_t)$
+
+Its simplicity makes it a great learning tool, but high variance limits practical performance. The next sections address this with baselines and eventually actor-critic methods.

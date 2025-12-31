@@ -1,0 +1,99 @@
+---
+title: "Actor-Critic Methods"
+slug: "actor-critic"
+section: "Policy Gradient Methods"
+description: "Combining policy and value learning for stability"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "reinforce"
+    title: "REINFORCE"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Actor-Critic Methods
+
+<ChapterObjectives>
+- Explain the actor-critic architecture and why it helps
+- Define the advantage function and understand its benefits
+- Implement Advantage Actor-Critic (A2C) from scratch
+- Understand how TD learning provides bootstrap targets
+- Navigate the bias-variance tradeoff in actor-critic methods
+</ChapterObjectives>
+
+REINFORCE taught us to weight log-probabilities by returns. But waiting for episode end is slow, and returns are noisy. What if we had a **critic** - a value function that could estimate how good a state is? We could get feedback every step, not just at episode end.
+
+## Why Actor-Critic?
+
+Actor-critic methods combine the best of both worlds:
+
+- **The Actor** (policy) learns which actions to take
+- **The Critic** (value function) learns how good states are
+
+The critic provides low-variance estimates of action quality, enabling the actor to learn faster and more stably than pure REINFORCE.
+
+## Chapter Overview
+
+This chapter introduces actor-critic methods, the workhorse architecture of modern deep RL. We'll cover the advantage function, A2C, and techniques for balancing bias and variance.
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <a href="/chapters/actor-critic/actor-critic-idea" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">The Actor-Critic Idea</h3>
+    <p className="text-slate-400 text-sm mt-1">Two networks working together</p>
+  </a>
+  <a href="/chapters/actor-critic/advantage-functions" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">Advantage Functions</h3>
+    <p className="text-slate-400 text-sm mt-1">How much better is this action than average?</p>
+  </a>
+  <a href="/chapters/actor-critic/a2c" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">Advantage Actor-Critic (A2C)</h3>
+    <p className="text-slate-400 text-sm mt-1">Synchronous actor-critic training</p>
+  </a>
+  <a href="/chapters/actor-critic/gae" className="block p-4 bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 rounded-lg border border-emerald-700/50 hover:border-emerald-500/50 transition-colors">
+    <h3 className="font-semibold text-emerald-400">Generalized Advantage Estimation</h3>
+    <p className="text-slate-400 text-sm mt-1">Balancing bias and variance in advantage estimation</p>
+  </a>
+</div>
+
+## The Big Picture
+
+<Intuition>
+
+Think of a student (actor) and a teacher (critic):
+
+- The **student** tries actions and learns from feedback
+- The **teacher** evaluates situations and provides guidance
+
+The teacher doesn't tell the student exactly what to do, but says "that situation looked promising" or "you were in trouble there." This guidance helps the student learn faster than trial-and-error alone.
+
+</Intuition>
+
+<Definition title="Actor-Critic">
+A family of algorithms where the **actor** learns a policy $\pi_\theta(a|s)$ and the **critic** learns a value function $V_\phi(s)$. The critic's estimates guide the actor's learning.
+</Definition>
+
+The advantage function captures "how much better than average" an action is:
+
+$$A^\pi(s, a) = Q^\pi(s, a) - V^\pi(s)$$
+
+## Prerequisites
+
+This chapter assumes familiarity with:
+- The Policy Gradient Theorem from [REINFORCE](/chapters/reinforce)
+- Baselines and variance reduction
+- TD learning concepts (helpful but not required)
+
+---
+
+<KeyTakeaways>
+- Actor-critic combines policy gradient (actor) with value learning (critic)
+- The **advantage function** $A(s,a) = Q(s,a) - V(s)$ measures relative action quality
+- **TD error** $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$ estimates the advantage
+- A2C enables online learning (no need to wait for episode end)
+- **n-step returns** and **GAE** balance bias and variance
+</KeyTakeaways>
+
+<NextChapter slug="ppo" title="Proximal Policy Optimization" />

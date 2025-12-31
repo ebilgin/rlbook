@@ -1,0 +1,436 @@
+---
+title: "Convergence and Stopping"
+slug: "convergence"
+section: "Dynamic Programming"
+description: "How do we know when we're done?"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Convergence and Stopping
+
+We have seen that iterative policy evaluation works. But *why* does it work? What mathematical property guarantees that we will reach the correct answer? And in practice, how do we decide when to stop iterating?
+
+This section answers these questions.
+
+## Why Policy Evaluation Converges
+
+The key property is that the Bellman operator is a **contraction mapping**. This is a powerful mathematical concept that guarantees convergence.
+
+<Definition title="Contraction Mapping">
+A function $T$ is a contraction if applying it to any two inputs brings them closer together. Formally, there exists $\gamma \in [0, 1)$ such that for all inputs $V_1$ and $V_2$:
+
+$$\|T(V_1) - T(V_2)\| \leq \gamma \|V_1 - V_2\|$$
+
+The constant $\gamma$ is called the contraction factor.
+</Definition>
+
+<Intuition>
+
+Imagine you have two different guesses for the value function. After one Bellman update, those guesses become more similar. After another update, they become even more similar. No matter how far apart you started, you keep getting pushed toward the same point.
+
+That point is the fixed point of the operator, and it is the true value function $V^\pi$.
+
+</Intuition>
+
+### The Bellman Operator
+
+<Mathematical>
+
+Let us define the Bellman expectation operator $T^\pi$ formally. For any value function $V$, we define:
+
+$$(T^\pi V)(s) = \sum_a \pi(a|s) \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V(s') \right]$$
+
+This operator takes a value function and returns a new value function. Iterative policy evaluation repeatedly applies this operator:
+
+$$V_{k+1} = T^\pi V_k$$
+
+The key theorem is:
+
+**Theorem (Bellman Operator is a Contraction):**
+For any two value functions $V_1$ and $V_2$:
+
+$$\|T^\pi V_1 - T^\pi V_2\|_\infty \leq \gamma \|V_1 - V_2\|_\infty$$
+
+where $\|\cdot\|_\infty$ is the max-norm: $\|V\|_\infty = \max_s |V(s)|$.
+
+**Proof Sketch:**
+Consider any state $s$:
+
+$$|(T^\pi V_1)(s) - (T^\pi V_2)(s)| = \left| \sum_a \pi(a|s) \gamma \sum_{s'} P(s'|s,a) (V_1(s') - V_2(s')) \right|$$
+
+The immediate rewards cancel since they depend only on $s$ and $a$, not on $V$. Using the triangle inequality and the fact that $\sum_a \pi(a|s) = 1$ and $\sum_{s'} P(s'|s,a) = 1$:
+
+$$|(T^\pi V_1)(s) - (T^\pi V_2)(s)| \leq \gamma \max_{s'} |V_1(s') - V_2(s')| = \gamma \|V_1 - V_2\|_\infty$$
+
+Since this holds for all states, it holds for the maximum, proving the contraction.
+
+</Mathematical>
+
+### The Fixed Point Theorem
+
+<Mathematical>
+
+**Banach Fixed Point Theorem:**
+If $T$ is a contraction mapping on a complete metric space, then:
+1. $T$ has a unique fixed point $V^*$ such that $T(V^*) = V^*$
+2. For any starting point $V_0$, the sequence $V_{k+1} = T(V_k)$ converges to $V^*$
+
+For our Bellman operator:
+- The fixed point is exactly $V^\pi$ (the true value function)
+- Starting from any $V_0$, we converge to $V^\pi$
+
+</Mathematical>
+
+<Intuition>
+
+The contraction property is like a rubber band. No matter where you start, each iteration pulls you closer to the center. The discount factor $\gamma$ controls how strong the pull is:
+
+- Higher $\gamma$ (close to 1): Weak contraction, slow convergence
+- Lower $\gamma$ (close to 0): Strong contraction, fast convergence
+
+</Intuition>
+
+## Convergence Speed
+
+How fast do we converge? The answer depends on $\gamma$.
+
+<Mathematical>
+
+After $k$ iterations, the error is bounded by:
+
+$$\|V_k - V^\pi\|_\infty \leq \gamma^k \|V_0 - V^\pi\|_\infty$$
+
+Each iteration reduces the error by a factor of at least $\gamma$. This gives us exponential convergence.
+
+**Example:** With $\gamma = 0.99$:
+- After 100 iterations: error reduced by factor $0.99^{100} \approx 0.37$
+- After 500 iterations: error reduced by factor $0.99^{500} \approx 0.0067$
+- After 1000 iterations: error reduced by factor $0.99^{1000} \approx 0.00004$
+
+With $\gamma = 0.9$:
+- After 100 iterations: error reduced by factor $0.9^{100} \approx 0.000027$
+
+</Mathematical>
+
+<Tip>
+The number of iterations needed scales roughly as $O(1/(1-\gamma))$. This makes intuitive sense:
+
+- With $\gamma = 0.9$, information needs to propagate about 10 steps to decay to 1/e
+- With $\gamma = 0.99$, information needs to propagate about 100 steps
+
+Higher discount factors make the agent care about more distant rewards, which requires more iterations to properly evaluate.
+</Tip>
+
+## The Stopping Criterion
+
+We cannot iterate forever, so we need a practical stopping rule.
+
+<Definition title="Stopping Criterion">
+Stop iterating when the maximum change in value across all states falls below a threshold $\theta$:
+
+$$\Delta = \max_s |V_{k+1}(s) - V_k(s)| < \theta$$
+</Definition>
+
+<Intuition>
+
+When values stop changing, we have essentially reached the fixed point. The threshold $\theta$ controls how close we need to get before declaring victory.
+
+</Intuition>
+
+### Choosing Theta
+
+<Example title="Choosing the Right Threshold">
+
+Consider a GridWorld where rewards range from -1 (per step) to +10 (goal). The values might range from -20 to +10.
+
+- **$\theta = 10^{-1}$**: Very coarse. Values accurate to within 0.1. Fast but imprecise.
+- **$\theta = 10^{-3}$**: Reasonable for most applications. Values accurate to within 0.001.
+- **$\theta = 10^{-6}$**: High precision. May need many more iterations.
+- **$\theta = 10^{-8}$**: Near machine precision. Usually overkill.
+
+</Example>
+
+<Tip>
+**Practical guidance for choosing $\theta$:**
+
+1. **Consider your precision needs.** If you only care about which action is best (not the exact values), a coarse $\theta$ is fine.
+
+2. **Scale with rewards.** If rewards are in millions, $\theta = 0.01$ might be too tight. If rewards are tiny, it might be too loose.
+
+3. **Start coarse, refine if needed.** Begin with $\theta = 10^{-3}$ and only decrease if you see policy instabilities.
+
+4. **Think about downstream use.** If these values feed into policy improvement, slightly inaccurate values often still produce the correct greedy policy.
+</Tip>
+
+### Error Bounds
+
+<Mathematical>
+
+How close are we to the true $V^\pi$ when we stop? If $\Delta < \theta$, then:
+
+$$\|V_k - V^\pi\|_\infty \leq \frac{\gamma}{1 - \gamma} \cdot \theta$$
+
+This tells us the worst-case error in our value estimates.
+
+**Example:** With $\gamma = 0.99$ and $\theta = 10^{-3}$:
+
+$$\text{Max error} \leq \frac{0.99}{0.01} \times 10^{-3} = 0.099$$
+
+With $\gamma = 0.9$ and $\theta = 10^{-3}$:
+
+$$\text{Max error} \leq \frac{0.9}{0.1} \times 10^{-3} = 0.009$$
+
+Higher $\gamma$ amplifies the error bound.
+
+</Mathematical>
+
+<Warning>
+The error bound $\frac{\gamma}{1-\gamma} \cdot \theta$ can be quite loose in practice. Real errors are often much smaller than the bound. However, this gives you a guaranteed upper limit on how wrong your values might be.
+</Warning>
+
+## Computational Complexity
+
+How expensive is each iteration, and how many iterations do we need?
+
+### Per-Sweep Cost
+
+<Mathematical>
+
+Each sweep visits every state and, for each state, considers all actions and all possible transitions:
+
+$$\text{Cost per sweep} = O(|\mathcal{S}| \cdot |\mathcal{A}| \cdot |\mathcal{S}|) = O(|\mathcal{S}|^2 \cdot |\mathcal{A}|)$$
+
+Breaking this down:
+- $|\mathcal{S}|$ states to update
+- $|\mathcal{A}|$ actions to consider per state
+- $|\mathcal{S}|$ possible next states per action (worst case)
+
+</Mathematical>
+
+### Sparse MDPs
+
+<Tip>
+In practice, most MDPs are **sparse**: each state-action pair leads to only a few possible next states. For example, in a GridWorld, moving right leads to at most a few cells, not all cells.
+
+For sparse MDPs with $d$ average transitions per state-action:
+
+$$\text{Cost per sweep} = O(|\mathcal{S}| \cdot |\mathcal{A}| \cdot d)$$
+
+This is typically much smaller than the worst-case bound.
+</Tip>
+
+### Total Cost
+
+<Mathematical>
+
+If we need $k$ iterations to converge:
+
+$$\text{Total cost} = O(k \cdot |\mathcal{S}|^2 \cdot |\mathcal{A}|)$$
+
+The number of iterations $k$ depends on:
+- The discount factor $\gamma$ (higher means more iterations)
+- The desired precision $\theta$ (smaller means more iterations)
+- The MDP structure (longer paths to rewards means more iterations)
+
+A rough estimate: $k \sim O\left(\frac{1}{1-\gamma} \log \frac{1}{\theta}\right)$
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def analyze_convergence(mdp, policy, gamma=0.99, theta=1e-6):
+    """
+    Analyze the convergence of policy evaluation.
+
+    Returns detailed statistics about the convergence process.
+    """
+    V = {s: 0.0 for s in mdp.states}
+    history = []
+
+    iteration = 0
+    while True:
+        delta = 0
+        old_V = V.copy()
+
+        for s in mdp.states:
+            if hasattr(mdp, 'terminal_states') and s in mdp.terminal_states:
+                continue
+
+            old_value = V[s]
+            new_value = 0.0
+
+            for a in mdp.actions(s):
+                action_prob = policy.get(s, {}).get(a, 0.0)
+                for s_next, prob, reward in mdp.transitions(s, a):
+                    new_value += action_prob * prob * (reward + gamma * V[s_next])
+
+            V[s] = new_value
+            delta = max(delta, abs(old_value - new_value))
+
+        iteration += 1
+        history.append({
+            'iteration': iteration,
+            'delta': delta,
+            'max_value': max(V.values()),
+            'min_value': min(V.values()),
+        })
+
+        if delta < theta:
+            break
+
+        if iteration > 100000:  # Safety limit
+            print("Warning: Did not converge")
+            break
+
+    return V, history
+
+
+def plot_convergence(history):
+    """Plot convergence metrics."""
+    import matplotlib.pyplot as plt
+
+    iterations = [h['iteration'] for h in history]
+    deltas = [h['delta'] for h in history]
+
+    plt.figure(figsize=(10, 4))
+
+    plt.subplot(1, 2, 1)
+    plt.semilogy(iterations, deltas)
+    plt.xlabel('Iteration')
+    plt.ylabel('Max Value Change (Delta)')
+    plt.title('Convergence: Log Scale')
+    plt.grid(True, alpha=0.3)
+
+    plt.subplot(1, 2, 2)
+    plt.plot(iterations, deltas)
+    plt.xlabel('Iteration')
+    plt.ylabel('Max Value Change (Delta)')
+    plt.title('Convergence: Linear Scale')
+    plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+```
+
+</Implementation>
+
+## The Effect of Gamma
+
+The discount factor $\gamma$ has a profound effect on convergence.
+
+<Example title="Convergence Speed vs Gamma">
+
+Consider the same 10-state chain MDP evaluated with different discount factors:
+
+| Discount Factor $\gamma$ | Iterations to $\theta = 10^{-6}$ | Interpretation |
+|--------------------------|----------------------------------|----------------|
+| 0.5 | ~25 | Very myopic, fast convergence |
+| 0.9 | ~130 | Balanced, moderate convergence |
+| 0.95 | ~270 | Far-sighted, slower convergence |
+| 0.99 | ~1,400 | Very far-sighted, slow convergence |
+| 0.999 | ~14,000 | Extremely far-sighted, very slow |
+
+</Example>
+
+<Intuition>
+
+Why does higher $\gamma$ mean slower convergence?
+
+With high $\gamma$, the value of a state depends heavily on states far in the future. Information about rewards must propagate through many steps. Each iteration propagates values one step, so more steps means more iterations.
+
+With low $\gamma$, only nearby rewards matter. Values stabilize quickly because distant states barely affect current values.
+
+</Intuition>
+
+<Warning>
+When $\gamma = 1$ (no discounting), convergence is **not guaranteed** for continuing tasks (infinite episodes). The values could grow without bound. For episodic tasks with guaranteed termination, $\gamma = 1$ can work, but convergence may still be slow.
+
+Always use $\gamma < 1$ for continuing tasks.
+</Warning>
+
+## Practical Considerations
+
+### Monitoring Convergence
+
+<Implementation>
+
+```python
+def policy_evaluation_verbose(mdp, policy, gamma=0.99, theta=1e-6):
+    """
+    Policy evaluation with detailed progress reporting.
+    """
+    V = {s: 0.0 for s in mdp.states}
+    iteration = 0
+
+    print("Iteration | Max Delta | Value Range")
+    print("-" * 45)
+
+    while True:
+        delta = 0
+
+        for s in mdp.states:
+            if hasattr(mdp, 'terminal_states') and s in mdp.terminal_states:
+                continue
+
+            old_value = V[s]
+            new_value = 0.0
+
+            for a in mdp.actions(s):
+                action_prob = policy.get(s, {}).get(a, 0.0)
+                for s_next, prob, reward in mdp.transitions(s, a):
+                    new_value += action_prob * prob * (reward + gamma * V[s_next])
+
+            V[s] = new_value
+            delta = max(delta, abs(old_value - new_value))
+
+        iteration += 1
+
+        # Print progress every 10 iterations or at convergence
+        if iteration % 10 == 0 or delta < theta:
+            min_v = min(V.values())
+            max_v = max(V.values())
+            print(f"{iteration:9d} | {delta:9.2e} | [{min_v:.2f}, {max_v:.2f}]")
+
+        if delta < theta:
+            print(f"\nConverged after {iteration} iterations!")
+            break
+
+        if iteration > 100000:
+            print(f"\nWarning: Did not converge after {iteration} iterations")
+            break
+
+    return V
+```
+
+</Implementation>
+
+### When Convergence is Slow
+
+<Tip>
+If policy evaluation is taking too long, consider:
+
+1. **Increase $\theta$**: Do you really need $10^{-8}$ precision? Often $10^{-3}$ suffices.
+
+2. **Lower $\gamma$** (if appropriate): If your problem allows, a smaller discount factor speeds things up dramatically.
+
+3. **Use prioritized sweeps**: Update states that changed the most first. This can significantly accelerate convergence.
+
+4. **Initialize with previous values**: If evaluating similar policies, start from the old value function instead of zeros.
+</Tip>
+
+## Summary
+
+<Note>
+**Key Takeaways:**
+
+1. **Convergence is guaranteed** because the Bellman operator is a contraction
+2. **Convergence speed** depends on $\gamma$: higher discount means slower convergence
+3. **Stop when** the maximum value change $\Delta$ falls below threshold $\theta$
+4. **Choose $\theta$** based on precision needs; $10^{-3}$ to $10^{-6}$ is typical
+5. **Computational cost** is $O(|\mathcal{S}|^2 \cdot |\mathcal{A}|)$ per sweep for dense MDPs
+</Note>
+
+With policy evaluation mastered, we can compute $V^\pi$ for any policy. The next chapter tackles the crucial question: **How do we use these values to find a better policy?**

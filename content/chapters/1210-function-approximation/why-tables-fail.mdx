@@ -1,0 +1,395 @@
+---
+title: "Why Tables Fail"
+slug: "why-tables-fail"
+section: "Deep Reinforcement Learning"
+description: "The curse of dimensionality in RL"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Why Tables Fail
+
+Our Q-learning agent conquered a 4x4 GridWorld. But real-world problems look nothing like discrete grids. A robot navigating a room has continuous position, velocity, and orientation. A self-driving car must process camera images with millions of pixels. A trading agent must handle portfolios with thousands of assets.
+
+In this section, we will confront the fundamental limitation of tabular methods and understand why we need a new approach.
+
+## The Curse of Dimensionality
+
+<Definition title="Curse of Dimensionality">
+The phenomenon where the volume of the state space grows exponentially with the number of state variables, making tabular methods impractical for problems with more than a few dimensions.
+</Definition>
+
+<Intuition>
+
+Consider a robot arm with just 7 joints (a typical industrial robot). If we discretize each joint angle into 100 positions, how many states do we have?
+
+$$100^7 = 100,000,000,000,000 \text{ (100 trillion states)}$$
+
+To store a Q-value for each state-action pair, assuming 8 bytes per value and 10 actions, we would need:
+
+$$100 \times 10^{12} \times 10 \times 8 \text{ bytes} = 8 \text{ petabytes}$$
+
+That is more storage than most data centers. And we would need to visit each state multiple times to learn its value. With 100 trillion states, even visiting each once would take longer than the age of the universe.
+
+This is the **curse of dimensionality**: as we add dimensions, the space we must explore grows exponentially.
+
+</Intuition>
+
+<Mathematical>
+
+For a state space with $d$ dimensions, each discretized into $n$ bins:
+
+$$|\mathcal{S}| = n^d$$
+
+The sample complexity (number of experiences needed to learn) scales at least linearly with the number of states. For tabular Q-learning with $|\mathcal{A}|$ actions, we typically need $O(|\mathcal{S}||\mathcal{A}|)$ samples to converge.
+
+**Example calculations:**
+
+- **2D grid (100x100)**: $10^4$ states, manageable
+- **4D state (100 per dim)**: $10^8$ states, challenging but possible
+- **6D state (100 per dim)**: $10^{12}$ states, impractical
+- **8D state (100 per dim)**: $10^{16}$ states, impossible
+
+The exponential growth means adding just two dimensions can transform a tractable problem into an impossible one.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+def count_states(dims_per_variable):
+    """
+    Calculate the number of states for a tabular representation.
+
+    Args:
+        dims_per_variable: List of discretization levels for each variable
+
+    Returns:
+        Total number of states
+    """
+    total = 1
+    for d in dims_per_variable:
+        total *= d
+    return total
+
+def memory_required_gb(n_states, n_actions, bytes_per_value=8):
+    """Calculate memory needed for Q-table in gigabytes."""
+    return n_states * n_actions * bytes_per_value / (1024**3)
+
+# Examples
+print("State space sizes:")
+print(f"  4x4 GridWorld: {count_states([4, 4]):,} states")
+print(f"  CartPole (100 bins each): {count_states([100, 100, 100, 100]):,} states")
+print(f"  Robot arm (7 joints, 100 positions): {count_states([100]*7):,} states")
+
+# Memory requirements
+cartpole_states = count_states([100, 100, 100, 100])
+print(f"\nMemory for CartPole Q-table (2 actions):")
+print(f"  {memory_required_gb(cartpole_states, 2):.2f} GB")
+
+robot_states = count_states([100]*7)
+print(f"\nMemory for robot arm Q-table (10 actions):")
+print(f"  {memory_required_gb(robot_states, 10) / 1e6:.2f} million GB")
+```
+
+</Implementation>
+
+## Continuous State Spaces
+
+<Intuition>
+
+The curse of dimensionality assumes we can discretize states. But many problems have **continuous** states where discretization itself is problematic.
+
+Consider the Mountain Car problem: the car's position can be anywhere from -1.2 to 0.6, and its velocity from -0.07 to 0.07. These are real numbers, not discrete bins.
+
+We could discretize by rounding to the nearest hundredth:
+- Position: 180 possible values
+- Velocity: 14 possible values
+- Total: 2,520 states
+
+But this discretization has two problems:
+
+1. **Aliasing**: States (0.001, 0.001) and (0.009, 0.009) might need very different actions, but they map to the same bin
+2. **Resolution vs. coverage trade-off**: Finer discretization reduces aliasing but explodes the state count
+
+</Intuition>
+
+<Mathematical>
+
+When we discretize a continuous state space, we introduce **quantization error**. For a state variable $x \in [a, b]$ discretized into $n$ bins:
+
+$$\text{Bin width} = \frac{b - a}{n}$$
+
+The maximum error between the true state and its discretized representation is:
+
+$$\epsilon_{\max} = \frac{b - a}{2n}$$
+
+For the quantization to capture meaningful state differences, we need:
+
+$$\frac{b - a}{2n} < \Delta_{\min}$$
+
+where $\Delta_{\min}$ is the smallest state difference that matters for decision-making. This often requires very fine discretization, exacerbating the curse of dimensionality.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+def discretize_state(state, state_bounds, n_bins):
+    """
+    Discretize a continuous state into bin indices.
+
+    Args:
+        state: Continuous state values
+        state_bounds: List of (min, max) for each dimension
+        n_bins: Number of bins per dimension
+
+    Returns:
+        Tuple of bin indices
+    """
+    indices = []
+    for i, (s, (low, high)) in enumerate(zip(state, state_bounds)):
+        # Clip to bounds
+        s = np.clip(s, low, high)
+        # Scale to [0, 1] then to [0, n_bins-1]
+        normalized = (s - low) / (high - low)
+        bin_idx = int(normalized * (n_bins - 1))
+        indices.append(bin_idx)
+    return tuple(indices)
+
+# Mountain Car example
+POSITION_BOUNDS = (-1.2, 0.6)
+VELOCITY_BOUNDS = (-0.07, 0.07)
+
+# Two very different states
+state_a = (-0.5, 0.02)   # Moving right
+state_b = (-0.5, -0.02)  # Moving left
+
+# With coarse discretization (10 bins)
+bins_coarse = 10
+disc_a_coarse = discretize_state(state_a, [POSITION_BOUNDS, VELOCITY_BOUNDS], bins_coarse)
+disc_b_coarse = discretize_state(state_b, [POSITION_BOUNDS, VELOCITY_BOUNDS], bins_coarse)
+
+print(f"Coarse discretization ({bins_coarse} bins):")
+print(f"  State A {state_a} -> {disc_a_coarse}")
+print(f"  State B {state_b} -> {disc_b_coarse}")
+print(f"  Same bin: {disc_a_coarse == disc_b_coarse}")  # May be True!
+
+# With fine discretization (100 bins)
+bins_fine = 100
+disc_a_fine = discretize_state(state_a, [POSITION_BOUNDS, VELOCITY_BOUNDS], bins_fine)
+disc_b_fine = discretize_state(state_b, [POSITION_BOUNDS, VELOCITY_BOUNDS], bins_fine)
+
+print(f"\nFine discretization ({bins_fine} bins):")
+print(f"  State A {state_a} -> {disc_a_fine}")
+print(f"  State B {state_b} -> {disc_b_fine}")
+print(f"  Same bin: {disc_a_fine == disc_b_fine}")
+print(f"  Total states: {bins_fine**2:,}")
+```
+
+</Implementation>
+
+## The Generalization Problem
+
+<Intuition>
+
+The most fundamental problem with tabular methods is that they learn nothing about the relationship between states. Each Q-value is stored and updated independently.
+
+Imagine you are learning to play tennis. If tabular learning is how humans learned, you would have to separately learn what to do for:
+- Ball at position (10.1, 5.3) with velocity (2.1, -1.4)
+- Ball at position (10.2, 5.3) with velocity (2.1, -1.4)
+- Ball at position (10.1, 5.4) with velocity (2.1, -1.4)
+
+These are essentially the same situation. A human would generalize: "when the ball is coming toward me at this angle, I should swing this way." But a Q-table treats each as a completely separate case.
+
+This is the **generalization problem**: tabular methods cannot transfer knowledge between similar states.
+
+</Intuition>
+
+<Mathematical>
+
+In tabular Q-learning, the update for state-action pair $(s, a)$:
+
+$$Q(s, a) \leftarrow Q(s, a) + \alpha[r + \gamma \max_{a'} Q(s', a') - Q(s, a)]$$
+
+affects **only** the entry $Q(s, a)$. The value of $Q(s + \epsilon, a)$ for any $\epsilon \neq 0$ remains unchanged.
+
+What we want is a function approximator that satisfies:
+
+$$\|s_1 - s_2\| \text{ small} \implies |Q(s_1, a) - Q(s_2, a)| \text{ small}$$
+
+This property is called **Lipschitz continuity** or smoothness. Tabular methods have no such property, as they treat each state independently.
+
+</Mathematical>
+
+## High-Dimensional Observations
+
+<Intuition>
+
+Modern RL often deals with observations that are inherently high-dimensional. Consider:
+
+**Atari games from pixels:**
+- Screen resolution: 210 x 160 pixels
+- Color depth: 3 channels (RGB)
+- Total dimensions: 210 x 160 x 3 = 100,800 values
+- Even with 8-bit color, that is $256^{100800}$ possible images
+
+**Robot camera input:**
+- 1080p video: 1920 x 1080 x 3 = 6.2 million values per frame
+- The state space is astronomically large
+
+No amount of discretization can handle such spaces. We need a completely different approach: instead of storing a value for every state, we need to **approximate** the value function with a compact representation.
+
+</Intuition>
+
+<Implementation>
+
+```python
+import numpy as np
+
+def atari_state_space_size():
+    """Calculate the theoretical size of Atari state space."""
+    height = 210
+    width = 160
+    channels = 3  # RGB
+    color_depth = 256  # 8-bit color
+
+    pixels = height * width * channels
+    # Number of possible images: 256^(100800)
+    # This is incomprehensibly large
+
+    print(f"Atari screen dimensions: {height}x{width}x{channels}")
+    print(f"Total pixels: {pixels:,}")
+    print(f"Possible images: 256^{pixels}")
+    print(f"That's a number with {pixels * np.log10(256):.0f} digits")
+
+    # For comparison
+    atoms_in_universe = 10**80
+    print(f"\nAtoms in observable universe: ~10^80")
+    print(f"Atari state space: ~10^{pixels * np.log10(256):.0f}")
+    print(f"Ratio: 10^{pixels * np.log10(256) - 80:.0f}")
+
+atari_state_space_size()
+
+def memory_for_pixel_qtable():
+    """What if we tried to store Q-values for every pixel configuration?"""
+    # Even for a tiny 4x4 grayscale image
+    height, width = 4, 4
+    gray_levels = 256
+    n_actions = 4
+    bytes_per_value = 8
+
+    n_states = gray_levels ** (height * width)
+    memory_bytes = n_states * n_actions * bytes_per_value
+
+    print(f"\nQ-table for 4x4 grayscale image:")
+    print(f"  Possible images: 256^16 = {n_states:.2e}")
+    print(f"  Memory needed: {memory_bytes:.2e} bytes")
+    print(f"  That's {memory_bytes / (1024**12):.2e} terabytes")
+
+memory_for_pixel_qtable()
+```
+
+</Implementation>
+
+## The Way Forward: Function Approximation
+
+<Intuition>
+
+The solution to all these problems is **function approximation**. Instead of storing $Q(s, a)$ for every state-action pair, we learn a parameterized function:
+
+$$\hat{Q}(s, a; \mathbf{w}) \approx Q^*(s, a)$$
+
+where $\mathbf{w}$ are learned parameters (weights).
+
+The key insight is that similar states should have similar values. A good function approximator captures this structure:
+
+- **Continuous states**: No discretization needed; the function handles any input
+- **Generalization**: Updating $\mathbf{w}$ for one state affects predictions for similar states
+- **Compact representation**: Millions of states can be represented with thousands of parameters
+- **High-dimensional inputs**: Neural networks can learn from raw pixels
+
+</Intuition>
+
+<Mathematical>
+
+Instead of a table with $|\mathcal{S}||\mathcal{A}|$ entries, we have a function:
+
+$$\hat{Q}: \mathcal{S} \times \mathcal{A} \rightarrow \mathbb{R}$$
+
+parameterized by weights $\mathbf{w} \in \mathbb{R}^d$ where $d \ll |\mathcal{S}||\mathcal{A}|$.
+
+**Example: Linear approximation**
+
+$$\hat{Q}(s, a; \mathbf{w}) = \mathbf{w}^\top \phi(s, a)$$
+
+where $\phi(s, a)$ is a feature vector. If $\phi$ has 100 features and we have 4 actions, we need only 400 parameters to approximate Q-values for any state.
+
+**Example: Neural network**
+
+$$\hat{Q}(s; \theta) = f_\theta(s)$$
+
+where $f_\theta$ is a neural network outputting Q-values for all actions. Even complex networks with millions of parameters are tiny compared to the state spaces they approximate.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class TabularQ:
+    """Tabular Q-learning (for small, discrete spaces only)."""
+
+    def __init__(self, n_states, n_actions):
+        self.Q = np.zeros((n_states, n_actions))
+        self.n_parameters = n_states * n_actions
+
+    def __call__(self, state, action):
+        return self.Q[state, action]
+
+class LinearQ:
+    """Linear function approximation for Q-values."""
+
+    def __init__(self, n_features, n_actions):
+        self.w = np.zeros((n_features, n_actions))
+        self.n_parameters = n_features * n_actions
+
+    def __call__(self, features, action):
+        return np.dot(features, self.w[:, action])
+
+    def get_features(self, state):
+        """Convert state to feature vector (problem-specific)."""
+        # Example: polynomial features for 2D state
+        x, v = state
+        return np.array([1, x, v, x*v, x**2, v**2])
+
+# Compare parameter counts
+print("Parameter comparison:")
+print(f"  Tabular (100x100 grid, 4 actions): {100*100*4:,} parameters")
+print(f"  Linear (6 features, 4 actions): {6*4} parameters")
+print(f"  Neural net (2 hidden layers of 64): ~{2*64 + 64*64 + 64*4:,} parameters")
+print(f"  DQN for Atari: ~1,700,000 parameters")
+print(f"  Atari state space: ~10^241544 states")
+```
+
+</Implementation>
+
+## Summary
+
+Tabular methods fail for three fundamental reasons:
+
+1. **Curse of dimensionality**: State spaces grow exponentially with dimensions
+2. **Continuous states**: Real-valued states cannot be perfectly discretized
+3. **No generalization**: Each state is learned independently
+
+The solution is **function approximation**: representing value functions with parameterized models that generalize across similar states. In the next section, we will explore the simplest form of function approximation: linear methods with hand-crafted features.
+
+<Warning>
+Function approximation introduces new challenges. We lose the convergence guarantees of tabular methods, and certain combinations of techniques can cause training to diverge. The next sections will explore these challenges and how to address them.
+</Warning>

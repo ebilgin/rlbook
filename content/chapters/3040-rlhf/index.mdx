@@ -1,0 +1,143 @@
+---
+title: "RLHF and Language Models"
+slug: "rlhf"
+section: "Advanced Topics"
+description: "How reinforcement learning powers modern AI assistants"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "policy-gradient-theorem"
+    title: "Policy Gradient Methods"
+  - slug: "ppo-and-advanced-pg"
+    title: "PPO"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# RLHF and Language Models
+
+<ChapterObjectives>
+- Explain why RLHF is necessary for aligning language models
+- Describe the three-stage RLHF pipeline
+- Implement a reward model from preference data
+- Apply PPO to optimize a language model
+- Understand the KL penalty and its role in preventing reward hacking
+- Compare RLHF to alternatives like DPO
+</ChapterObjectives>
+
+You've been interacting with RLHF all along. Every time you chat with Claude, ChatGPT, or other AI assistants, you're talking to a model shaped by reinforcement learning from human feedback. This technique—RLHF—is how language models learn to be helpful, harmless, and honest.
+
+<Intuition>
+
+Think about what a raw language model knows: it can predict text, complete sentences, and generate coherent prose. But it doesn't know *what you want*. It might give a harmful answer, an unhelpful response, or simply refuse to engage.
+
+RLHF teaches models what humans actually want. Not through explicit rules—those are too rigid—but through feedback. Thousands of humans compared model responses and said "this one is better." From those comparisons, models learned the subtle patterns of helpful, harmless behavior.
+
+This chapter connects everything you've learned: policy gradients, PPO, offline RL—all of it comes together in RLHF.
+
+</Intuition>
+
+## Chapter Overview
+
+<div className="my-8">
+  <div className="text-slate-400 text-sm mb-4">In this chapter:</div>
+
+  <div className="space-y-3">
+    <a href="/chapters/rlhf/rl-for-alignment" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-cyan-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-cyan-400 font-bold text-lg">RL for AI Alignment</div>
+      <div className="text-slate-400 text-sm mt-1">Why we need RLHF, the alignment problem, and the three-stage pipeline</div>
+    </a>
+
+    <a href="/chapters/rlhf/reward-modeling" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-violet-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-violet-400 font-bold text-lg">Reward Modeling</div>
+      <div className="text-slate-400 text-sm mt-1">Learning what humans prefer from pairwise comparisons using the Bradley-Terry model</div>
+    </a>
+
+    <a href="/chapters/rlhf/ppo-for-llms" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-amber-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-amber-400 font-bold text-lg">PPO for Language Models</div>
+      <div className="text-slate-400 text-sm mt-1">Applying policy optimization to text generation with KL constraints</div>
+    </a>
+
+    <a href="/chapters/rlhf/frontiers" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-emerald-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-emerald-400 font-bold text-lg">Current Frontiers</div>
+      <div className="text-emerald-400 text-sm mt-1">DPO, Constitutional AI, and the future of alignment research</div>
+    </a>
+  </div>
+</div>
+
+## The Big Picture
+
+<Definition title="RLHF">
+**Reinforcement Learning from Human Feedback**: A technique for aligning AI systems with human preferences by (1) collecting human comparisons of model outputs, (2) training a reward model on those comparisons, and (3) optimizing the model using RL to maximize the learned reward.
+</Definition>
+
+RLHF bridges the gap between what models *can* do (generate text) and what we *want* them to do (be helpful, harmless, honest). It's the answer to a fundamental question: how do you teach a model something you can't write down as a simple rule?
+
+<Intuition>
+
+Consider this progression of training approaches:
+
+**Pretraining**: Learn to predict text from the internet. Result: knows a lot, but will generate anything—helpful or harmful.
+
+**Supervised Fine-tuning**: Learn from curated examples of good responses. Result: better, but limited by what examples you can write.
+
+**RLHF**: Learn from human preferences on model-generated responses. Result: learns subtle patterns of human values that we couldn't explicitly specify.
+
+Each stage builds on the previous. RLHF is the final refinement that turns a capable text predictor into a helpful assistant.
+
+</Intuition>
+
+## Why RLHF Matters
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="bg-emerald-900/20 border border-emerald-700/50 rounded-lg p-4">
+    <div className="text-emerald-400 font-bold mb-2">What RLHF Enables</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>Models that understand nuanced human preferences</li>
+      <li>Helpfulness without harmful behaviors</li>
+      <li>Appropriate uncertainty and refusals</li>
+      <li>Responses that feel "right" even for edge cases</li>
+    </ul>
+  </div>
+  <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+    <div className="text-blue-400 font-bold mb-2">Real-World Impact</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>Powers ChatGPT, Claude, and other assistants</li>
+      <li>Enables safe deployment of powerful models</li>
+      <li>Sets the standard for AI alignment</li>
+      <li>Shapes how AI interacts with billions of users</li>
+    </ul>
+  </div>
+</div>
+
+<Note title="The Journey Comes Full Circle">
+
+Everything in this book leads here:
+
+- **MDPs and Q-learning**: The foundations of sequential decision-making
+- **Policy gradients**: How to optimize policies directly
+- **PPO**: The practical algorithm that makes RLHF work
+- **Offline RL**: Learning from fixed data (preferences are collected offline)
+
+RLHF is where these techniques become a transformative technology. Welcome to the capstone of your RL journey.
+
+</Note>
+
+<Tip title="Start Here">
+
+Begin with [RL for AI Alignment](/chapters/rlhf/rl-for-alignment) to understand why RLHF is necessary and how the pieces fit together.
+
+</Tip>
+
+---
+
+<KeyTakeaways>
+- RLHF teaches models human preferences through feedback, not rules
+- The pipeline: supervised fine-tuning, reward modeling, RL optimization
+- Reward models learn from pairwise human comparisons (Bradley-Terry)
+- PPO optimizes the model against the reward, with KL penalty to prevent reward hacking
+- DPO offers a simpler alternative that skips explicit reward modeling
+- RLHF powers the AI assistants you use every day
+</KeyTakeaways>

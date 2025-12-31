@@ -1,0 +1,367 @@
+---
+title: "The Policy Gradient Theorem"
+slug: "policy-gradient-theorem"
+section: "Policy Gradient Methods"
+description: "How to compute gradients for policies"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# The Policy Gradient Theorem
+
+The Policy Gradient Theorem is the theoretical cornerstone of all policy gradient methods. It answers a crucial question: **how do we compute the gradient of expected return when the return depends on environment dynamics we don't know?**
+
+## The Problem
+
+<Intuition>
+
+We want to improve our policy by gradient ascent on expected return:
+
+$$\theta \leftarrow \theta + \alpha \nabla_\theta J(\theta)$$
+
+But computing $\nabla_\theta J(\theta)$ seems to require knowing how the environment works. When we change the policy, different trajectories become more or less likely, and those trajectories depend on environment dynamics.
+
+The remarkable insight of the policy gradient theorem is that we can compute this gradient using only samples from our policy - no need to know transition probabilities.
+
+</Intuition>
+
+## The Log-Derivative Trick
+
+The key mathematical tool is the **log-derivative trick** (also called the REINFORCE trick or score function trick).
+
+<Mathematical>
+
+For any probability distribution $p_\theta(x)$ that depends on parameters $\theta$:
+
+$$\nabla_\theta p_\theta(x) = p_\theta(x) \cdot \nabla_\theta \log p_\theta(x)$$
+
+**Proof**:
+
+Starting from the chain rule:
+$$\nabla_\theta \log p_\theta(x) = \frac{\nabla_\theta p_\theta(x)}{p_\theta(x)}$$
+
+Rearranging:
+$$\nabla_\theta p_\theta(x) = p_\theta(x) \cdot \nabla_\theta \log p_\theta(x)$$
+
+**Why this matters**: The left side has $\nabla_\theta p_\theta(x)$, which is hard to work with in expectations. The right side has $p_\theta(x)$ times something, which can be converted to an expectation!
+
+</Mathematical>
+
+<Intuition>
+
+The log-derivative trick converts a gradient of a probability into an expectation. This is crucial because:
+
+- We can't easily compute $\nabla_\theta P(\tau|\theta)$ (the gradient of trajectory probability)
+- But we CAN sample trajectories from $P(\tau|\theta)$
+- And we CAN compute $\nabla_\theta \log \pi_\theta(a|s)$ for our policy
+
+The trick lets us estimate gradients by sampling.
+
+</Intuition>
+
+## Deriving the Policy Gradient Theorem
+
+<Mathematical>
+
+Let's derive the policy gradient step by step.
+
+**Step 1: Write out the objective**
+
+$$J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)] = \sum_\tau P(\tau|\theta) R(\tau)$$
+
+**Step 2: Take the gradient**
+
+$$\nabla_\theta J(\theta) = \sum_\tau \nabla_\theta P(\tau|\theta) \cdot R(\tau)$$
+
+**Step 3: Apply the log-derivative trick**
+
+$$= \sum_\tau P(\tau|\theta) \cdot \nabla_\theta \log P(\tau|\theta) \cdot R(\tau)$$
+
+$$= \mathbb{E}_{\tau \sim \pi_\theta}\left[ \nabla_\theta \log P(\tau|\theta) \cdot R(\tau) \right]$$
+
+**Step 4: Expand the trajectory probability**
+
+$$P(\tau|\theta) = p(s_0) \prod_{t=0}^{T-1} \pi_\theta(a_t|s_t) \cdot p(s_{t+1}|s_t, a_t)$$
+
+Taking the log:
+
+$$\log P(\tau|\theta) = \log p(s_0) + \sum_{t=0}^{T-1} \left[ \log \pi_\theta(a_t|s_t) + \log p(s_{t+1}|s_t, a_t) \right]$$
+
+**Step 5: Take gradient (key insight!)**
+
+$$\nabla_\theta \log P(\tau|\theta) = \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(a_t|s_t)$$
+
+The initial state distribution $p(s_0)$ and transition dynamics $p(s_{t+1}|s_t, a_t)$ don't depend on $\theta$, so their gradients are zero!
+
+**Step 6: Final result**
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\left[ \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(a_t|s_t) \cdot R(\tau) \right]$$
+
+</Mathematical>
+
+<Definition title="Policy Gradient Theorem (Simple Form)">
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\left[ \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(a_t|s_t) \cdot R(\tau) \right]$$
+
+The gradient of expected return equals the expected sum of log-policy gradients, weighted by trajectory return.
+
+</Definition>
+
+## Intuition: Why This Works
+
+<Intuition>
+
+Let's understand why multiplying by returns makes sense.
+
+Consider a single trajectory where we took actions $a_0, a_1, ..., a_{T-1}$ and got return $R$.
+
+**If $R$ is high (good trajectory)**:
+- We want to increase $\pi_\theta(a_t|s_t)$ for all the actions we took
+- $\nabla_\theta \log \pi_\theta(a_t|s_t)$ points in the direction that increases action probability
+- Multiplying by positive $R$ pushes $\theta$ to make these actions more likely
+
+**If $R$ is low (bad trajectory)**:
+- We want to decrease $\pi_\theta(a_t|s_t)$ for these actions
+- Multiplying by small or negative $R$ pushes $\theta$ to make these actions less likely
+
+The gradient naturally reinforces good actions and suppresses bad ones!
+
+</Intuition>
+
+<Example>
+
+**Bandit Example**
+
+Consider a 2-armed bandit with softmax policy:
+- $\pi_\theta(a_1) = \frac{e^{\theta_1}}{e^{\theta_1} + e^{\theta_2}}$
+- $\pi_\theta(a_2) = \frac{e^{\theta_2}}{e^{\theta_1} + e^{\theta_2}}$
+
+Suppose we sample action $a_1$ and get reward $R = 10$.
+
+The gradient $\nabla_\theta \log \pi_\theta(a_1)$ points toward increasing $\theta_1$ relative to $\theta_2$.
+
+Multiplied by $R = 10$, this creates a strong push toward action $a_1$.
+
+If instead we got $R = 0.1$, the push would be weak.
+
+This is exactly what we want: **good outcomes create strong updates, poor outcomes create weak updates**.
+
+</Example>
+
+## The Reward-to-Go Refinement
+
+The basic theorem uses the full trajectory return $R(\tau)$ for every timestep. We can do better.
+
+<Mathematical>
+
+**Key observation**: Action $a_t$ can only affect rewards at times $t+1, t+2, ...$. It cannot affect rewards at earlier times.
+
+Therefore, we can use the **reward-to-go** (also called return from time $t$):
+
+$$G_t = \sum_{k=t}^{T-1} \gamma^{k-t} r_{k+1}$$
+
+The refined policy gradient theorem:
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\left[ \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(a_t|s_t) \cdot G_t \right]$$
+
+This is mathematically equivalent but has **lower variance** because we remove the irrelevant past rewards.
+
+</Mathematical>
+
+<Intuition>
+
+Imagine you're at timestep $t=5$. The rewards from steps 1-5 have already happened - nothing you do now can change them. So why should they influence your gradient?
+
+Using reward-to-go means each action is only credited for future rewards it could have influenced. This makes the gradient estimate less noisy.
+
+</Intuition>
+
+<Definition title="Policy Gradient Theorem (Reward-to-Go Form)">
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\left[ \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(a_t|s_t) \cdot G_t \right]$$
+
+where $G_t = \sum_{k=t}^{T-1} \gamma^{k-t} r_{k+1}$ is the return from time $t$.
+
+</Definition>
+
+## Estimating the Gradient from Samples
+
+<Mathematical>
+
+Since the gradient is an expectation, we can estimate it with samples:
+
+$$\nabla_\theta J(\theta) \approx \frac{1}{N} \sum_{i=1}^{N} \sum_{t=0}^{T_i-1} \nabla_\theta \log \pi_\theta(a_t^{(i)}|s_t^{(i)}) \cdot G_t^{(i)}$$
+
+where:
+- $N$ is the number of sampled trajectories
+- $T_i$ is the length of trajectory $i$
+- $(s_t^{(i)}, a_t^{(i)})$ is the state-action pair at time $t$ in trajectory $i$
+- $G_t^{(i)}$ is the reward-to-go from time $t$ in trajectory $i$
+
+This is an **unbiased** estimate: its expected value equals the true gradient.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import numpy as np
+
+def compute_returns(rewards, gamma=0.99):
+    """
+    Compute reward-to-go for each timestep.
+
+    Args:
+        rewards: List of rewards [r_1, r_2, ..., r_T]
+        gamma: Discount factor
+
+    Returns:
+        List of returns [G_0, G_1, ..., G_{T-1}]
+    """
+    returns = []
+    G = 0
+    # Work backwards from end of episode
+    for r in reversed(rewards):
+        G = r + gamma * G
+        returns.insert(0, G)
+    return returns
+
+
+def estimate_policy_gradient(policy, trajectories):
+    """
+    Estimate policy gradient from sampled trajectories.
+
+    Args:
+        policy: Policy network with .log_prob(state, action) method
+        trajectories: List of (states, actions, rewards) tuples
+
+    Returns:
+        Gradient estimate (accumulated in policy.parameters())
+    """
+    policy_loss = 0
+
+    for states, actions, rewards in trajectories:
+        # Compute returns for this trajectory
+        returns = compute_returns(rewards)
+        returns = torch.tensor(returns, dtype=torch.float32)
+
+        # Compute log probabilities
+        states_t = torch.stack(states)
+        actions_t = torch.tensor(actions)
+        log_probs = policy.log_prob(states_t, actions_t)
+
+        # Policy gradient loss: -log_prob * return
+        # Negative because we minimize loss (equivalent to maximizing J)
+        trajectory_loss = -(log_probs * returns).sum()
+        policy_loss = policy_loss + trajectory_loss
+
+    # Average over trajectories
+    policy_loss = policy_loss / len(trajectories)
+
+    return policy_loss
+
+
+# Example usage
+class SimplePolicy(nn.Module):
+    def __init__(self, state_dim, n_actions):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(state_dim, 64),
+            nn.Tanh(),
+            nn.Linear(64, n_actions)
+        )
+
+    def forward(self, state):
+        return torch.softmax(self.net(state), dim=-1)
+
+    def log_prob(self, state, action):
+        probs = self.forward(state)
+        return torch.log(probs.gather(1, action.unsqueeze(1)).squeeze(1) + 1e-10)
+
+
+# After collecting trajectories:
+# loss = estimate_policy_gradient(policy, trajectories)
+# loss.backward()
+# optimizer.step()
+```
+
+</Implementation>
+
+## Connection to Maximum Likelihood
+
+<Intuition>
+
+The policy gradient has a nice interpretation as **weighted maximum likelihood**.
+
+In supervised learning, maximum likelihood says: "increase the probability of the actions in the training data."
+
+$$\max_\theta \sum_t \log \pi_\theta(a_t|s_t)$$
+
+Policy gradient says the same thing, but weighted by returns:
+
+$$\max_\theta \sum_t G_t \cdot \log \pi_\theta(a_t|s_t)$$
+
+"Increase the probability of actions, but weight high-return actions more heavily."
+
+This is like supervised learning where the labels (actions) come from our own experience, and we trust high-return experiences more.
+
+</Intuition>
+
+<Mathematical>
+
+The gradient update can be written as:
+
+$$\theta \leftarrow \theta + \alpha \sum_t G_t \nabla_\theta \log \pi_\theta(a_t|s_t)$$
+
+Compare to maximum likelihood estimation:
+
+$$\theta \leftarrow \theta + \alpha \sum_t \nabla_\theta \log \pi_\theta(a_t|s_t)$$
+
+The only difference is the weighting by $G_t$. This weighting turns undifferentiated imitation into selective reinforcement of good behaviors.
+
+</Mathematical>
+
+## The Score Function
+
+<Definition title="Score Function">
+
+The **score function** (or score) is defined as:
+
+$$\nabla_\theta \log \pi_\theta(a|s)$$
+
+It represents "the direction in parameter space that increases the log-probability of action $a$ in state $s$."
+
+Key properties:
+- Its expected value is zero: $\mathbb{E}_{a \sim \pi_\theta}[\nabla_\theta \log \pi_\theta(a|s)] = 0$
+- This is why baselines work (next sections)
+
+</Definition>
+
+<Mathematical>
+
+**Proof that the expected score is zero**:
+
+$$\mathbb{E}_{a \sim \pi_\theta}[\nabla_\theta \log \pi_\theta(a|s)] = \sum_a \pi_\theta(a|s) \nabla_\theta \log \pi_\theta(a|s)$$
+
+Using the log-derivative trick backwards:
+
+$$= \sum_a \nabla_\theta \pi_\theta(a|s) = \nabla_\theta \sum_a \pi_\theta(a|s) = \nabla_\theta 1 = 0$$
+
+This property is crucial for understanding baselines.
+
+</Mathematical>
+
+## Summary
+
+The Policy Gradient Theorem provides a practical way to compute policy gradients:
+
+- **The log-derivative trick** converts gradients of probabilities into expectations
+- **Environment dynamics cancel out** - we only need to differentiate through our policy
+- **Sample-based estimation** - we can estimate the gradient by sampling trajectories
+- **Reward-to-go** reduces variance by only crediting actions for future rewards
+- **Intuition**: High-return trajectories reinforce the actions taken; low-return trajectories suppress them
+
+The next section puts this into a complete algorithm: REINFORCE.

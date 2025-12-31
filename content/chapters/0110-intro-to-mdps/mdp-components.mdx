@@ -1,0 +1,293 @@
+---
+title: "The MDP Components"
+slug: "mdp-components"
+section: "Markov Decision Processes"
+description: "States, actions, transitions, rewards, and discount factors"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# The MDP Components
+
+A Markov Decision Process is defined by five components, often written as a tuple:
+
+$$\mathcal{M} = (\mathcal{S}, \mathcal{A}, P, R, \gamma)$$
+
+Let's explore each one.
+
+## 1. States ($\mathcal{S}$)
+
+<Definition title="State Space">
+The set of all possible situations the agent can be in. We denote it $\mathcal{S}$ and individual states as $s \in \mathcal{S}$.
+</Definition>
+
+<Intuition>
+
+States answer the question: **"Where am I?"** or **"What situation am I in?"**
+
+- In a maze: which cell you're in
+- In chess: the current board configuration
+- In a dialogue system: the conversation history so far
+- In robotics: joint angles, velocities, and sensor readings
+
+</Intuition>
+
+States can be:
+
+- **Discrete**: Finite or countable set (cells in a grid, chess positions)
+- **Continuous**: Infinite, real-valued (robot arm angles, car velocity)
+
+<Example title="GridWorld States">
+
+In a 4×4 GridWorld, there are 16 possible states. We can represent each as coordinates:
+
+$$\mathcal{S} = \{(0,0), (0,1), ..., (3,3)\}$$
+
+Or equivalently as integers 0-15. The representation doesn't matter as long as it uniquely identifies each situation.
+
+</Example>
+
+## 2. Actions ($\mathcal{A}$)
+
+<Definition title="Action Space">
+The set of choices available to the agent. We denote it $\mathcal{A}$, and the action at time $t$ as $A_t$.
+</Definition>
+
+Actions answer: **"What can I do?"**
+
+<Intuition>
+
+- In a maze: Up, Down, Left, Right
+- In chess: All legal moves from current position
+- In robotics: Motor torques or velocity commands
+- In dialogue: What response to generate
+
+</Intuition>
+
+<Note>
+In some MDPs, available actions depend on the current state. We write $\mathcal{A}(s)$ for the actions available in state $s$. In chess, legal moves depend on the board position.
+</Note>
+
+## 3. Transition Dynamics ($P$)
+
+<Definition title="Transition Function">
+The probability of reaching state $s'$ when taking action $a$ in state $s$:
+
+$$P(s' | s, a) = \Pr(S_{t+1} = s' | S_t = s, A_t = a)$$
+</Definition>
+
+<Intuition>
+
+The transition function answers: **"If I do this, where might I end up?"**
+
+Transitions can be:
+
+- **Deterministic**: One action always leads to the same next state
+- **Stochastic**: There's randomness in where you end up
+
+</Intuition>
+
+<Example title="Slippery Ice">
+
+Imagine a robot on an icy floor. When it tries to move right:
+- 80% chance: it actually moves right
+- 10% chance: it slips and stays in place
+- 10% chance: it slips and moves down
+
+This is captured by the transition probabilities:
+- $P(\text{right cell} | s, \text{move-right}) = 0.8$
+- $P(s | s, \text{move-right}) = 0.1$
+- $P(\text{down cell} | s, \text{move-right}) = 0.1$
+
+</Example>
+
+<Mathematical>
+
+For any state-action pair, the transition probabilities must form a valid distribution:
+
+$$\sum_{s' \in \mathcal{S}} P(s' | s, a) = 1 \quad \text{for all } s, a$$
+
+The transition function fully describes the environment's dynamics. In **model-free** RL, we don't know $P$—we must learn from experience. In **model-based** RL, we either know or learn $P$.
+
+</Mathematical>
+
+## 4. Reward Function ($R$)
+
+<Definition title="Reward Function">
+The feedback signal that tells the agent how good a transition was. Common formulations include:
+
+- $R(s, a, s')$: Reward depends on state, action, and next state
+- $R(s, a)$: Reward depends on state and action
+- $R(s)$: Reward depends only on state
+</Definition>
+
+<Intuition>
+
+Rewards answer: **"How did that go?"**
+
+They encode the goal:
+- Reaching the goal: +10
+- Falling in a pit: -10
+- Each step: -1 (encourages efficiency)
+- Winning the game: +1
+- Losing: -1
+
+</Intuition>
+
+<Example title="GridWorld Rewards">
+
+A typical GridWorld might have:
+- $R(s) = -1$ for all non-terminal states (step penalty)
+- $R(\text{goal}) = +10$ (reward for reaching the goal)
+- $R(\text{pit}) = -10$ (penalty for falling in a pit)
+
+The step penalty encourages finding the shortest path—otherwise, the agent might wander forever.
+
+</Example>
+
+<Warning>
+Reward design is crucial and tricky. The agent will maximize whatever reward you give it—which might not be what you intended. This is a core challenge in RL.
+</Warning>
+
+<Mathematical>
+
+When we write the expected reward:
+
+$$R(s, a) = \mathbb{E}[R_{t+1} | S_t = s, A_t = a]$$
+
+This averages over the randomness in transitions. If rewards depend on $s'$:
+
+$$R(s, a) = \sum_{s'} P(s' | s, a) \cdot R(s, a, s')$$
+
+</Mathematical>
+
+## 5. Discount Factor ($\gamma$)
+
+<Definition title="Discount Factor">
+A number $\gamma \in [0, 1]$ that determines how much we value future rewards relative to immediate ones. The **discounted return** is:
+
+$$G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \ldots = \sum_{k=0}^{\infty} \gamma^k R_{t+k+1}$$
+</Definition>
+
+<Intuition>
+
+The discount factor answers: **"How much do I care about the future?"**
+
+- $\gamma = 0$: Completely myopic—only care about immediate reward
+- $\gamma = 0.9$: A reward 10 steps away is worth about 35% of an immediate reward
+- $\gamma = 0.99$: A reward 100 steps away is worth about 37% of an immediate reward
+- $\gamma = 1$: Future rewards matter just as much as immediate ones
+
+</Intuition>
+
+<Example title="Why Discount?">
+
+Consider an agent that gets +1 reward every step forever. Without discounting:
+
+$$G_t = 1 + 1 + 1 + ... = \infty$$
+
+Every state would have infinite value! Discounting gives us:
+
+$$G_t = 1 + \gamma + \gamma^2 + ... = \frac{1}{1 - \gamma}$$
+
+With $\gamma = 0.9$, this is a finite value of 10.
+
+</Example>
+
+<Mathematical>
+
+The discount factor serves multiple purposes:
+
+1. **Mathematical**: Ensures finite returns for infinite-horizon problems
+2. **Economic**: Models uncertainty (future might not happen)
+3. **Practical**: Bounds how far ahead we need to plan
+
+The geometric series gives us:
+
+$$\sum_{k=0}^{\infty} \gamma^k = \frac{1}{1-\gamma} \quad \text{when } |\gamma| < 1$$
+
+If rewards are bounded by $R_{\max}$, then returns are bounded by $\frac{R_{\max}}{1-\gamma}$.
+
+</Mathematical>
+
+## Episodic vs Continuing Tasks
+
+<Definition title="Task Types">
+- **Episodic**: Has a natural end (terminal state). Examples: games, robot reaching a goal
+- **Continuing**: Goes on forever. Examples: temperature control, stock trading
+
+</Definition>
+
+For **episodic** tasks, we can use $\gamma = 1$ since returns are naturally finite. For **continuing** tasks, we need $\gamma < 1$ to ensure convergence.
+
+<Tip>
+A common choice is $\gamma = 0.99$. It's close enough to 1 that the agent cares about the future, but bounded enough for stable learning.
+</Tip>
+
+## Putting It Together
+
+<Implementation>
+
+Here's how we might represent a simple MDP in Python:
+
+```python
+class MDP:
+    """A simple Markov Decision Process."""
+
+    def __init__(self, states, actions, transitions, rewards, gamma=0.99):
+        self.states = states          # List of state names
+        self.actions = actions        # List of action names
+        self.transitions = transitions  # P[s][a] = [(s', prob), ...]
+        self.rewards = rewards        # R[s] or R[s][a] -> float
+        self.gamma = gamma
+
+    def get_transitions(self, state, action):
+        """Return list of (next_state, probability) tuples."""
+        return self.transitions[state][action]
+
+    def get_reward(self, state, action=None, next_state=None):
+        """Return the reward for a transition."""
+        if callable(self.rewards):
+            return self.rewards(state, action, next_state)
+        return self.rewards.get(state, 0)
+
+
+# Example: Simple 3-state MDP
+mdp = MDP(
+    states=['start', 'middle', 'goal'],
+    actions=['left', 'right'],
+    transitions={
+        'start': {
+            'right': [('middle', 1.0)],
+            'left': [('start', 1.0)],  # Wall
+        },
+        'middle': {
+            'right': [('goal', 0.8), ('start', 0.2)],  # Stochastic!
+            'left': [('start', 1.0)],
+        },
+        'goal': {
+            'right': [('goal', 1.0)],  # Terminal
+            'left': [('goal', 1.0)],
+        },
+    },
+    rewards={'goal': 10, 'start': -1, 'middle': -1},
+    gamma=0.99
+)
+```
+
+</Implementation>
+
+## Summary
+
+Every MDP is defined by these five components:
+
+| Component | Symbol | Question It Answers |
+|-----------|--------|---------------------|
+| States | $\mathcal{S}$ | Where am I? |
+| Actions | $\mathcal{A}$ | What can I do? |
+| Transitions | $P$ | Where might I end up? |
+| Rewards | $R$ | How did that go? |
+| Discount | $\gamma$ | How much do I care about the future? |
+
+Together, they provide a complete mathematical description of a sequential decision problem. In the next section, we'll explore the crucial **Markov property** that makes this framework tractable.

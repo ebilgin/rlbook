@@ -1,0 +1,358 @@
+---
+title: "The Actor-Critic Idea"
+slug: "actor-critic-idea"
+section: "Policy Gradient Methods"
+description: "Two networks working together"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# The Actor-Critic Idea
+
+REINFORCE with a baseline learns a value function to reduce variance. But we still wait until the end of each episode to update. What if we could update at every step, using the value function more directly?
+
+This is the actor-critic idea: **combine a policy (actor) with a value function (critic)** to get the best of both worlds.
+
+## The Two Components
+
+<Definition title="Actor-Critic Architecture">
+
+**Actor**: The policy network $\pi_\theta(a|s)$ that decides what action to take. It's called the "actor" because it determines how the agent acts.
+
+**Critic**: The value network $V_\phi(s)$ that evaluates how good states are. It "criticizes" the actor by estimating expected returns, providing feedback for learning.
+
+Together, they form a powerful learning system where the critic guides the actor's improvement.
+
+</Definition>
+
+<Intuition>
+
+Think of learning to play chess:
+
+- **Actor (your strategy)**: "In this position, I should probably castle, or maybe push a pawn..."
+- **Critic (your evaluation)**: "This position looks good for me - I'm up material and have better piece activity."
+
+The critic doesn't tell you what move to make, but it does tell you whether you're in a good position. This feedback helps the actor learn which moves lead to good positions.
+
+In REINFORCE, we had an actor but the critic was implicit (just the returns). Now we make the critic explicit and trainable.
+
+</Intuition>
+
+## Why Combine Them?
+
+### The REINFORCE Problem
+
+<Intuition>
+
+REINFORCE has a fundamental limitation: it uses **Monte Carlo returns** - we must wait until the end of the episode to know how good our actions were.
+
+This causes several problems:
+
+1. **Can't learn mid-episode**: We accumulate experience but can't use it until the episode ends
+2. **High variance**: Returns incorporate randomness from many future steps
+3. **Slow credit assignment**: A good early action gets the same noisy signal as a mediocre late action
+4. **Long episodes are painful**: A 1000-step episode means 1000 steps before any update
+
+</Intuition>
+
+### The Value Function Solution
+
+<Intuition>
+
+The value function $V(s)$ estimates the expected return from state $s$. If our estimate is good, we can use it to provide immediate feedback:
+
+Instead of waiting to see the actual return:
+$$G_t = r_{t+1} + \gamma r_{t+2} + \gamma^2 r_{t+3} + ...$$
+
+We can use a **bootstrapped estimate**:
+$$G_t \approx r_{t+1} + \gamma V(s_{t+1})$$
+
+This is the one-step TD target. We observe one reward and then ask the critic: "How good is the next state?" This gives us usable signal at every step.
+
+</Intuition>
+
+<Mathematical>
+
+The TD error provides an advantage estimate:
+
+$$\delta_t = r_{t+1} + \gamma V(s_{t+1}) - V(s_t)$$
+
+This approximates $A(s_t, a_t) = Q(s_t, a_t) - V(s_t)$ because:
+
+$$Q(s_t, a_t) = \mathbb{E}[r_{t+1} + \gamma V(s_{t+1})]$$
+
+If we take the sampled reward and next state as our estimate:
+
+$$\hat{Q}(s_t, a_t) = r_{t+1} + \gamma V(s_{t+1})$$
+
+Then:
+
+$$\delta_t = \hat{Q}(s_t, a_t) - V(s_t) \approx A(s_t, a_t)$$
+
+</Mathematical>
+
+## The Actor-Critic Update
+
+<Mathematical>
+
+At each step, actor-critic performs two updates:
+
+**Actor update** (policy gradient with advantage):
+$$\theta \leftarrow \theta + \alpha_\theta \nabla_\theta \log \pi_\theta(a_t|s_t) \cdot \delta_t$$
+
+**Critic update** (TD learning):
+$$\phi \leftarrow \phi - \alpha_\phi \nabla_\phi (V_\phi(s_t) - (r_{t+1} + \gamma V_\phi(s_{t+1})))^2$$
+
+The actor learns from the critic's feedback. The critic learns from observed rewards. Both improve together.
+
+</Mathematical>
+
+<Intuition>
+
+Each step of actor-critic:
+
+1. **Act**: Sample action from current policy
+2. **Observe**: Get reward and next state
+3. **Critique**: Compute TD error (was reality better or worse than expected?)
+4. **Update Actor**: If TD error is positive, reinforce the action; if negative, suppress it
+5. **Update Critic**: Adjust value estimates toward observed reality
+
+This happens at every timestep - no waiting for episode end!
+
+</Intuition>
+
+## Shared vs. Separate Networks
+
+<Intuition>
+
+Should actor and critic share parameters?
+
+**Shared networks** (common in practice):
+- Lower layers extract features useful for both policy and value
+- Reduces total parameters
+- Acts as regularization
+- Can sometimes destabilize training (competing objectives)
+
+**Separate networks**:
+- Complete independence between actor and critic
+- Easier to tune learning rates separately
+- No interference between objectives
+- More parameters to train
+
+Most implementations (including PPO) use shared networks with separate "heads" for policy and value outputs.
+
+</Intuition>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class ActorCriticNetwork(nn.Module):
+    """
+    Combined actor-critic network with shared feature extraction.
+
+    Architecture:
+        State -> Shared Layers -> Actor Head (policy)
+                               -> Critic Head (value)
+    """
+
+    def __init__(self, state_dim, n_actions, hidden_dim=128):
+        super().__init__()
+
+        # Shared feature extraction layers
+        self.shared = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Tanh(),
+        )
+
+        # Actor head: outputs action logits
+        self.actor_head = nn.Linear(hidden_dim, n_actions)
+
+        # Critic head: outputs single value
+        self.critic_head = nn.Linear(hidden_dim, 1)
+
+    def forward(self, state):
+        """Forward pass returning both policy and value."""
+        features = self.shared(state)
+        action_logits = self.actor_head(features)
+        value = self.critic_head(features)
+        return action_logits, value.squeeze(-1)
+
+    def get_policy(self, state):
+        """Get action distribution."""
+        action_logits, _ = self.forward(state)
+        return torch.distributions.Categorical(logits=action_logits)
+
+    def get_value(self, state):
+        """Get state value."""
+        _, value = self.forward(state)
+        return value
+
+    def get_action_and_value(self, state):
+        """Sample action and return log_prob, value."""
+        action_logits, value = self.forward(state)
+        dist = torch.distributions.Categorical(logits=action_logits)
+        action = dist.sample()
+        log_prob = dist.log_prob(action)
+        return action, log_prob, value
+
+
+class SeparateActorCritic(nn.Module):
+    """Separate actor and critic networks."""
+
+    def __init__(self, state_dim, n_actions, hidden_dim=128):
+        super().__init__()
+
+        # Actor network
+        self.actor = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, n_actions)
+        )
+
+        # Critic network
+        self.critic = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, 1)
+        )
+
+    def forward(self, state):
+        action_logits = self.actor(state)
+        value = self.critic(state).squeeze(-1)
+        return action_logits, value
+```
+
+</Implementation>
+
+## Online vs. Batch Updates
+
+<Intuition>
+
+Actor-critic can work in two modes:
+
+**Online (step-by-step)**:
+- Update after every single step
+- Maximum responsiveness to new data
+- Can be unstable due to high variance
+
+**Batch (n-step or trajectory)**:
+- Collect n steps of experience, then update
+- More stable gradients from averaging
+- Standard in modern implementations (PPO uses batches)
+
+Most practical implementations use batched updates because they provide more stable learning while still being much faster than full-episode Monte Carlo.
+
+</Intuition>
+
+<Implementation>
+
+```python
+def online_actor_critic_step(model, optimizer, state, action, reward,
+                              next_state, done, gamma=0.99):
+    """
+    Online (single-step) actor-critic update.
+    """
+    # Forward pass
+    action_logits, value = model(state.unsqueeze(0))
+
+    if done:
+        next_value = 0.0
+    else:
+        with torch.no_grad():
+            _, next_value = model(next_state.unsqueeze(0))
+
+    # TD error (advantage estimate)
+    td_target = reward + gamma * next_value
+    advantage = td_target - value
+
+    # Actor loss: negative log prob weighted by advantage
+    dist = torch.distributions.Categorical(logits=action_logits)
+    log_prob = dist.log_prob(torch.tensor([action]))
+    actor_loss = -log_prob * advantage.detach()
+
+    # Critic loss: squared TD error
+    critic_loss = F.mse_loss(value, torch.tensor([td_target.item()]))
+
+    # Combined loss
+    loss = actor_loss + 0.5 * critic_loss
+
+    # Update
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    return loss.item(), advantage.item()
+```
+
+</Implementation>
+
+## The Bias-Variance Tradeoff
+
+<Warning>
+
+Actor-critic introduces bias that REINFORCE doesn't have.
+
+**REINFORCE** uses true returns $G_t$ - unbiased but high variance.
+
+**Actor-Critic** uses bootstrapped estimates $r + \gamma V(s')$ - biased (because $V$ is approximate) but lower variance.
+
+This is a fundamental tradeoff in RL. We'll see how to navigate it with n-step returns and GAE in later sections.
+
+</Warning>
+
+<Mathematical>
+
+The bias in actor-critic comes from using $V_\phi(s')$ instead of the true expected value:
+
+$$\delta_t = r_{t+1} + \gamma V_\phi(s_{t+1}) - V_\phi(s_t)$$
+
+If $V_\phi \neq V^\pi$, then $\mathbb{E}[\delta_t] \neq A^\pi(s_t, a_t)$.
+
+However, as $V_\phi$ improves, the bias decreases. The learning process bootstraps - actor and critic improve together.
+
+</Mathematical>
+
+<Intuition>
+
+Think of it like trusting a friend's advice:
+
+- **Monte Carlo (REINFORCE)**: Wait to see the actual outcome. Unbiased but might take forever.
+- **Actor-Critic**: Trust your friend's estimate of how things will go. Faster, but your friend might be wrong.
+
+As you both learn together, your friend's estimates get better, and so does your decision-making.
+
+</Intuition>
+
+## Advantages Over REINFORCE
+
+| Aspect | REINFORCE | Actor-Critic |
+|--------|-----------|--------------|
+| **Update frequency** | End of episode | Every step |
+| **Return estimation** | Monte Carlo (full) | Bootstrapped (TD) |
+| **Variance** | High | Lower |
+| **Bias** | None | Some (decreasing) |
+| **Long episodes** | Painful | No problem |
+| **Sample efficiency** | Lower | Higher |
+
+## Summary
+
+The actor-critic architecture combines policy gradient with value learning:
+
+- **Actor** ($\pi_\theta$): Learns what actions to take
+- **Critic** ($V_\phi$): Learns to evaluate states
+- **TD error**: Provides low-variance advantage estimates
+- **Online updates**: No need to wait for episode end
+- **Tradeoff**: Some bias for much lower variance
+
+This is the foundation for modern algorithms like A2C, A3C, and PPO. The next sections explore the advantage function in more detail and the A2C algorithm specifically.

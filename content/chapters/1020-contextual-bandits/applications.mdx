@@ -1,0 +1,560 @@
+---
+title: "Real-World Applications"
+slug: "applications"
+section: "Bandit Problems"
+description: "Recommendations, ads, and clinical trials"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Real-World Applications
+
+Contextual bandits aren't just theoretical—they power some of the most impactful machine learning systems in production. From news recommendations to clinical trials, the ability to personalize decisions while learning is incredibly valuable.
+
+Let's explore how contextual bandits are used in practice.
+
+## News Recommendation: The Yahoo! Story
+
+<Intuition>
+
+The seminal application of contextual bandits was at Yahoo! in the late 2000s. The challenge: personalize the "Today Module" on Yahoo's front page—a single headline slot seen by millions of users daily.
+
+**The problem:**
+- Millions of users with diverse interests
+- Dozens of candidate articles
+- Each impression is a decision: which article should we show this user?
+- Reward signal: did the user click?
+
+**Why contextual bandits?**
+- Each user is different (context matters)
+- We want to learn which articles appeal to whom
+- We need to explore new articles while exploiting what works
+
+</Intuition>
+
+<Example title="The Yahoo! Study Results">
+
+Li et al. (2010) ran A/B tests comparing LinUCB to other approaches:
+
+**Algorithms tested:**
+- Random selection (baseline)
+- Most-popular article
+- Epsilon-greedy with linear models
+- LinUCB
+
+**Results over several weeks:**
+- LinUCB achieved **12.5% relative improvement** in click-through rate over competitive baselines
+- This translated to millions of additional clicks per day
+
+**Key insight**: The exploration bonus was crucial. Pure exploitation (always showing the predicted-best article) performed worse because it couldn't adapt to changing user preferences and new content.
+
+</Example>
+
+<Mathematical>
+
+In the Yahoo! setup:
+
+**Context $x$ included:**
+- User features: demographics, browsing history embedding, geographic location
+- Article features: category, recency, editor ratings
+
+**Arms were articles**, with new articles cycling in daily.
+
+**Reward**: $r = 1$ if user clicked, $r = 0$ otherwise.
+
+The model learned weights that captured relationships like:
+- "Users who read sports articles are more likely to click on sports"
+- "Mobile users prefer shorter articles"
+- "Morning users want news, evening users want entertainment"
+
+</Mathematical>
+
+## Online Advertising
+
+<Intuition>
+
+Every time you see an ad online, a contextual bandit (or more sophisticated variant) likely made that decision. Ad platforms face exactly the right problem structure:
+
+**Context:**
+- User profile (anonymous but rich)
+- Page content and position
+- Time of day, device type
+- Historical behavior
+
+**Arms:**
+- Pool of candidate ads
+- Each ad has features (creative, advertiser, category)
+
+**Reward:**
+- Click (most common)
+- Conversion (purchase, signup)
+- Combination of immediate and delayed signals
+
+</Intuition>
+
+<Example title="Ad Selection at Scale">
+
+Consider a major ad platform:
+- Billions of ad requests per day
+- Millions of advertisers
+- Decisions made in milliseconds
+
+**Challenges beyond basic contextual bandits:**
+
+1. **Delayed feedback**: Conversions might happen hours after the click
+2. **Credit assignment**: User saw 5 ads before converting—which one gets credit?
+3. **Budget constraints**: Can't show the same ad too many times
+4. **Auction dynamics**: Ads compete with each other on price
+
+**Solution**: Extensions like delayed feedback bandits, credit attribution models, and constrained optimization layers on top of the base contextual bandit.
+
+</Example>
+
+<Implementation>
+
+```python
+import numpy as np
+from typing import List, Dict, Tuple
+
+class AdSelector:
+    """
+    A simplified ad selection system using contextual bandits.
+
+    In practice, this would be much more sophisticated with:
+    - Real-time bidding integration
+    - Budget pacing
+    - Frequency capping
+    - Multiple objectives
+    """
+
+    def __init__(self, n_features: int, alpha: float = 1.0):
+        self.n_features = n_features
+        self.alpha = alpha
+        # Each ad gets its own LinUCB model
+        self.ad_models: Dict[str, 'LinUCBModel'] = {}
+
+    def select_ad(
+        self,
+        user_context: np.ndarray,
+        candidate_ads: List[Dict]
+    ) -> str:
+        """
+        Select the best ad for this user from candidates.
+
+        Args:
+            user_context: Feature vector describing the user
+            candidate_ads: List of ad dictionaries with 'id' and 'features'
+
+        Returns:
+            ID of selected ad
+        """
+        best_ad_id = None
+        best_ucb = -float('inf')
+
+        for ad in candidate_ads:
+            ad_id = ad['id']
+
+            # Create model if new ad
+            if ad_id not in self.ad_models:
+                self.ad_models[ad_id] = LinUCBModel(
+                    self.n_features, self.alpha
+                )
+
+            # Combine user and ad features
+            combined_context = np.concatenate([
+                user_context,
+                ad['features']
+            ])
+
+            # Get UCB value
+            ucb = self.ad_models[ad_id].get_ucb(combined_context)
+
+            if ucb > best_ucb:
+                best_ucb = ucb
+                best_ad_id = ad_id
+
+        return best_ad_id
+
+    def update(
+        self,
+        ad_id: str,
+        context: np.ndarray,
+        clicked: bool
+    ):
+        """Update model after observing click/no-click."""
+        if ad_id in self.ad_models:
+            reward = 1.0 if clicked else 0.0
+            self.ad_models[ad_id].update(context, reward)
+
+
+class LinUCBModel:
+    """Simple LinUCB model for a single arm."""
+
+    def __init__(self, d: int, alpha: float = 1.0):
+        self.A = np.eye(d)
+        self.b = np.zeros(d)
+        self.alpha = alpha
+
+    def get_ucb(self, x: np.ndarray) -> float:
+        A_inv = np.linalg.inv(self.A)
+        theta = A_inv @ self.b
+        mean = x @ theta
+        std = np.sqrt(x @ A_inv @ x)
+        return mean + self.alpha * std
+
+    def update(self, x: np.ndarray, reward: float):
+        self.A += np.outer(x, x)
+        self.b += reward * x
+```
+
+</Implementation>
+
+## Clinical Trials: Adaptive Treatment Assignment
+
+<Intuition>
+
+Traditional clinical trials randomize patients equally between treatments. But if early evidence suggests one treatment is better, why keep assigning patients to the worse one?
+
+**Adaptive clinical trials** use bandit algorithms to:
+- Assign more patients to promising treatments
+- Learn faster which treatment works
+- Reduce the number of patients receiving inferior treatments
+
+This has profound ethical implications: better exploration means fewer patients get suboptimal care.
+
+</Intuition>
+
+<Example title="Personalized Medicine">
+
+Consider a trial for a new cancer treatment:
+
+**Context (patient features):**
+- Genetic markers
+- Cancer stage and type
+- Age, overall health
+- Prior treatments
+
+**Arms (treatments):**
+- Standard chemotherapy
+- New targeted therapy
+- Combination therapy
+- Radiation only
+
+**Reward:**
+- Tumor response
+- Side effects
+- Quality of life metrics
+
+**The value of context:**
+- The new therapy might work great for patients with certain genetic markers
+- Standard chemo might be better for others
+- A contextual bandit can learn these personalized treatment effects
+
+**Ethical considerations:**
+- Exploration is costly (some patients get suboptimal treatment)
+- But without exploration, we can't learn
+- Bandit algorithms minimize this cost while still learning
+
+</Example>
+
+<Warning>
+**Regulatory and Ethical Challenges**
+
+Using bandits in clinical trials requires careful consideration:
+
+1. **Informed consent**: Patients must understand they might not get the "best" treatment while the system learns
+
+2. **Regulatory approval**: FDA and other bodies have frameworks for adaptive trials, but they're more complex to approve
+
+3. **Transparency**: The algorithm's decisions must be explainable
+
+4. **Safety monitoring**: Can't purely optimize for efficacy—must monitor for adverse events
+
+Despite these challenges, adaptive trials are increasingly common. The potential to save lives by learning faster is compelling.
+</Warning>
+
+## A/B Testing Evolution
+
+<Intuition>
+
+Traditional A/B testing:
+1. Randomly assign users to A or B
+2. Wait for sufficient data
+3. Declare a winner
+4. Deploy the winner to everyone
+
+**The problem**: During the test, half your users get the inferior variant. If the test runs for weeks and A is 20% worse, that's a lot of lost value.
+
+**Bandits for A/B testing**:
+1. Start with equal exploration
+2. As data accumulates, shift traffic to the better variant
+3. Automatically exploit while continuing to explore
+4. No fixed "test end" needed—continuous optimization
+
+</Intuition>
+
+<Example title="Multi-Armed Bandit A/B Testing">
+
+You're testing 4 different checkout button colors on an e-commerce site:
+
+**Traditional A/B**:
+- 25% traffic to each variant for 2 weeks
+- Measure conversion rates
+- Winner: Green at 4.2% (vs 3.8%, 3.9%, 4.0% for others)
+- Total conversions lost during test: significant
+
+**Thompson Sampling approach**:
+- Start with equal priors
+- After day 1: Green is ahead, shift ~40% traffic there
+- After day 3: Green consistently best, ~60% traffic there
+- After week 1: 80% traffic to Green while still confirming
+- Continuous learning, minimal regret
+
+**Result**: Same conclusion (Green wins) but with more total conversions during the "test" period.
+
+</Example>
+
+<Implementation>
+
+```python
+import numpy as np
+from typing import Dict, List, Tuple
+
+class BanditABTest:
+    """
+    A/B testing using Thompson Sampling.
+
+    Automatically balances exploration and exploitation,
+    sending more traffic to winning variants over time.
+    """
+
+    def __init__(self, variant_names: List[str]):
+        self.variants = variant_names
+        # Beta priors for each variant (for Bernoulli rewards)
+        self.alpha = {name: 1.0 for name in variant_names}
+        self.beta = {name: 1.0 for name in variant_names}
+        self.impressions = {name: 0 for name in variant_names}
+        self.conversions = {name: 0 for name in variant_names}
+
+    def select_variant(self) -> str:
+        """Select a variant using Thompson Sampling."""
+        samples = {
+            name: np.random.beta(self.alpha[name], self.beta[name])
+            for name in self.variants
+        }
+        return max(samples, key=samples.get)
+
+    def record_outcome(self, variant: str, converted: bool):
+        """Record the outcome of showing a variant."""
+        self.impressions[variant] += 1
+        if converted:
+            self.conversions[variant] += 1
+            self.alpha[variant] += 1
+        else:
+            self.beta[variant] += 1
+
+    def get_statistics(self) -> Dict:
+        """Return current statistics for all variants."""
+        stats = {}
+        for name in self.variants:
+            mean = self.alpha[name] / (self.alpha[name] + self.beta[name])
+            # 95% credible interval
+            from scipy import stats
+            low = stats.beta.ppf(0.025, self.alpha[name], self.beta[name])
+            high = stats.beta.ppf(0.975, self.alpha[name], self.beta[name])
+            stats[name] = {
+                'impressions': self.impressions[name],
+                'conversions': self.conversions[name],
+                'rate': self.conversions[name] / max(1, self.impressions[name]),
+                'posterior_mean': mean,
+                'credible_interval': (low, high)
+            }
+        return stats
+
+    def get_probability_best(self, n_samples: int = 10000) -> Dict[str, float]:
+        """Estimate probability each variant is actually best."""
+        samples = {
+            name: np.random.beta(
+                self.alpha[name], self.beta[name], n_samples
+            )
+            for name in self.variants
+        }
+
+        # Stack and find argmax for each sample
+        all_samples = np.stack([samples[name] for name in self.variants])
+        best_indices = np.argmax(all_samples, axis=0)
+
+        probs = {}
+        for i, name in enumerate(self.variants):
+            probs[name] = np.mean(best_indices == i)
+        return probs
+
+
+# Example usage
+test = BanditABTest(['control', 'variant_a', 'variant_b', 'variant_c'])
+
+# Simulate 1000 users
+true_rates = {'control': 0.03, 'variant_a': 0.035,
+              'variant_b': 0.04, 'variant_c': 0.032}
+
+for _ in range(1000):
+    variant = test.select_variant()
+    converted = np.random.random() < true_rates[variant]
+    test.record_outcome(variant, converted)
+
+# Check results
+print("Traffic distribution:", {k: v['impressions'] for k, v in test.get_statistics().items()})
+print("Probability best:", test.get_probability_best())
+```
+
+</Implementation>
+
+## Neural Contextual Bandits
+
+<Intuition>
+
+Linear models are powerful but limited. What if the relationship between context and reward is non-linear?
+
+**Neural contextual bandits** replace the linear model with a neural network:
+
+$$\mathbb{E}[r | x, a] = f_\theta(x, a)$$
+
+where $f_\theta$ is a neural network.
+
+**Challenge**: How do we measure uncertainty for exploration? Neural networks don't give us nice confidence intervals like linear regression.
+
+**Solutions:**
+1. **Neural Linear**: Use neural net features + linear layer with UCB on the linear part
+2. **Dropout as uncertainty**: Use Monte Carlo dropout to estimate uncertainty
+3. **Ensembles**: Train multiple networks, use disagreement as uncertainty
+4. **Neural Thompson Sampling**: Maintain approximate posterior over weights
+
+</Intuition>
+
+<Implementation>
+
+```python
+import numpy as np
+import torch
+import torch.nn as nn
+
+class NeuralLinearBandit:
+    """
+    Neural contextual bandit using the Neural Linear approach.
+
+    A neural network learns features, then LinUCB operates
+    on the last layer for tractable uncertainty estimation.
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dim: int,
+        n_arms: int,
+        alpha: float = 1.0
+    ):
+        self.n_arms = n_arms
+        self.alpha = alpha
+
+        # Neural network for feature extraction
+        self.network = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+        )
+
+        # LinUCB head for each arm
+        self.feature_dim = hidden_dim
+        self.A = [np.eye(hidden_dim) for _ in range(n_arms)]
+        self.b = [np.zeros(hidden_dim) for _ in range(n_arms)]
+
+        # Training data for neural net updates
+        self.history = []
+
+    def get_features(self, context: np.ndarray) -> np.ndarray:
+        """Extract features using the neural network."""
+        with torch.no_grad():
+            x = torch.FloatTensor(context).unsqueeze(0)
+            features = self.network(x).numpy().squeeze()
+        return features
+
+    def select_action(self, context: np.ndarray) -> int:
+        """Select arm with highest UCB."""
+        features = self.get_features(context)
+
+        best_arm = 0
+        best_ucb = -float('inf')
+
+        for arm in range(self.n_arms):
+            A_inv = np.linalg.inv(self.A[arm])
+            theta = A_inv @ self.b[arm]
+
+            mean = features @ theta
+            std = np.sqrt(features @ A_inv @ features)
+            ucb = mean + self.alpha * std
+
+            if ucb > best_ucb:
+                best_ucb = ucb
+                best_arm = arm
+
+        return best_arm
+
+    def update(self, context: np.ndarray, action: int, reward: float):
+        """Update LinUCB head for the selected arm."""
+        features = self.get_features(context)
+
+        self.A[action] += np.outer(features, features)
+        self.b[action] += reward * features
+
+        # Store for potential neural network retraining
+        self.history.append((context, action, reward))
+```
+
+</Implementation>
+
+## When to Use Contextual Bandits vs Full RL
+
+<Tip>
+**Decision Framework**
+
+**Use Contextual Bandits when:**
+- Decisions are one-shot (user visits, clicks, leaves)
+- Actions don't affect future contexts
+- You want simpler, more interpretable models
+- You have rich context features
+
+**Use Full RL (MDPs) when:**
+- Actions affect future states
+- You need to plan multiple steps ahead
+- Long-term consequences matter
+- Sequential dependencies exist
+
+**Hybrid approaches:**
+- Use contextual bandits for immediate decisions
+- Use RL for session-level optimization
+- Many production systems combine both
+</Tip>
+
+## Summary: The Power of Personalization
+
+Contextual bandits enable personalized decision-making at scale:
+
+1. **News & Content**: Show the right article to the right user
+2. **Advertising**: Match ads to user interests efficiently
+3. **Clinical Trials**: Personalize treatment assignment
+4. **A/B Testing**: Optimize while testing
+5. **E-commerce**: Product recommendations, pricing, UI variants
+
+The key insight: by learning relationships between context and outcomes, we can do better than one-size-fits-all decisions while maintaining the simplicity of bandit algorithms.
+
+<Note>
+Contextual bandits represent the sweet spot between simple bandits (too limited) and full RL (too complex for many applications). They're the workhorse of modern personalization systems, running at scale in companies like Yahoo!, Google, Microsoft, Netflix, and countless others.
+</Note>
+
+## What's Next?
+
+We've now covered bandit problems—from simple multi-armed bandits to contextual personalization. These ideas form the foundation for exploration in all of RL.
+
+In the next section, we'll move to **Markov Decision Processes**—adding the crucial element that bandits lack: states that evolve based on actions. This is where reinforcement learning truly begins.

@@ -1,0 +1,454 @@
+---
+title: "Planning with Learned Models"
+slug: "planning"
+section: "Advanced Topics"
+description: "Using imagination for better decisions"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Planning with Learned Models
+
+Once we have a model of how the world works, we can use it to plan. Planning means using the model to look ahead, simulating possible futures to find good actions without actually taking them.
+
+## What is Planning?
+
+<Definition title="Planning">
+
+In model-based RL, **planning** is the process of using an internal model to simulate trajectories (sequences of states, actions, and rewards) and use these simulations to improve the policy or value estimates—all without interacting with the real environment.
+
+</Definition>
+
+<Intuition>
+
+Imagine you're playing chess. Before making a move, you might think: "If I move my bishop here, my opponent will probably respond by moving their knight there. Then I could take their pawn..." This mental simulation is planning.
+
+The key insight: every move you consider in your head is essentially a "free" sample. You're learning from simulated experience, not real experience. A chess grandmaster might consider thousands of positions mentally before making a single actual move.
+
+Model-based RL gives agents this same capability: simulate many possible futures in the model, then choose the best action in reality.
+
+</Intuition>
+
+## Types of Planning
+
+There are several ways to use a model for planning:
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+    <div className="text-blue-400 font-bold mb-2">Background Planning</div>
+    <div className="text-slate-300 text-sm">
+      Generate simulated experience to improve value estimates during "off time" between real interactions.
+    </div>
+    <div className="text-slate-400 text-xs mt-2">Example: Dyna-Q</div>
+  </div>
+  <div className="bg-violet-900/20 border border-violet-700/50 rounded-lg p-4">
+    <div className="text-violet-400 font-bold mb-2">Decision-Time Planning</div>
+    <div className="text-slate-300 text-sm">
+      Plan specifically for the current state to choose the best action right now.
+    </div>
+    <div className="text-slate-400 text-xs mt-2">Example: Monte Carlo Tree Search</div>
+  </div>
+</div>
+
+## Background Planning: Simulated Experience
+
+The simplest form of planning is **background planning**: use the model to generate simulated experiences and update value estimates, just as if they were real experiences.
+
+<Intuition>
+
+Think of it this way: after each real experience, you "daydream" about similar experiences. You sample a state-action pair you've seen before, ask the model what would happen, and learn from that imagined outcome.
+
+This amplifies each real experience: one real step might generate 10 or 50 simulated steps, dramatically accelerating learning.
+
+</Intuition>
+
+<Mathematical>
+
+In background planning, we repeatedly:
+
+1. Sample a previously visited state-action pair $(s, a)$
+2. Query the model: $s', r = \hat{P}(s, a), \hat{R}(s, a)$
+3. Update Q-values as if $(s, a, r, s')$ were a real experience:
+
+$$Q(s, a) \leftarrow Q(s, a) + \alpha \left[ r + \gamma \max_{a'} Q(s', a') - Q(s, a) \right]$$
+
+The update is identical to Q-learning—the only difference is that $(s', r)$ came from the model, not the real environment.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+def background_planning_step(Q, model, alpha=0.1, gamma=0.99):
+    """
+    Perform one step of background planning.
+
+    Args:
+        Q: Q-table as numpy array (n_states, n_actions)
+        model: TabularModel that can sample and predict
+        alpha: Learning rate
+        gamma: Discount factor
+
+    Returns:
+        TD error from the simulated update
+    """
+    # Sample a previously experienced state-action pair
+    result = model.sample_experienced()
+    if result is None:
+        return 0.0  # No experience to plan with yet
+
+    s, a = result
+
+    # Ask the model what would happen
+    s_prime, r = model.predict(s, a)
+    if s_prime is None:
+        return 0.0
+
+    # Q-learning update on simulated experience
+    td_target = r + gamma * np.max(Q[s_prime])
+    td_error = td_target - Q[s, a]
+    Q[s, a] += alpha * td_error
+
+    return td_error
+
+
+def planning_loop(Q, model, n_planning_steps, alpha=0.1, gamma=0.99):
+    """
+    Perform multiple planning steps.
+
+    This is typically called after each real environment step.
+    """
+    total_error = 0.0
+    for _ in range(n_planning_steps):
+        error = background_planning_step(Q, model, alpha, gamma)
+        total_error += abs(error)
+    return total_error / max(n_planning_steps, 1)
+```
+
+</Implementation>
+
+## Decision-Time Planning: Search
+
+For more focused planning, we can do **decision-time planning**: plan specifically for the current state to decide what action to take right now.
+
+<Intuition>
+
+Background planning improves your general knowledge. Decision-time planning is like focusing intensely on the current problem: "I'm in this specific state. What should I do?"
+
+The classic example is Monte Carlo Tree Search (MCTS), used by AlphaGo and AlphaZero. Before each move, the agent simulates thousands of possible game trajectories from the current position and chooses the most promising action.
+
+</Intuition>
+
+### Rollout Planning
+
+The simplest decision-time planning is **rollout**: simulate full trajectories from the current state and estimate the value of each action by the average return.
+
+<Mathematical>
+
+To decide on an action in state $s$:
+
+1. For each action $a$:
+   - Simulate $K$ trajectories starting with $(s, a)$
+   - For each trajectory, use the model and a rollout policy $\pi_{\text{rollout}}$ to generate states and rewards
+   - Compute the return $G = \sum_t \gamma^t r_t$ for each trajectory
+2. Choose the action with the highest average return
+
+$$a^* = \arg\max_a \frac{1}{K} \sum_{k=1}^{K} G_k(s, a)$$
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def rollout_planning(state, model, n_actions, n_rollouts=50, horizon=10, gamma=0.99):
+    """
+    Decision-time planning via rollouts.
+
+    Args:
+        state: Current state
+        model: Environment model with predict(s, a) method
+        n_actions: Number of possible actions
+        n_rollouts: Number of rollouts per action
+        horizon: How many steps to simulate
+        gamma: Discount factor
+
+    Returns:
+        Best action according to rollout estimates
+    """
+    action_values = np.zeros(n_actions)
+
+    for a in range(n_actions):
+        returns = []
+
+        for _ in range(n_rollouts):
+            # Simulate trajectory starting with action a
+            s = state
+            total_return = 0.0
+            discount = 1.0
+
+            for t in range(horizon):
+                if t == 0:
+                    action = a  # First action is the one we're evaluating
+                else:
+                    action = np.random.randint(n_actions)  # Random rollout policy
+
+                s_next, r = model.predict(s, action)
+                if s_next is None:
+                    break
+
+                total_return += discount * r
+                discount *= gamma
+                s = s_next
+
+            returns.append(total_return)
+
+        action_values[a] = np.mean(returns)
+
+    return np.argmax(action_values)
+```
+
+</Implementation>
+
+## Model Predictive Control (MPC)
+
+A powerful planning approach is **Model Predictive Control (MPC)**: plan an action sequence, execute only the first action, then re-plan.
+
+<Intuition>
+
+MPC is like constantly updating your GPS while driving. You plan a route, start driving, but then re-plan based on where you actually end up. If the model was slightly wrong, you correct course immediately rather than blindly following a potentially outdated plan.
+
+This makes MPC robust to model errors: you never commit to a long action sequence based on an imperfect model.
+
+</Intuition>
+
+<Mathematical>
+
+At each time step in state $s$:
+
+1. Optimize over action sequences of length $H$: $\mathbf{a} = (a_0, a_1, ..., a_{H-1})$
+2. Simulate each sequence in the model to estimate total reward
+3. Execute only $a_0$ (the first action)
+4. Observe the new state and repeat
+
+The optimization can be done via random shooting, cross-entropy method, or gradient-based methods.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def mpc_action(state, model, n_actions, horizon=10, n_sequences=100, gamma=0.99):
+    """
+    Model Predictive Control action selection.
+
+    Uses random shooting to find good action sequences.
+    """
+    best_return = float('-inf')
+    best_first_action = 0
+
+    for _ in range(n_sequences):
+        # Sample random action sequence
+        actions = np.random.randint(n_actions, size=horizon)
+
+        # Simulate sequence in model
+        s = state
+        total_return = 0.0
+        discount = 1.0
+
+        for a in actions:
+            s_next, r = model.predict(s, a)
+            if s_next is None:
+                break
+            total_return += discount * r
+            discount *= gamma
+            s = s_next
+
+        # Keep track of best sequence
+        if total_return > best_return:
+            best_return = total_return
+            best_first_action = actions[0]
+
+    return best_first_action
+
+
+def cross_entropy_mpc(state, model, n_actions, horizon=10, n_samples=100,
+                       n_elite=10, n_iterations=5, gamma=0.99):
+    """
+    MPC with Cross-Entropy Method for optimization.
+
+    More sample-efficient than pure random shooting.
+    """
+    # Initialize action distribution (uniform)
+    action_probs = np.ones((horizon, n_actions)) / n_actions
+
+    for _ in range(n_iterations):
+        # Sample action sequences from current distribution
+        sequences = []
+        returns = []
+
+        for _ in range(n_samples):
+            actions = np.array([
+                np.random.choice(n_actions, p=action_probs[t])
+                for t in range(horizon)
+            ])
+
+            # Evaluate sequence
+            s = state
+            total_return = 0.0
+            discount = 1.0
+
+            for a in actions:
+                s_next, r = model.predict(s, a)
+                if s_next is None:
+                    break
+                total_return += discount * r
+                discount *= gamma
+                s = s_next
+
+            sequences.append(actions)
+            returns.append(total_return)
+
+        # Select elite sequences
+        elite_idx = np.argsort(returns)[-n_elite:]
+        elite_sequences = [sequences[i] for i in elite_idx]
+
+        # Update action distribution toward elite sequences
+        action_probs = np.zeros((horizon, n_actions))
+        for seq in elite_sequences:
+            for t, a in enumerate(seq):
+                action_probs[t, a] += 1
+        action_probs /= n_elite
+
+        # Add small uniform noise for exploration
+        action_probs = 0.9 * action_probs + 0.1 / n_actions
+
+    # Return the most likely first action
+    return np.argmax(action_probs[0])
+```
+
+</Implementation>
+
+## Planning Horizon and Model Accuracy
+
+<Warning title="The Horizon-Accuracy Tradeoff">
+
+Longer planning horizons let you consider more future consequences, but model errors compound over time. There's a sweet spot: plan far enough to make good decisions, but not so far that accumulated model errors dominate.
+
+</Warning>
+
+<Intuition>
+
+If your model has 95% accuracy per step, after 10 steps you might have only $0.95^{10} \approx 60\%$ accuracy. After 50 steps, you're at $0.95^{50} \approx 8\%$. Your "plan" is mostly fantasy at that point.
+
+The right horizon depends on:
+- **Model accuracy**: Better models allow longer horizons
+- **Task horizon**: Some tasks require long-term planning
+- **Discount factor**: High $\gamma$ makes distant rewards matter more
+
+</Intuition>
+
+<Mathematical>
+
+If the model has expected error $\epsilon$ per step, and errors accumulate (a reasonable approximation), the total expected error after $H$ steps is roughly $H \cdot \epsilon$.
+
+For meaningful planning, we want this accumulated error to be small relative to the actual state differences that matter for decision-making.
+
+A practical heuristic: if model accuracy drops noticeably after $H$ steps (measured by held-out prediction error), keep the planning horizon at or below $H$.
+
+</Mathematical>
+
+## Prioritized Planning
+
+Not all planning is equally valuable. **Prioritized planning** focuses computational effort on the most useful simulated experiences.
+
+<Intuition>
+
+Imagine you just discovered a new shortcut in a maze. Which experiences are most valuable to simulate?
+
+- Experiences that might be affected by this new knowledge (states near the shortcut)
+- Experiences where the current values might be wrong (high TD error)
+- States you're likely to visit soon (relevant to current policy)
+
+Random planning wastes time on experiences that don't change anything. Prioritized planning focuses where it matters.
+
+</Intuition>
+
+<Implementation>
+
+```python
+import heapq
+
+class PrioritizedPlanning:
+    """
+    Prioritized planning based on TD error magnitude.
+
+    States with higher TD errors are more valuable to plan from.
+    """
+
+    def __init__(self, n_states, n_actions, theta=0.01):
+        self.n_states = n_states
+        self.n_actions = n_actions
+        self.theta = theta  # Priority threshold
+        self.priority_queue = []  # Min-heap (negated priorities for max behavior)
+        self.priorities = {}  # (s, a) -> priority
+
+    def update_priority(self, s, a, td_error):
+        """Update priority for a state-action pair."""
+        priority = abs(td_error)
+        if priority > self.theta:
+            self.priorities[(s, a)] = priority
+            # Python heapq is a min-heap, so negate for max-priority behavior
+            heapq.heappush(self.priority_queue, (-priority, s, a))
+
+    def get_highest_priority(self):
+        """Get the state-action pair with highest priority."""
+        while self.priority_queue:
+            neg_priority, s, a = heapq.heappop(self.priority_queue)
+            # Check if this priority is still valid (might be outdated)
+            if (s, a) in self.priorities:
+                current_priority = self.priorities.pop((s, a))
+                if abs(-neg_priority - current_priority) < 0.01:
+                    return s, a
+        return None
+
+
+def prioritized_planning_step(Q, model, priority_queue, alpha=0.1, gamma=0.99):
+    """
+    One step of prioritized planning.
+    """
+    result = priority_queue.get_highest_priority()
+    if result is None:
+        return 0.0
+
+    s, a = result
+
+    # Simulate from this state-action pair
+    s_prime, r = model.predict(s, a)
+    if s_prime is None:
+        return 0.0
+
+    # Q-learning update
+    td_target = r + gamma * np.max(Q[s_prime])
+    td_error = td_target - Q[s, a]
+    Q[s, a] += alpha * td_error
+
+    # Update priorities for predecessor states
+    # (In practice, you'd track which states lead to s)
+
+    return abs(td_error)
+```
+
+</Implementation>
+
+## Summary
+
+Planning is how model-based RL extracts maximum value from learned models. By simulating experiences before taking real actions, agents can:
+
+- Learn more efficiently (background planning amplifies real experience)
+- Make better immediate decisions (decision-time planning and MPC)
+- Avoid costly mistakes (think before acting)
+
+The challenge is balancing planning depth against model accuracy. In the next section, we'll see how the Dyna architecture elegantly combines planning with learning from real experience.

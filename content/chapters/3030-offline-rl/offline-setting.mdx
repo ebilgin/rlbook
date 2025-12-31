@@ -1,0 +1,307 @@
+---
+title: "The Offline Setting"
+slug: "offline-setting"
+section: "Advanced Topics"
+description: "When you can't interact with the environment"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# The Offline Setting
+
+Standard reinforcement learning assumes you can interact with your environment: try actions, observe outcomes, and learn from experience. But what if interaction is impossible, dangerous, or prohibitively expensive? This is the offline RL setting.
+
+## Why Offline RL?
+
+<Intuition>
+
+Consider these scenarios:
+
+**Healthcare**: You want to learn the best treatment protocol for cancer patients. You can't experiment on patients—running an untested treatment just to see what happens is unethical. But you have 20 years of medical records: what treatments doctors prescribed, patient outcomes, lab results, everything.
+
+**Autonomous Driving**: You want to learn to drive safely. Crashing cars to learn about accidents is expensive and dangerous. But you have millions of miles of logged driving data from human drivers.
+
+**Industrial Control**: You want to optimize a chemical plant. Running random experiments could damage equipment worth millions. But you have logs of how operators have run the plant for years.
+
+In each case: **exploration is off the table, but you have data**. Can you learn from it?
+
+</Intuition>
+
+<Definition title="Offline RL">
+Reinforcement learning from a fixed, previously-collected dataset $D = \{(s_t, a_t, r_t, s_{t+1})\}$ with no ability to collect new data during training. The agent learns entirely from this logged experience.
+</Definition>
+
+## Online vs Offline: A Fundamental Distinction
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4">
+    <div className="text-blue-400 font-bold mb-2">Online RL</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>Learn while interacting with environment</li>
+      <li>Can try any action to see what happens</li>
+      <li>Exploration enables discovering new behaviors</li>
+      <li>Policy and data distribution evolve together</li>
+    </ul>
+    <div className="text-slate-400 text-xs mt-2">Example: Q-learning in a simulator</div>
+  </div>
+  <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-4">
+    <div className="text-amber-400 font-bold mb-2">Offline RL</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>Learn from fixed, pre-collected dataset</li>
+      <li>Cannot query environment during training</li>
+      <li>Limited to behaviors in the dataset</li>
+      <li>Must extrapolate carefully beyond data</li>
+    </ul>
+    <div className="text-slate-400 text-xs mt-2">Example: Learning from logged human behavior</div>
+  </div>
+</div>
+
+<Mathematical>
+
+**Online RL** learns from data collected by the current policy:
+
+$$D_t = \{(s, a, r, s') : a \sim \pi_{\theta_t}\}$$
+
+The data distribution changes as the policy improves.
+
+**Offline RL** learns from a fixed dataset collected by some behavior policy $\pi_\beta$:
+
+$$D = \{(s, a, r, s') : a \sim \pi_\beta\}$$
+
+The data distribution is fixed—it doesn't change during training. The behavior policy $\pi_\beta$ could be human experts, previous RL policies, random actions, or any combination.
+
+The objective is the same—maximize expected return—but the learning constraints differ fundamentally:
+
+$$\max_\pi \mathbb{E}_{\tau \sim \pi}\left[\sum_t \gamma^t r_t\right] \quad \text{using only } D$$
+
+</Mathematical>
+
+## The Behavior Policy
+
+<Definition title="Behavior Policy">
+The policy $\pi_\beta$ that was used to collect the offline dataset. This might be a human expert, a previous RL agent, a hand-coded controller, or a mixture of different policies.
+</Definition>
+
+<Intuition>
+
+The behavior policy shapes what you can learn:
+
+- If $\pi_\beta$ is an expert, the data shows good behavior but may lack diversity
+- If $\pi_\beta$ is random, the data covers many states but with poor outcomes
+- If $\pi_\beta$ is a mediocre policy, you might learn to outperform it—or not
+
+Ideally, the behavior policy covers the states and actions that matter for the task. If the optimal action in some state was never tried by the behavior policy, you have no data about what would happen—and that's a problem.
+
+</Intuition>
+
+<Example title="Dataset Quality Matters">
+
+Consider learning to play chess from a dataset of games:
+
+**Expert dataset**: Games from grandmasters. High-quality moves, but limited coverage of suboptimal positions (experts don't often get into bad positions).
+
+**Amateur dataset**: Games from casual players. Many suboptimal moves, but broader coverage of what happens when things go wrong.
+
+**Mixed dataset**: Both expert and amateur games. Better coverage, but confusing labels—the same position might show both good and bad moves.
+
+Each has tradeoffs. In offline RL, **dataset coverage** often matters more than raw dataset size.
+
+</Example>
+
+## Setting Up an Offline RL Problem
+
+<Implementation>
+
+```python
+import numpy as np
+from collections import deque
+
+class OfflineDataset:
+    """
+    A fixed dataset for offline RL.
+
+    Once created, this dataset cannot be modified during training.
+    """
+
+    def __init__(self, transitions):
+        """
+        Args:
+            transitions: List of (state, action, reward, next_state, done) tuples
+        """
+        self.transitions = transitions
+        self.n_samples = len(transitions)
+
+        # Pre-compute statistics for normalization
+        states = np.array([t[0] for t in transitions])
+        self.state_mean = states.mean(axis=0)
+        self.state_std = states.std(axis=0) + 1e-8
+
+        # Track which state-action pairs are in the dataset
+        self._index_transitions()
+
+    def _index_transitions(self):
+        """Index the dataset for analysis."""
+        self.state_action_counts = {}
+        for s, a, r, s_next, done in self.transitions:
+            key = (tuple(np.round(s, 2)), a)
+            self.state_action_counts[key] = self.state_action_counts.get(key, 0) + 1
+
+    def sample(self, batch_size):
+        """Sample a random batch from the dataset."""
+        indices = np.random.randint(0, self.n_samples, size=batch_size)
+        batch = [self.transitions[i] for i in indices]
+
+        states = np.array([t[0] for t in batch])
+        actions = np.array([t[1] for t in batch])
+        rewards = np.array([t[2] for t in batch])
+        next_states = np.array([t[3] for t in batch])
+        dones = np.array([t[4] for t in batch])
+
+        return states, actions, rewards, next_states, dones
+
+    def normalize_state(self, state):
+        """Normalize state using dataset statistics."""
+        return (state - self.state_mean) / self.state_std
+
+    def is_in_distribution(self, state, action, threshold=0.1):
+        """
+        Check if a state-action pair is close to something in the dataset.
+
+        This is a simplistic check; real implementations use more sophisticated
+        distance metrics or density models.
+        """
+        rounded_state = tuple(np.round(state, 2))
+        return (rounded_state, action) in self.state_action_counts
+
+
+def collect_offline_dataset(env, behavior_policy, n_episodes=100):
+    """
+    Collect a fixed dataset using a behavior policy.
+
+    Args:
+        env: The environment
+        behavior_policy: Policy used for data collection (e.g., human, expert)
+        n_episodes: Number of episodes to collect
+
+    Returns:
+        OfflineDataset: A fixed dataset for offline RL
+    """
+    transitions = []
+
+    for episode in range(n_episodes):
+        state = env.reset()
+        done = False
+
+        while not done:
+            # Behavior policy selects action
+            action = behavior_policy(state)
+
+            # Execute in environment
+            next_state, reward, done, _ = env.step(action)
+
+            # Store transition
+            transitions.append((
+                state.copy(),
+                action,
+                reward,
+                next_state.copy(),
+                done
+            ))
+
+            state = next_state
+
+    print(f"Collected {len(transitions)} transitions from {n_episodes} episodes")
+    return OfflineDataset(transitions)
+
+
+# Example behavior policies
+def random_policy(state):
+    """Random behavior policy."""
+    return np.random.randint(4)  # Assuming 4 actions
+
+def epsilon_greedy_behavior(q_table, epsilon=0.3):
+    """Epsilon-greedy behavior policy (for tabular case)."""
+    def policy(state):
+        if np.random.random() < epsilon:
+            return np.random.randint(q_table.shape[1])
+        return np.argmax(q_table[state])
+    return policy
+```
+
+</Implementation>
+
+## What Can We Learn from Offline Data?
+
+<Intuition>
+
+Given a fixed dataset, what's actually possible?
+
+**Best case**: The behavior policy explored thoroughly. We have data about every action in every relevant state. We can accurately estimate Q-values and find a near-optimal policy.
+
+**Typical case**: The behavior policy covered some states well, others poorly. We can improve on the behavior policy for covered states, but must be careful about unfamiliar territory.
+
+**Worst case**: The behavior policy was narrow (only one way of doing things). We can imitate it, but improving is risky—any deviation takes us into unknown territory.
+
+The key insight: **offline RL can only work with what's in the data**. Asking for behavior the dataset doesn't cover is asking to extrapolate—which neural networks do unreliably.
+
+</Intuition>
+
+<Mathematical>
+
+The fundamental limitation of offline RL is captured by the **coverage assumption**. Ideally, we want the behavior policy to have coverage over states that matter:
+
+$$\text{supp}(\pi^*) \subseteq \text{supp}(\pi_\beta)$$
+
+If the optimal policy $\pi^*$ visits a state where the behavior policy never went, we have no data about that state—and our estimates there will be unreliable.
+
+In practice, we often have **partial coverage**: the behavior policy covers some of the important states. The question becomes: how do we make the best use of what we have without making catastrophic mistakes in uncovered regions?
+
+</Mathematical>
+
+## When is Offline RL Appropriate?
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="bg-emerald-900/20 border border-emerald-700/50 rounded-lg p-4">
+    <div className="text-emerald-400 font-bold mb-2">Use Offline RL When:</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>Real interaction is expensive or dangerous</li>
+      <li>You have a good existing dataset</li>
+      <li>Safety is critical during deployment</li>
+      <li>You need reproducible training</li>
+      <li>The behavior policy covers relevant states</li>
+    </ul>
+  </div>
+  <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-4">
+    <div className="text-red-400 font-bold mb-2">Prefer Online RL When:</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>You have a safe simulator</li>
+      <li>Exploration is cheap and safe</li>
+      <li>Dataset coverage is poor</li>
+      <li>The task requires novel behaviors</li>
+      <li>You can do online fine-tuning after offline pretraining</li>
+    </ul>
+  </div>
+</div>
+
+<Tip title="Hybrid Approaches">
+
+The best results often come from combining offline and online learning:
+
+1. **Offline pretraining**: Learn a reasonable initial policy from logged data
+2. **Online fine-tuning**: Improve with limited online interaction
+
+This gets the safety benefits of offline learning with the coverage benefits of online learning.
+
+</Tip>
+
+## Summary
+
+The offline RL setting fundamentally changes the learning problem:
+
+- We learn from a **fixed dataset** collected by a behavior policy
+- We cannot explore or collect new data during training
+- The **dataset coverage** determines what we can learn
+- We must extrapolate carefully—or not at all—beyond the data
+
+This constraint makes offline RL both harder (can't explore) and more practical (safe, uses existing data). In the next section, we'll see why standard RL algorithms fail in this setting due to **distribution shift**.

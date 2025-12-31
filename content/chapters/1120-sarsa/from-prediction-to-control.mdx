@@ -1,0 +1,243 @@
+---
+title: "From Prediction to Control"
+slug: "from-prediction-to-control"
+section: "Temporal Difference Learning"
+description: "Using TD for action-value estimation"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# From Prediction to Control
+
+TD(0) gives us a powerful way to learn value functions. But there's a catch: it learns **state values** $V(s)$—how good it is to be in a state. For control, we need to know how good it is to take specific **actions**. That's where action values come in.
+
+## The Prediction Problem
+
+<Intuition>
+
+So far, we've focused on **prediction**: given a policy $\pi$, estimate its value function $V^\pi(s)$.
+
+TD(0) does this beautifully:
+$$V(S_t) \leftarrow V(S_t) + \alpha\left[R_{t+1} + \gamma V(S_{t+1}) - V(S_t)\right]$$
+
+But now we want **control**: find a policy that maximizes expected return. This requires:
+1. Evaluate the current policy
+2. Improve the policy based on what we learned
+3. Repeat
+
+This is **Generalized Policy Iteration (GPI)**—the same framework we saw in Dynamic Programming.
+
+</Intuition>
+
+<Definition title="Control Problem">
+The task of finding a policy that maximizes expected return. Unlike prediction (estimating values for a fixed policy), control requires both evaluation and policy improvement. The goal is to find $\pi^*$, the optimal policy.
+</Definition>
+
+## Why State Values Aren't Enough
+
+Here's the problem: to improve a policy using state values, you need a **model** of the environment.
+
+<Mathematical>
+
+With state values, the greedy policy improvement says: pick the action that leads to the best next state:
+
+$$\pi'(s) = \arg\max_a \sum_{s'} p(s'|s,a) \left[R(s,a,s') + \gamma V(s')\right]$$
+
+But this requires knowing $p(s'|s,a)$—the transition probabilities. That's exactly what we're trying to avoid in model-free RL!
+
+</Mathematical>
+
+<Intuition>
+
+Suppose you're in a state with $V = 5.0$, and you have two actions: LEFT and RIGHT. Which should you pick?
+
+With only state values, you'd need to know:
+- Where does LEFT take me? What's the value there?
+- Where does RIGHT take me? What's the value there?
+
+Without a model, you can't answer these questions. You'd have to try each action many times and see where you end up—that's expensive and slow.
+
+**Action values solve this problem.** $Q(s, LEFT)$ directly tells you how good LEFT is. No model needed.
+
+</Intuition>
+
+## Enter Action Values
+
+<Definition title="Action Value Function">
+The function $Q^\pi(s,a)$ gives the expected return starting from state $s$, taking action $a$, and then following policy $\pi$:
+
+$$Q^\pi(s,a) = \mathbb{E}_\pi\left[G_t \mid S_t = s, A_t = a\right]$$
+</Definition>
+
+With action values, policy improvement is trivial:
+
+$$\pi'(s) = \arg\max_a Q(s, a)$$
+
+No model needed—just pick the action with the highest Q-value. This is the key insight that makes model-free control possible.
+
+## TD for Action Values
+
+<Intuition>
+
+The transition from TD(0) to SARSA is straightforward. Instead of learning $V(s)$, we learn $Q(s,a)$:
+
+**TD(0) for states:**
+- We observe: state $S_t$, reward $R_{t+1}$, next state $S_{t+1}$
+- Update: $V(S_t) \leftarrow V(S_t) + \alpha[R_{t+1} + \gamma V(S_{t+1}) - V(S_t)]$
+
+**TD for state-action pairs (SARSA):**
+- We observe: state $S_t$, action $A_t$, reward $R_{t+1}$, next state $S_{t+1}$, next action $A_{t+1}$
+- Update: $Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha[R_{t+1} + \gamma Q(S_{t+1}, A_{t+1}) - Q(S_t, A_t)]$
+
+The structure is identical—we just track state-action pairs instead of states alone.
+
+</Intuition>
+
+<Mathematical>
+
+The SARSA update rule follows directly from the Bellman equation for action values:
+
+$$Q^\pi(s,a) = \mathbb{E}_\pi\left[R_{t+1} + \gamma Q^\pi(S_{t+1}, A_{t+1}) \mid S_t = s, A_t = a\right]$$
+
+Just as TD(0) samples the Bellman equation for $V$, SARSA samples this equation for $Q$:
+
+$$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha\left[R_{t+1} + \gamma Q(S_{t+1}, A_{t+1}) - Q(S_t, A_t)\right]$$
+
+The key requirement: we need to know $A_{t+1}$—the next action we'll take—before we can do the update.
+
+</Mathematical>
+
+## The GPI Framework with TD
+
+Generalized Policy Iteration alternates between:
+
+1. **Policy Evaluation**: Estimate $Q^\pi$ for the current policy
+2. **Policy Improvement**: Make the policy greedy with respect to $Q$
+
+<Note>
+In practice, we don't fully evaluate the policy before improving it. We interleave evaluation and improvement, updating Q-values and the policy after every step. This is sometimes called "online" or "incremental" GPI.
+</Note>
+
+<Example>
+**GPI in Action**
+
+Episode 1, Step 1:
+- State: $s = (1, 2)$
+- Current policy (random at first) picks action: RIGHT
+- We observe reward $-1$ and next state $(1, 3)$
+- Policy picks next action: UP
+- SARSA update: $Q((1,2), RIGHT) \leftarrow Q((1,2), RIGHT) + \alpha[\dots]$
+
+Now the policy can use the updated Q-value! If $Q((1,2), RIGHT)$ is now the highest, the greedy policy would choose RIGHT next time we're in $(1,2)$.
+
+The policy and Q-values evolve together, step by step.
+</Example>
+
+## Why We Need Both Evaluation and Improvement
+
+<Warning>
+It might seem like we could just learn Q* directly without worrying about the current policy. Q-learning does exactly this—but there's a catch.
+
+SARSA learns about the policy it's following. If your policy explores (which it must, to find good actions), SARSA's Q-values reflect that exploration. This can be safer in risky environments.
+
+We'll explore this trade-off deeply when we compare SARSA and Q-learning.
+</Warning>
+
+## The Exploration Problem
+
+To learn good Q-values, we need to try different actions. But to act well, we should exploit what we've learned. This is the **exploration-exploitation tradeoff** we saw in bandits.
+
+<Intuition>
+
+For TD control, we typically use **epsilon-greedy exploration**:
+
+- With probability $\varepsilon$: pick a random action (explore)
+- With probability $1-\varepsilon$: pick $\arg\max_a Q(s,a)$ (exploit)
+
+This ensures we try all actions (at least occasionally) while mostly choosing what seems best. Common choices: $\varepsilon = 0.1$ or $\varepsilon = 0.05$.
+
+</Intuition>
+
+<Implementation>
+
+```python
+import numpy as np
+
+def epsilon_greedy(Q, state, epsilon, n_actions):
+    """
+    Select action using epsilon-greedy policy.
+
+    Args:
+        Q: Q-table, Q[state] is array of action values
+        state: Current state
+        epsilon: Exploration probability
+        n_actions: Number of available actions
+
+    Returns:
+        Selected action
+    """
+    if np.random.random() < epsilon:
+        # Explore: random action
+        return np.random.randint(n_actions)
+    else:
+        # Exploit: best action according to Q
+        return np.argmax(Q[state])
+```
+
+</Implementation>
+
+## From V to Q: A Visual Comparison
+
+| Aspect | State Values $V(s)$ | Action Values $Q(s,a)$ |
+|--------|---------------------|------------------------|
+| **What it measures** | How good to be in state $s$ | How good to take action $a$ in state $s$ |
+| **Table size** | One entry per state | One entry per state-action pair |
+| **Policy improvement** | Needs model | Model-free |
+| **TD update** | $V(s) \leftarrow \dots + \gamma V(s')$ | $Q(s,a) \leftarrow \dots + \gamma Q(s', a')$ |
+
+## The SARSA Tuple
+
+<Intuition>
+
+SARSA gets its name from the five elements needed for each update:
+
+1. **S** — Current state $S_t$
+2. **A** — Action taken $A_t$
+3. **R** — Reward received $R_{t+1}$
+4. **S'** — Next state $S_{t+1}$
+5. **A'** — Next action $A_{t+1}$ (selected from the policy)
+
+The crucial insight: we need to select $A'$ **before** updating. This is what makes SARSA an **on-policy** method—it uses the action from the same policy it's evaluating.
+
+</Intuition>
+
+<Implementation>
+
+```python
+# The SARSA experience tuple
+class SARSATuple:
+    """One step of experience for SARSA."""
+
+    def __init__(self, state, action, reward, next_state, next_action):
+        self.s = state        # S
+        self.a = action       # A
+        self.r = reward       # R
+        self.s_next = next_state    # S'
+        self.a_next = next_action   # A'
+
+    def __repr__(self):
+        return f"SARSA({self.s}, {self.a}, {self.r}, {self.s_next}, {self.a_next})"
+```
+
+</Implementation>
+
+## Summary
+
+The transition from prediction to control requires:
+
+1. **Action values instead of state values**—so we can improve policies without a model
+2. **Exploration**—so we try all actions and learn about them
+3. **Policy improvement**—using our Q-estimates to make better decisions
+
+SARSA combines these elements into a complete TD control algorithm. In the next section, we'll see exactly how it works.

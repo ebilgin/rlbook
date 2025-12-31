@@ -1,0 +1,100 @@
+---
+title: "Multi-Armed Bandits"
+slug: "multi-armed-bandits"
+section: "Bandit Problems"
+description: "Master the exploration-exploitation tradeoff in the simplest RL setting"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "rl-framework"
+    title: "The RL Framework"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Multi-Armed Bandits
+
+<ChapterObjectives>
+- Formalize the multi-armed bandit problem and its key assumptions
+- Implement and analyze greedy and epsilon-greedy exploration strategies
+- Understand Upper Confidence Bound (UCB) and optimism in the face of uncertainty
+- Apply Thompson Sampling using Bayesian reasoning
+- Compare exploration strategies and know when to use each
+</ChapterObjectives>
+
+You're at a casino with k slot machines. Each has a different (unknown) probability of paying out. You have limited pulls. How do you maximize your winnings?
+
+Welcome to the **multi-armed bandit problem**—the simplest RL setting, and yet remarkably rich. Here, we'll develop the fundamental exploration strategies that power everything from online advertising to clinical trials.
+
+## Why Bandits?
+
+Before we tackle full reinforcement learning with states and transitions, let's master the core challenge: **exploration vs exploitation**. Bandits strip away everything else to focus on this fundamental tradeoff.
+
+<Note>
+The name "multi-armed bandit" comes from imagining a gambler facing multiple slot machines (one-armed bandits), trying to figure out which one pays best while maximizing winnings.
+</Note>
+
+## Chapter Overview
+
+This chapter develops the core exploration strategies used throughout RL:
+
+<div className="grid md:grid-cols-3 gap-4 my-6">
+  <a href="/chapters/multi-armed-bandits/bandit-problem" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">The Bandit Problem</h3>
+    <p className="text-slate-400 text-sm mt-1">Setup, action-values, and regret as our metric</p>
+  </a>
+  <a href="/chapters/multi-armed-bandits/greedy-methods" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">Greedy Methods</h3>
+    <p className="text-slate-400 text-sm mt-1">From pure exploitation to epsilon-greedy exploration</p>
+  </a>
+  <a href="/chapters/multi-armed-bandits/ucb" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">Upper Confidence Bound</h3>
+    <p className="text-slate-400 text-sm mt-1">Optimism in the face of uncertainty</p>
+  </a>
+</div>
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <a href="/chapters/multi-armed-bandits/thompson-sampling" className="block p-4 bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 rounded-lg border border-emerald-700/50 hover:border-emerald-500/50 transition-colors">
+    <h3 className="font-semibold text-emerald-400">Thompson Sampling</h3>
+    <p className="text-slate-400 text-sm mt-1">The Bayesian approach to exploration</p>
+  </a>
+  <a href="/chapters/multi-armed-bandits/comparing-strategies" className="block p-4 bg-gradient-to-br from-rose-900/30 to-rose-800/10 rounded-lg border border-rose-700/50 hover:border-rose-500/50 transition-colors">
+    <h3 className="font-semibold text-rose-400">Comparing Strategies</h3>
+    <p className="text-slate-400 text-sm mt-1">Empirical comparison and practical recommendations</p>
+  </a>
+</div>
+
+## The Big Picture
+
+Every exploration strategy reflects a different philosophy:
+
+- **Greedy**: Always exploit what you know
+- **Epsilon-greedy**: Mostly exploit, sometimes explore randomly
+- **UCB**: Explore where uncertainty is high
+- **Thompson Sampling**: Explore probabilistically based on beliefs
+
+There's no universal best—the right choice depends on your problem. By the end of this chapter, you'll understand the tradeoffs and know when to use each.
+
+<Definition title="Multi-Armed Bandit">
+A sequential decision problem where an agent repeatedly chooses among k actions ("arms") with unknown reward distributions, aiming to maximize cumulative reward over time.
+</Definition>
+
+## Prerequisites
+
+This chapter builds on:
+- The agent-environment loop from [The RL Framework](/chapters/rl-framework)
+- The exploration-exploitation tradeoff from [Exploration vs Exploitation](/chapters/rl-framework/exploration-exploitation)
+
+---
+
+<KeyTakeaways>
+- Bandits isolate the exploration-exploitation tradeoff from sequential decision-making
+- **Epsilon-greedy** explores randomly with fixed probability
+- **UCB** explores where uncertainty is high ("optimism in the face of uncertainty")
+- **Thompson Sampling** samples from posterior beliefs to balance exploration and exploitation
+- **Regret** measures how much reward we lost compared to always playing the best arm
+</KeyTakeaways>
+
+<NextChapter slug="contextual-bandits" title="Contextual Bandits" />

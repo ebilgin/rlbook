@@ -1,0 +1,104 @@
+---
+title: "Proximal Policy Optimization"
+slug: "ppo"
+section: "Policy Gradient Methods"
+description: "The most popular deep RL algorithm in practice"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "actor-critic"
+    title: "Actor-Critic Methods"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Proximal Policy Optimization (PPO)
+
+<ChapterObjectives>
+- Explain why large policy updates are dangerous
+- Understand the trust region concept and its importance
+- Implement PPO with the clipped surrogate objective
+- Tune PPO hyperparameters effectively
+- Train agents using PPO on standard benchmarks
+</ChapterObjectives>
+
+Policy gradient methods are powerful, but fragile. One bad update can destroy a good policy. TRPO solved this elegantly but with complex math. Then in 2017, OpenAI introduced PPO - a simpler algorithm that works just as well. Today, **PPO is the most popular deep RL algorithm in practice**.
+
+## Why PPO?
+
+The core insight is simple: **don't let the new policy get too far from the old one**.
+
+- TRPO enforces this with a KL divergence constraint solved via second-order optimization
+- PPO approximates this with a **clipped objective** that can be optimized with standard gradient descent
+
+The result: simpler code, similar performance, and remarkable robustness.
+
+## Chapter Overview
+
+This chapter explains PPO, the workhorse algorithm behind modern RL applications from game-playing agents to RLHF for language models.
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <a href="/chapters/ppo/trust-regions" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">Trust Regions</h3>
+    <p className="text-slate-400 text-sm mt-1">Why we need to limit how much policies can change</p>
+  </a>
+  <a href="/chapters/ppo/ppo-algorithm" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">The PPO Algorithm</h3>
+    <p className="text-slate-400 text-sm mt-1">Clipped surrogate objectives explained</p>
+  </a>
+  <a href="/chapters/ppo/why-ppo-works" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">Why PPO Works</h3>
+    <p className="text-slate-400 text-sm mt-1">Simplicity, stability, and performance</p>
+  </a>
+  <a href="/chapters/ppo/ppo-in-practice" className="block p-4 bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 rounded-lg border border-emerald-700/50 hover:border-emerald-500/50 transition-colors">
+    <h3 className="font-semibold text-emerald-400">PPO in Practice</h3>
+    <p className="text-slate-400 text-sm mt-1">Hyperparameters, tricks, and common pitfalls</p>
+  </a>
+</div>
+
+## The Big Picture
+
+<Definition title="Proximal Policy Optimization">
+A policy gradient algorithm that constrains policy updates by clipping the probability ratio between old and new policies. This prevents destructively large updates while maintaining simplicity.
+</Definition>
+
+<Mathematical>
+
+The PPO clipped objective:
+
+$$L^{\text{CLIP}}(\theta) = \mathbb{E}_t \left[ \min\left( r_t(\theta) \hat{A}_t, \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon) \hat{A}_t \right) \right]$$
+
+where $r_t(\theta) = \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{\text{old}}}(a_t|s_t)}$ is the probability ratio.
+
+</Mathematical>
+
+<Intuition>
+
+Think of PPO as a "cautious optimizer":
+
+- If an action looks good (positive advantage), increase its probability - but not too much
+- If an action looks bad (negative advantage), decrease its probability - but not too much
+- The clip prevents overreaction to any single batch of experience
+
+</Intuition>
+
+## Prerequisites
+
+This chapter assumes familiarity with:
+- The advantage function from [Actor-Critic Methods](/chapters/actor-critic)
+- GAE for advantage estimation
+- Basic policy gradient concepts
+
+---
+
+<KeyTakeaways>
+- Large policy updates can be **catastrophic** - trust regions prevent this
+- TRPO uses complex second-order optimization; PPO uses simple clipping
+- The **clipped objective** limits how much any update can change the policy
+- PPO is **robust** to hyperparameters and works across many domains
+- PPO powers modern applications including **RLHF for language models**
+</KeyTakeaways>
+
+<NextChapter slug="model-based-rl" title="Model-Based RL" />

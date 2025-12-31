@@ -1,0 +1,130 @@
+---
+title: "SARSA"
+slug: "sarsa"
+section: "Temporal Difference Learning"
+description: "On-policy TD control: learning while following your current policy"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "intro-to-td"
+    title: "Introduction to TD Learning"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# SARSA: On-Policy TD Control
+
+<ChapterObjectives>
+- Explain the transition from prediction to control
+- Implement SARSA for learning action values
+- Explain what "on-policy" means and its implications
+- Recognize when SARSA's cautious behavior is desirable
+- Train an agent to solve GridWorld using SARSA
+</ChapterObjectives>
+
+TD(0) learns $V^\pi$—the value of states under a policy. But to control behavior, we need to evaluate actions, not just states. SARSA is TD for action values—and it gets its name from the quintuple $(S, A, R, S', A')$ that defines each update.
+
+## Why SARSA?
+
+SARSA extends TD learning to **control problems** by learning action-values $Q(s,a)$ instead of state-values $V(s)$. The key insight is that SARSA learns the value of the policy it's actually following, including the exploration. This makes it "safe"—it learns to avoid dangerous states even if there's a risky shortcut.
+
+<Definition title="SARSA">
+An on-policy TD control algorithm that learns action values. The name comes from the tuple $(S_t, A_t, R_{t+1}, S_{t+1}, A_{t+1})$ used in each update. SARSA learns the value of the policy it follows, including exploration.
+</Definition>
+
+## The SARSA Update
+
+<Mathematical>
+
+The SARSA update rule:
+
+$$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha \left[ R_{t+1} + \gamma Q(S_{t+1}, A_{t+1}) - Q(S_t, A_t) \right]$$
+
+Notice the key difference from Q-learning (which we'll see next): SARSA uses the **actual next action** $A_{t+1}$, not the best possible action. This makes SARSA an **on-policy** method.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def sarsa_update(Q, state, action, reward, next_state, next_action,
+                 alpha=0.1, gamma=0.99, done=False):
+    """Single SARSA update."""
+    if done:
+        td_target = reward
+    else:
+        td_target = reward + gamma * Q[next_state][next_action]
+
+    td_error = td_target - Q[state][action]
+    Q[state][action] += alpha * td_error
+    return td_error
+```
+
+</Implementation>
+
+## Chapter Overview
+
+This chapter introduces SARSA—the first TD control algorithm. We'll cover:
+
+<div className="grid md:grid-cols-3 gap-4 my-6">
+  <a href="/chapters/sarsa/from-prediction-to-control" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">From Prediction to Control</h3>
+    <p className="text-slate-400 text-sm mt-1">Why we need action values and how GPI works with TD</p>
+  </a>
+  <a href="/chapters/sarsa/sarsa-algorithm" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">The SARSA Algorithm</h3>
+    <p className="text-slate-400 text-sm mt-1">Complete algorithm with implementation and worked examples</p>
+  </a>
+  <a href="/chapters/sarsa/on-policy-behavior" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">On-Policy Behavior</h3>
+    <p className="text-slate-400 text-sm mt-1">The Cliff Walking example and why SARSA is safe</p>
+  </a>
+</div>
+
+## Prerequisites
+
+This chapter assumes you're comfortable with:
+- [Introduction to TD Learning](/chapters/intro-to-td) — TD(0) and the TD error
+- [The RL Framework](/chapters/rl-framework/policies-values) — Value functions and policies
+
+## Key Questions We'll Answer
+
+- Why do we need action values for control?
+- What does "on-policy" mean and why does it matter?
+- Why is SARSA considered "safe" or "cautious"?
+- When should you choose SARSA over other methods?
+
+## The Big Picture
+
+<Intuition>
+
+SARSA sits at a crucial point in the RL landscape:
+
+- It's the first **control** algorithm we've seen that learns from experience
+- Unlike policy evaluation, it can actually find good policies
+- Unlike Q-learning (coming next), it accounts for exploration in its values
+
+The name itself encodes the algorithm: at each step, you have State, take Action, get Reward, enter new State, and pick the next Action. Then you update.
+
+</Intuition>
+
+| From | To | What Changes |
+|------|-----|--------------|
+| TD(0) | SARSA | State values → Action values |
+| DP | SARSA | Model-based → Model-free |
+| MC Control | SARSA | Episode end → Every step |
+
+---
+
+<KeyTakeaways>
+- SARSA learns **action values** $Q(s,a)$ using TD updates
+- It's called SARSA because each update uses $(S, A, R, S', A')$
+- **On-policy**: SARSA learns the value of the policy it follows
+- SARSA is "safe" because it accounts for exploration in its value estimates
+- The learned values reflect $Q^\pi$ for the exploratory policy, not $Q^*$
+- Choose SARSA when exploration is costly and safety matters
+</KeyTakeaways>
+
+<NextChapter slug="q-learning" title="Q-Learning" />

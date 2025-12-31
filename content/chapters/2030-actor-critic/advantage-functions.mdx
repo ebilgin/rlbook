@@ -1,0 +1,422 @@
+---
+title: "Advantage Functions"
+slug: "advantage-functions"
+section: "Policy Gradient Methods"
+description: "How much better is this action than average?"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Advantage Functions
+
+The advantage function is one of the most important concepts in modern reinforcement learning. It answers a crucial question: **how much better is this specific action compared to what we'd typically do in this state?**
+
+## Definition and Intuition
+
+<Definition title="Advantage Function">
+
+The advantage of taking action $a$ in state $s$ under policy $\pi$:
+
+$$A^\pi(s, a) = Q^\pi(s, a) - V^\pi(s)$$
+
+Where:
+- $Q^\pi(s, a)$ is the expected return from taking action $a$ in state $s$, then following $\pi$
+- $V^\pi(s)$ is the expected return from state $s$ when following $\pi$
+
+The advantage measures **relative action quality** - how much better or worse an action is compared to the average.
+
+</Definition>
+
+<Intuition>
+
+Think of evaluating a basketball shot:
+
+- **Q-value**: "This shot has a 40% chance of going in" (absolute quality)
+- **V-value**: "From this spot on the court, I typically make 35% of my shots" (baseline)
+- **Advantage**: "This shot is 5% better than my typical shot from here" (relative quality)
+
+The advantage tells you whether to reinforce or suppress an action, regardless of whether the state is inherently good or bad.
+
+</Intuition>
+
+## Why Use Advantages?
+
+### The Problem with Raw Returns
+
+<Intuition>
+
+Consider two states in a game:
+
+**State A** (winning position): Expected return = +100
+**State B** (losing position): Expected return = -50
+
+If you take an action in State A and get return +90, that's actually **below average** - you did worse than expected. But REINFORCE with raw returns would still reinforce this action strongly (return of +90 is high).
+
+If you take an action in State B and get return -40, that's **above average** - you did better than expected! REINFORCE might not reinforce this enough because the absolute return is negative.
+
+Advantages fix this by measuring relative performance.
+
+</Intuition>
+
+<Example>
+
+**State A**: You're up by 50 points with 1 minute left.
+- Average return from here: +100 (you usually win big)
+- You take a risky action and get return +80
+- **Advantage = 80 - 100 = -20** (you did worse than usual, suppress this action)
+
+**State B**: You're down by 50 points with 1 minute left.
+- Average return from here: -80 (you usually lose)
+- You take a heroic action and get return -50
+- **Advantage = -50 - (-80) = +30** (you did better than usual, reinforce this action!)
+
+</Example>
+
+### Variance Reduction
+
+<Mathematical>
+
+Using advantages instead of returns reduces variance because:
+
+1. **Centering**: Since $\mathbb{E}_{a \sim \pi}[A^\pi(s,a)] = 0$, advantages are centered around zero
+
+2. **Smaller magnitude**: Advantages are typically smaller than returns (they're differences)
+
+3. **State-dependent baseline**: $V(s)$ provides an optimal baseline for each state
+
+The policy gradient with advantages:
+
+$$\nabla_\theta J(\theta) = \mathbb{E}\left[ \sum_t \nabla_\theta \log \pi_\theta(a_t|s_t) \cdot A^\pi(s_t, a_t) \right]$$
+
+This has lower variance than using returns $G_t$ while remaining unbiased (if $A$ is computed correctly).
+
+</Mathematical>
+
+## Relationships Between Q, V, and A
+
+<Mathematical>
+
+The three value functions are intimately connected:
+
+**From Q to V:**
+$$V^\pi(s) = \mathbb{E}_{a \sim \pi}[Q^\pi(s,a)] = \sum_a \pi(a|s) Q^\pi(s,a)$$
+
+**From V to Q (Bellman):**
+$$Q^\pi(s,a) = \mathbb{E}[r + \gamma V^\pi(s') | s, a]$$
+
+**Advantage from Q and V:**
+$$A^\pi(s,a) = Q^\pi(s,a) - V^\pi(s)$$
+
+**Key property - advantages average to zero:**
+$$\mathbb{E}_{a \sim \pi}[A^\pi(s,a)] = \mathbb{E}_{a \sim \pi}[Q^\pi(s,a)] - V^\pi(s) = V^\pi(s) - V^\pi(s) = 0$$
+
+</Mathematical>
+
+<Intuition>
+
+These relationships make sense intuitively:
+
+- **V is the average of Q**: The value of a state is the average value of all actions weighted by policy
+- **A is Q minus V**: How much better is this action than the average?
+- **A averages to zero**: Some actions are above average, some below; they cancel out
+
+</Intuition>
+
+## Estimating Advantages
+
+We rarely know the true advantage. Instead, we estimate it from experience.
+
+### Monte Carlo Estimate
+
+<Mathematical>
+
+The simplest estimate uses the actual return:
+
+$$\hat{A}_t^{MC} = G_t - V(s_t)$$
+
+where $G_t = \sum_{k=t}^{T} \gamma^{k-t} r_{k+1}$ is the observed return.
+
+**Properties:**
+- Unbiased (if $V = V^\pi$)
+- High variance (returns are noisy)
+- Requires waiting for episode end
+
+</Mathematical>
+
+### TD Error Estimate
+
+<Mathematical>
+
+The one-step TD error provides a biased but low-variance estimate:
+
+$$\hat{A}_t^{TD} = \delta_t = r_{t+1} + \gamma V(s_{t+1}) - V(s_t)$$
+
+**Why this works:** If $V \approx V^\pi$, then:
+$$\delta_t = r_{t+1} + \gamma V(s_{t+1}) - V(s_t) \approx Q(s_t, a_t) - V(s_t) = A(s_t, a_t)$$
+
+**Properties:**
+- Biased (uses approximate $V$)
+- Low variance (only one step of randomness)
+- Can update at every step
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def compute_td_advantage(reward, value, next_value, done, gamma=0.99):
+    """
+    Compute one-step TD advantage estimate.
+
+    Args:
+        reward: Immediate reward received
+        value: V(s_t) - value of current state
+        next_value: V(s_{t+1}) - value of next state
+        done: Whether episode ended
+        gamma: Discount factor
+
+    Returns:
+        TD error as advantage estimate
+    """
+    if done:
+        # Terminal state has value 0
+        td_target = reward
+    else:
+        td_target = reward + gamma * next_value
+
+    advantage = td_target - value
+    return advantage
+
+
+def compute_mc_advantage(returns, values):
+    """
+    Compute Monte Carlo advantage estimates.
+
+    Args:
+        returns: Tensor of returns [G_0, G_1, ..., G_{T-1}]
+        values: Tensor of values [V(s_0), V(s_1), ..., V(s_{T-1})]
+
+    Returns:
+        Advantage estimates
+    """
+    return returns - values
+```
+
+</Implementation>
+
+### N-Step Estimates
+
+<Mathematical>
+
+We can blend MC and TD by using n-step returns:
+
+$$G_t^{(n)} = \sum_{k=0}^{n-1} \gamma^k r_{t+k+1} + \gamma^n V(s_{t+n})$$
+
+The n-step advantage estimate:
+
+$$\hat{A}_t^{(n)} = G_t^{(n)} - V(s_t)$$
+
+**Spectrum:**
+- $n=1$: TD (high bias, low variance)
+- $n=\infty$: MC (low bias, high variance)
+- $n$ in between: Balanced tradeoff
+
+</Mathematical>
+
+<Intuition>
+
+Think of n-step returns as "how far to trust reality vs. estimates":
+
+- **1-step**: Use one real reward, then trust the value function
+- **5-step**: Use five real rewards, then trust the value function
+- **Full episode**: Use all real rewards, don't trust the value function at all
+
+More real rewards = less bias, more variance.
+
+</Intuition>
+
+<Implementation>
+
+```python
+def compute_n_step_returns(rewards, values, last_value, n, gamma=0.99):
+    """
+    Compute n-step returns for advantage estimation.
+
+    Args:
+        rewards: List of rewards
+        values: List of value estimates
+        last_value: Bootstrap value at the end
+        n: Number of steps to use
+        gamma: Discount factor
+
+    Returns:
+        n-step returns for each timestep
+    """
+    T = len(rewards)
+    returns = []
+
+    for t in range(T):
+        G = 0
+        # Sum actual rewards for n steps (or until episode end)
+        for k in range(min(n, T - t)):
+            G += (gamma ** k) * rewards[t + k]
+
+        # Bootstrap with value function if not at episode end
+        if t + n < T:
+            G += (gamma ** n) * values[t + n]
+        elif t + n == T:
+            G += (gamma ** n) * last_value
+
+        returns.append(G)
+
+    return torch.tensor(returns, dtype=torch.float32)
+```
+
+</Implementation>
+
+## Properties of the Advantage
+
+### Sign Indicates Direction
+
+<Intuition>
+
+The sign of the advantage tells the policy gradient which way to push:
+
+- **$A > 0$**: Action was better than average. Increase its probability.
+- **$A < 0$**: Action was worse than average. Decrease its probability.
+- **$A = 0$**: Action was exactly average. No update needed.
+
+This is why advantages are natural for policy gradients - the sign directly determines the update direction.
+
+</Intuition>
+
+### Magnitude Indicates Strength
+
+<Intuition>
+
+The magnitude of the advantage determines update strength:
+
+- **Large positive $A$**: Strong reinforcement - "This was much better than usual!"
+- **Small positive $A$**: Weak reinforcement - "This was slightly better than usual."
+- **Large negative $A$**: Strong suppression - "This was much worse than usual!"
+- **Small negative $A$**: Weak suppression - "This was slightly worse than usual."
+
+This makes gradient updates proportional to how surprising/informative the outcome was.
+
+</Intuition>
+
+### State-Independent on Average
+
+<Mathematical>
+
+A key property: the expected advantage is zero in every state:
+
+$$\mathbb{E}_{a \sim \pi}[A^\pi(s,a)] = 0 \quad \forall s$$
+
+This means in any state, advantages center around zero. Some actions are positive (above average), some negative (below average), and they balance out.
+
+This centering is one reason advantages reduce variance compared to returns.
+
+</Mathematical>
+
+## Advantages in the Policy Gradient
+
+<Mathematical>
+
+The policy gradient can be written in terms of advantages:
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{s \sim d^\pi, a \sim \pi_\theta}\left[ \nabla_\theta \log \pi_\theta(a|s) \cdot A^\pi(s, a) \right]$$
+
+This is equivalent to using Q-values:
+
+$$= \mathbb{E}\left[ \nabla_\theta \log \pi_\theta(a|s) \cdot Q^\pi(s, a) \right]$$
+
+Or returns with baseline:
+
+$$= \mathbb{E}\left[ \nabla_\theta \log \pi_\theta(a|s) \cdot (G_t - V^\pi(s)) \right]$$
+
+All three are mathematically equivalent, but advantages provide the best variance reduction.
+
+</Mathematical>
+
+## Implementation Patterns
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class AdvantageEstimator:
+    """
+    Computes advantage estimates using various methods.
+    """
+
+    def __init__(self, gamma=0.99):
+        self.gamma = gamma
+
+    def td_advantage(self, rewards, values, next_values, dones):
+        """
+        One-step TD advantage: delta = r + gamma * V(s') - V(s)
+        """
+        td_targets = rewards + self.gamma * next_values * (1 - dones)
+        return td_targets - values
+
+    def mc_advantage(self, rewards, values, dones):
+        """
+        Monte Carlo advantage: G - V(s)
+        """
+        returns = self._compute_returns(rewards, dones)
+        return returns - values
+
+    def _compute_returns(self, rewards, dones):
+        """Compute discounted returns."""
+        returns = []
+        G = 0
+        for r, d in zip(reversed(rewards), reversed(dones)):
+            if d:
+                G = 0
+            G = r + self.gamma * G
+            returns.insert(0, G)
+        return torch.tensor(returns, dtype=torch.float32)
+
+
+def policy_gradient_with_advantage(policy, states, actions, advantages):
+    """
+    Compute policy gradient using advantages.
+
+    Args:
+        policy: Policy network
+        states: Batch of states
+        actions: Batch of actions taken
+        advantages: Advantage estimates
+
+    Returns:
+        Policy loss (to be minimized)
+    """
+    # Get log probabilities
+    log_probs = policy.log_prob(states, actions)
+
+    # Policy gradient loss: -E[log_pi * A]
+    # Negative because we minimize loss (equivalent to maximizing objective)
+    policy_loss = -(log_probs * advantages).mean()
+
+    return policy_loss
+```
+
+</Implementation>
+
+## Summary
+
+The advantage function is central to modern policy gradient methods:
+
+- **Definition**: $A(s,a) = Q(s,a) - V(s)$ - how much better than average
+- **Sign**: Positive = reinforce, Negative = suppress
+- **Variance reduction**: Centering and state-dependent baseline
+- **Estimation**: TD error (biased, low variance) or MC (unbiased, high variance)
+- **N-step blending**: Trade off bias and variance
+
+The next section shows how to use advantages in A2C, and the following section introduces GAE - a principled way to blend different advantage estimates.

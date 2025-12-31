@@ -1,0 +1,347 @@
+---
+title: "Why Context Matters"
+slug: "context-matters"
+section: "Bandit Problems"
+description: "From bandits to personalized decisions"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Why Context Matters
+
+In multi-armed bandits, we searched for a single best arm—one action that's optimal for everyone. But many real problems have a crucial missing ingredient: **context**. Different situations call for different decisions.
+
+A news website shouldn't show the same headline to everyone. A sports fan wants game scores; a tech enthusiast wants startup news. The best arm depends on *who's asking*.
+
+Welcome to **contextual bandits**—where we learn to personalize decisions.
+
+## The Limitation of One-Size-Fits-All
+
+<Intuition>
+
+Consider running a news website. You have 5 headline slots and need to choose which article to feature. In the standard bandit framework:
+
+- Run the site for a week
+- Track which headlines get the most clicks
+- Converge on the "best" headline
+- Show it to everyone
+
+But this ignores a massive opportunity. Different users have different interests:
+
+| User Type | Best Article Category | Click Rate on Sports | Click Rate on Tech |
+|-----------|----------------------|---------------------|-------------------|
+| Sports fan | Sports | 80% | 10% |
+| Tech enthusiast | Tech | 20% | 70% |
+| General reader | Either | 40% | 40% |
+
+A standard bandit might conclude "Sports headlines get 50% clicks overall, Tech gets 40%—show Sports to everyone."
+
+But if you could identify the user type first, you could show Sports to sports fans (80% clicks) and Tech to tech enthusiasts (70% clicks). That's much better than 50% for everyone!
+
+</Intuition>
+
+<Example title="The Cost of Ignoring Context">
+
+Let's quantify the opportunity cost:
+
+**Standard Bandit (one arm for all)**:
+- Population: 50% sports fans, 50% tech enthusiasts
+- Best overall: Sports (50% sports fans x 80% + 50% tech enthusiasts x 20% = 50% average CTR)
+- Show Sports to everyone: 50% CTR
+
+**Contextual Bandit (personalized)**:
+- Sports fans see Sports: 80% CTR
+- Tech enthusiasts see Tech: 70% CTR
+- Overall: 50% x 80% + 50% x 70% = 75% CTR
+
+By using context, we improved CTR from 50% to 75%—a 50% relative improvement! This is the power of personalization.
+
+</Example>
+
+## Introducing Context
+
+<Definition title="Context (Feature Vector)">
+A vector of features $x \in \mathbb{R}^d$ that describes the current situation. Context is observed before making a decision and helps predict which action will be best.
+</Definition>
+
+<Intuition>
+
+Context is any information available before you choose an action:
+
+**User context** (who is this?):
+- Demographics (age, location)
+- Past behavior (browsing history, purchase history)
+- Device type (mobile, desktop)
+- Time of visit
+
+**Situational context** (what's happening?):
+- Time of day, day of week
+- Current weather
+- Trending topics
+- Recent site activity
+
+**Item context** (what are the options?):
+- Article category, length, recency
+- Product features, price, ratings
+- Ad creative details
+
+The key insight: context helps us predict how good each action will be *for this specific situation*.
+
+</Intuition>
+
+## The Contextual Bandit Framework
+
+<Mathematical>
+
+A contextual bandit problem consists of:
+
+1. **Context space** $\mathcal{X} \subseteq \mathbb{R}^d$: The set of possible contexts
+2. **Action space** $\mathcal{A} = \{1, \ldots, k\}$: The set of arms/actions
+3. **Reward function**: For each arm $a$, there's a function $f_a: \mathcal{X} \to \mathbb{R}$ that determines expected reward given context
+
+At each round $t$:
+1. Environment generates context $x_t \in \mathcal{X}$
+2. Agent observes $x_t$ and selects action $a_t \in \mathcal{A}$
+3. Agent receives reward $r_t = f_{a_t}(x_t) + \varepsilon_t$ where $\varepsilon_t$ is noise
+
+The goal is to maximize cumulative reward:
+$$\sum_{t=1}^T r_t = \sum_{t=1}^T f_{a_t}(x_t) + \varepsilon_t$$
+
+Or equivalently, minimize regret relative to always picking the best arm for each context:
+$$\text{Regret}(T) = \sum_{t=1}^T \left[ \max_a f_a(x_t) - f_{a_t}(x_t) \right]$$
+
+</Mathematical>
+
+<Intuition>
+
+The key difference from standard bandits:
+- **Standard bandit**: Find the single best arm
+- **Contextual bandit**: Find the best arm *for each context*
+
+We're learning a **policy** $\pi: \mathcal{X} \to \mathcal{A}$ that maps contexts to actions, not just picking a single action.
+
+</Intuition>
+
+## Linear Reward Models
+
+<Intuition>
+
+How do we model the relationship between context and reward? The simplest approach: assume rewards are linear in the features.
+
+$$\text{Expected reward for arm } a \text{ with context } x = x^\top \theta_a$$
+
+where $\theta_a \in \mathbb{R}^d$ is a weight vector for arm $a$.
+
+For example, if context is $x = [\text{age}, \text{is\_mobile}, \text{time\_of\_day}]$:
+- Sports arm might have $\theta_{\text{sports}} = [0.02, -0.1, 0.05]$
+- Tech arm might have $\theta_{\text{tech}} = [-0.01, 0.15, 0.02]$
+
+Then a 25-year-old on mobile at noon would have:
+- Sports expected reward: $25 \times 0.02 + 1 \times (-0.1) + 12 \times 0.05 = 1.0$
+- Tech expected reward: $25 \times (-0.01) + 1 \times 0.15 + 12 \times 0.02 = 0.14$
+
+Sports is predicted to be better for this user.
+
+</Intuition>
+
+<Mathematical>
+
+Formally, we assume:
+
+$$\mathbb{E}[r_t | x_t, a_t] = x_t^\top \theta_{a_t}$$
+
+This is the **linear reward model**. Each arm has its own parameter vector $\theta_a$, and we learn these from data.
+
+Given observations $(x_1, a_1, r_1), \ldots, (x_n, a_n, r_n)$, we can estimate $\theta_a$ using ridge regression on the data where arm $a$ was selected:
+
+$$\hat{\theta}_a = \left(\sum_{t: a_t = a} x_t x_t^\top + \lambda I\right)^{-1} \sum_{t: a_t = a} r_t x_t$$
+
+The regularization term $\lambda I$ prevents overfitting when we have few samples.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class ContextualBandit:
+    """
+    A contextual bandit environment with linear rewards.
+
+    Each arm has a true weight vector. Rewards are linear
+    in features plus Gaussian noise.
+    """
+
+    def __init__(self, n_arms: int, n_features: int, noise_std: float = 0.1):
+        self.n_arms = n_arms
+        self.n_features = n_features
+        self.noise_std = noise_std
+
+        # True weight vectors (unknown to the agent)
+        self.theta = np.random.randn(n_arms, n_features)
+        # Normalize so rewards are roughly in [0, 1]
+        self.theta = self.theta / (n_features ** 0.5)
+
+    def get_context(self) -> np.ndarray:
+        """Generate a random context vector."""
+        return np.random.randn(self.n_features)
+
+    def get_reward(self, context: np.ndarray, arm: int) -> float:
+        """Return noisy reward for selecting arm given context."""
+        expected = context @ self.theta[arm]
+        return expected + np.random.randn() * self.noise_std
+
+    def get_optimal_arm(self, context: np.ndarray) -> int:
+        """Return the best arm for this context (for evaluation)."""
+        expected_rewards = context @ self.theta.T
+        return np.argmax(expected_rewards)
+
+    def get_optimal_reward(self, context: np.ndarray) -> float:
+        """Return the expected reward of the optimal arm."""
+        expected_rewards = context @ self.theta.T
+        return np.max(expected_rewards)
+
+
+# Example usage
+bandit = ContextualBandit(n_arms=5, n_features=10)
+
+# Simulate some interactions
+for _ in range(10):
+    context = bandit.get_context()
+    optimal = bandit.get_optimal_arm(context)
+    rewards = [bandit.get_reward(context, a) for a in range(5)]
+    print(f"Optimal arm: {optimal}, Rewards: {[f'{r:.2f}' for r in rewards]}")
+```
+
+</Implementation>
+
+## Context is NOT State
+
+<Warning>
+**Don't Confuse Context with State**
+
+A crucial distinction:
+- **Context** is observed before the action and doesn't change due to your action
+- **State** (in full RL) changes as a result of your actions
+
+In contextual bandits:
+- A user arrives with context $x$ (their profile)
+- You show them an article
+- They click or don't
+- **The user leaves**—your action didn't change anything about future users
+
+In full RL (MDPs):
+- You're in state $s$
+- You take action $a$
+- You transition to a new state $s'$ that **depends on your action**
+- Future rewards depend on where your action took you
+
+Contextual bandits are "one-shot" decisions. If your recommendations affect future user preferences (filter bubbles), you need full RL.
+</Warning>
+
+<Intuition>
+
+Here's the key test: **Does your action affect the next context you see?**
+
+**Contextual bandit (action doesn't affect future)**:
+- Showing an ad to a user
+- Recommending a movie to a random visitor
+- Selecting a news headline
+- Choosing a treatment for independent patients
+
+**Full RL (action affects future)**:
+- Playing a game (moves change the board)
+- Robot navigation (position changes)
+- Dialogue systems (conversation evolves)
+- Long-term recommendations (preferences shift)
+
+</Intuition>
+
+## Why Not Separate Bandits?
+
+<Intuition>
+
+You might wonder: "Why not just run a separate bandit for each possible context?"
+
+The problem is **context is usually continuous or high-dimensional**. If your context is a 100-dimensional user embedding, you'll never see the exact same context twice!
+
+We need to **generalize** across contexts. If two users have similar features, their preferences are probably similar. This is where function approximation (like linear models) comes in—we learn smooth relationships between context and reward.
+
+</Intuition>
+
+<Example title="The Generalization Advantage">
+
+Suppose you have:
+- 1 million possible users (contexts)
+- 10 arms
+- 10,000 total impressions
+
+**Separate bandits approach**:
+- Each user-arm combination needs its own estimate
+- 10 million parameters to learn
+- Most users seen only once—no learning possible!
+
+**Contextual bandit with 50-dimensional features**:
+- 10 arms x 50 features = 500 parameters total
+- Learning generalizes across similar users
+- Even users seen once benefit from information about similar users
+
+The linear model lets us transfer knowledge: "Users who like sports also tend to like fitness articles" is captured in the learned weights.
+
+</Example>
+
+## Exploration in Context Space
+
+<Intuition>
+
+Exploration becomes more nuanced with context. In standard bandits, we asked: "Should I try this arm more?"
+
+In contextual bandits, we ask: "Should I try this arm *for contexts like this one*?"
+
+An arm might be well-understood for some contexts but not others. If we've never seen a teenager on mobile asking for news, we're uncertain about which headline they'd prefer—even if we've learned a lot about other demographics.
+
+This leads to algorithms like LinUCB that explore based on **uncertainty in predictions for the current context**, not just global arm uncertainty.
+
+</Intuition>
+
+<Mathematical>
+
+In the linear model, our uncertainty about the expected reward $x^\top \theta_a$ depends on:
+
+1. **How well we've estimated $\theta_a$**: More samples = lower uncertainty
+2. **How similar $x$ is to past contexts**: If $x$ is unlike anything we've seen, we're uncertain
+
+The covariance matrix $A_a^{-1}$ captures both:
+
+$$\text{Var}(x^\top \hat{\theta}_a) \propto x^\top A_a^{-1} x$$
+
+where $A_a = \sum_{t: a_t = a} x_t x_t^\top + \lambda I$.
+
+High variance means high uncertainty—and that's where we should explore.
+
+</Mathematical>
+
+## Summary: From Bandits to Contextual Bandits
+
+<Intuition>
+
+| Aspect | Multi-Armed Bandits | Contextual Bandits |
+|--------|--------------------|--------------------|
+| **Goal** | Find one best arm | Find best arm per context |
+| **Input** | Nothing (same each round) | Context vector $x$ |
+| **Output** | Action $a$ | Policy $\pi(x) \to a$ |
+| **Reward model** | $\mu_a$ (constant per arm) | $f_a(x)$ (function of context) |
+| **Exploration** | Per-arm uncertainty | Per-context uncertainty |
+| **Generalization** | None needed | Across similar contexts |
+
+</Intuition>
+
+The key insight: contextual bandits learn to **personalize** decisions by using features that predict which action will be best. This is the foundation of modern recommendation systems, ad selection, and many other applications.
+
+In the next section, we'll see LinUCB—the workhorse algorithm for contextual bandits that elegantly extends UCB to handle context.
+
+<Note>
+Contextual bandits sit between simple bandits and full RL. They're more powerful than bandits (they personalize) but simpler than RL (no sequential dependencies). This sweet spot makes them extremely practical for real-world applications.
+</Note>

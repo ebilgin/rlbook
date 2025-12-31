@@ -1,0 +1,351 @@
+---
+title: "The Policy Improvement Theorem"
+slug: "improvement-theorem"
+section: "Dynamic Programming"
+description: "Why greedy improvement always works"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# The Policy Improvement Theorem
+
+The policy improvement theorem is one of the most beautiful results in reinforcement learning. It tells us that acting greedily with respect to a value function can never make things worse, and usually makes things better.
+
+This simple guarantee is the foundation of both policy iteration and value iteration.
+
+## The Greedy Policy
+
+<Definition title="Greedy Policy">
+Given a value function $V$, the greedy policy selects the action that maximizes the expected one-step return:
+
+$$\pi'(s) = \arg\max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V(s') \right]$$
+</Definition>
+
+<Intuition>
+
+Think of it as a one-step lookahead. For each action, you ask: "If I take this action, I get some immediate reward. Then I end up in a new state, which has some value according to my current estimates. Which action maximizes this total?"
+
+The greedy policy always picks the action with the highest answer.
+
+</Intuition>
+
+<Implementation>
+
+```python
+def compute_greedy_policy(mdp, V, gamma=0.99):
+    """
+    Compute the greedy policy with respect to value function V.
+
+    Args:
+        mdp: MDP with states, actions(s), transitions(s, a)
+        V: dict mapping state -> value
+        gamma: discount factor
+
+    Returns:
+        policy: dict mapping state -> best action
+    """
+    policy = {}
+
+    for s in mdp.states:
+        if hasattr(mdp, 'terminal_states') and s in mdp.terminal_states:
+            policy[s] = None  # No action in terminal states
+            continue
+
+        best_action = None
+        best_value = float('-inf')
+
+        for a in mdp.actions(s):
+            # Compute Q(s, a) = expected reward + discounted future value
+            action_value = 0.0
+            for s_next, prob, reward in mdp.transitions(s, a):
+                action_value += prob * (reward + gamma * V[s_next])
+
+            if action_value > best_value:
+                best_value = action_value
+                best_action = a
+
+        policy[s] = best_action
+
+    return policy
+```
+
+</Implementation>
+
+## The Q-Function Connection
+
+The greedy policy is choosing the action that maximizes $Q^\pi(s, a)$, the action-value function.
+
+<Mathematical>
+
+Recall that the action-value function is:
+
+$$Q^\pi(s, a) = R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^\pi(s')$$
+
+This is exactly what we are maximizing! The greedy policy is:
+
+$$\pi'(s) = \arg\max_a Q^\pi(s, a)$$
+
+The Q-function tells us: "If I take action $a$ in state $s$, then follow policy $\pi$ forever after, what return do I expect?"
+
+The greedy policy says: "Always take the action with the highest Q-value."
+
+</Mathematical>
+
+## The Theorem
+
+Now we come to the key result.
+
+<Definition title="Policy Improvement Theorem">
+Let $\pi$ and $\pi'$ be two policies such that for all states $s$:
+
+$$Q^\pi(s, \pi'(s)) \geq V^\pi(s)$$
+
+Then $\pi'$ is at least as good as $\pi$ for all states:
+
+$$V^{\pi'}(s) \geq V^\pi(s) \text{ for all } s$$
+
+If the inequality is strict for any state where $\pi' \neq \pi$, then $\pi'$ is strictly better overall.
+</Definition>
+
+<Intuition>
+
+The theorem says: if you find an action that looks better than what the current policy would do (even just for one step), and you take that action instead, you cannot make things worse overall.
+
+This is remarkable. You might worry: "What if being greedy now hurts me later?" The theorem guarantees this never happens. Local greed leads to global improvement.
+
+</Intuition>
+
+### Why It Works
+
+<Mathematical>
+
+**Proof Sketch:**
+
+Start from the assumption: $Q^\pi(s, \pi'(s)) \geq V^\pi(s)$ for all $s$.
+
+This means:
+$$V^\pi(s) \leq Q^\pi(s, \pi'(s))$$
+$$= R(s, \pi'(s)) + \gamma \sum_{s'} P(s'|s, \pi'(s)) V^\pi(s')$$
+
+Now we use the key trick. The value $V^\pi(s')$ for each next state $s'$ also satisfies the same inequality:
+$$V^\pi(s') \leq Q^\pi(s', \pi'(s'))$$
+$$= R(s', \pi'(s')) + \gamma \sum_{s''} P(s''|s', \pi'(s')) V^\pi(s'')$$
+
+Substituting back:
+$$V^\pi(s) \leq R(s, \pi'(s)) + \gamma \sum_{s'} P(s'|s, \pi'(s)) \left[ R(s', \pi'(s')) + \gamma \sum_{s''} P(s''|s', \pi'(s')) V^\pi(s'') \right]$$
+
+We can keep unrolling this. After infinite unrolling, we get:
+$$V^\pi(s) \leq \mathbb{E}_{\pi'}\left[ R_1 + \gamma R_2 + \gamma^2 R_3 + ... | S_0 = s \right] = V^{\pi'}(s)$$
+
+The left side is bounded by what we get if we follow $\pi'$ forever, which is exactly $V^{\pi'}(s)$.
+
+</Mathematical>
+
+## A Worked Example
+
+<Example title="Improving a Random Policy">
+
+Consider a simple 3-state MDP:
+
+```
+State A: Can go to B (action 'right') or stay in A (action 'stay')
+State B: Can go to C (action 'right') or go to A (action 'left')
+State C: Terminal with reward +10
+```
+
+All transitions have reward -1 except the transition B to C which gives +10. Let $\gamma = 0.9$.
+
+**Step 1: Start with a random policy**
+
+$$\pi(A) = \text{right with prob 0.5, stay with prob 0.5}$$
+$$\pi(B) = \text{right with prob 0.5, left with prob 0.5}$$
+
+**Step 2: Evaluate this policy**
+
+After running policy evaluation, we find:
+- $V^\pi(A) \approx 3.5$
+- $V^\pi(B) \approx 5.5$
+- $V^\pi(C) = 0$
+
+**Step 3: Compute Q-values**
+
+For state A:
+- $Q^\pi(A, \text{right}) = -1 + 0.9 \times 5.5 = 3.95$
+- $Q^\pi(A, \text{stay}) = -1 + 0.9 \times 3.5 = 2.15$
+
+For state B:
+- $Q^\pi(B, \text{right}) = 10 + 0.9 \times 0 = 10$
+- $Q^\pi(B, \text{left}) = -1 + 0.9 \times 3.5 = 2.15$
+
+**Step 4: Construct greedy policy**
+
+$$\pi'(A) = \text{right (since 3.95 > 2.15)}$$
+$$\pi'(B) = \text{right (since 10 > 2.15)}$$
+
+**Step 5: Verify improvement**
+
+The new policy always goes right. Evaluating it:
+- $V^{\pi'}(A) = -1 + 0.9 \times V^{\pi'}(B) = -1 + 0.9 \times 10 = 8$
+- $V^{\pi'}(B) = 10$
+
+Indeed, $V^{\pi'}(A) = 8 > 3.5 = V^\pi(A)$ and $V^{\pi'}(B) = 10 > 5.5 = V^\pi(B)$.
+
+The greedy policy is strictly better!
+
+</Example>
+
+## When Does Improvement Stop?
+
+<Tip>
+The greedy improvement process stops when the greedy policy equals the current policy. At this point:
+
+$$\pi'(s) = \arg\max_a Q^\pi(s, a) = \pi(s) \text{ for all } s$$
+
+This means the current policy is already greedy with respect to its own value function. Such a policy satisfies the **Bellman optimality equation** and is therefore optimal.
+</Tip>
+
+<Mathematical>
+
+When $\pi = \pi'$ (the policy no longer changes), we have:
+
+$$V^\pi(s) = \max_a Q^\pi(s, a) = \max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V^\pi(s') \right]$$
+
+This is exactly the Bellman optimality equation! Therefore, $V^\pi = V^*$ and $\pi = \pi^*$.
+
+</Mathematical>
+
+## Why This Is Remarkable
+
+<Intuition>
+
+Consider why this theorem is surprising:
+
+1. **Greedy is not usually optimal.** In many settings, being greedy leads to suboptimal outcomes. Eating dessert first feels great now but is not optimal for health. The policy improvement theorem tells us that for MDPs with accurate value functions, greedy actually IS optimal.
+
+2. **Local changes give global improvement.** We only look one step ahead when computing the greedy action. Yet the improvement is not just one step; the new policy is better from every state for all time.
+
+3. **We cannot get stuck.** Either the greedy policy is different (and better), or it is the same (and optimal). There is no local optimum trap.
+
+</Intuition>
+
+## Stochastic Policies
+
+So far we have discussed deterministic greedy policies. What about stochastic policies?
+
+<Mathematical>
+
+For stochastic policies, the improvement theorem still holds. If $\pi'$ is greedy with respect to $V^\pi$, meaning:
+
+$$\pi'(a|s) > 0 \text{ only if } a \in \arg\max_{a'} Q^\pi(s, a')$$
+
+Then $V^{\pi'}(s) \geq V^\pi(s)$ for all $s$.
+
+When multiple actions are tied for the maximum Q-value, we can break ties arbitrarily (even stochastically) without affecting the improvement guarantee.
+
+</Mathematical>
+
+<Note>
+In practice, we usually work with deterministic policies for DP because they are simpler and just as good. For any MDP, there exists a deterministic optimal policy. Stochastic policies become important in settings with partial observability or when we need exploration.
+</Note>
+
+## Implementation: Policy Improvement Step
+
+<Implementation>
+
+```python
+def policy_improvement(mdp, V, policy, gamma=0.99):
+    """
+    Perform one step of policy improvement.
+
+    Args:
+        mdp: MDP object
+        V: Current value function (dict: state -> value)
+        policy: Current policy (dict: state -> action)
+        gamma: Discount factor
+
+    Returns:
+        new_policy: Improved policy
+        is_stable: True if policy did not change
+    """
+    is_stable = True
+    new_policy = {}
+
+    for s in mdp.states:
+        if hasattr(mdp, 'terminal_states') and s in mdp.terminal_states:
+            new_policy[s] = None
+            continue
+
+        old_action = policy.get(s)
+
+        # Find the greedy action
+        best_action = None
+        best_value = float('-inf')
+
+        for a in mdp.actions(s):
+            action_value = 0.0
+            for s_next, prob, reward in mdp.transitions(s, a):
+                action_value += prob * (reward + gamma * V[s_next])
+
+            if action_value > best_value:
+                best_value = action_value
+                best_action = a
+
+        new_policy[s] = best_action
+
+        # Check if policy changed
+        if old_action != best_action:
+            is_stable = False
+
+    return new_policy, is_stable
+
+
+def compute_q_values(mdp, V, gamma=0.99):
+    """
+    Compute Q(s, a) for all state-action pairs.
+
+    Useful for understanding what the greedy policy sees.
+    """
+    Q = {}
+
+    for s in mdp.states:
+        Q[s] = {}
+        for a in mdp.actions(s):
+            action_value = 0.0
+            for s_next, prob, reward in mdp.transitions(s, a):
+                action_value += prob * (reward + gamma * V[s_next])
+            Q[s][a] = action_value
+
+    return Q
+```
+
+</Implementation>
+
+## Common Misconceptions
+
+<Warning>
+**Misconception 1: "The greedy policy is only one step better"**
+
+Wrong. The greedy policy is better for all future time, from every state. The one-step lookahead identifies improvements that compound over the entire trajectory.
+
+**Misconception 2: "We need to know the optimal values to improve"**
+
+Wrong. We can improve with respect to any value function. Even if $V$ is an imperfect estimate, the greedy policy with respect to $V$ is guaranteed to be at least as good as the policy that generated $V$.
+
+**Misconception 3: "Multiple iterations might lead to worse policies"**
+
+Wrong. The policy improvement theorem guarantees monotonic improvement. Each iteration is at least as good as the previous one, until we reach optimality.
+</Warning>
+
+## Summary
+
+<Note>
+**Key Takeaways:**
+
+1. The **greedy policy** selects $\arg\max_a Q^\pi(s, a)$ at each state
+2. The **policy improvement theorem** guarantees: if $\pi'$ is greedy w.r.t. $V^\pi$, then $V^{\pi'} \geq V^\pi$
+3. Improvement stops when the policy equals its own greedy policy, which means optimality
+4. This is the foundation for both policy iteration and value iteration
+</Note>
+
+Now that we understand why improvement works, we can put it together with evaluation to build complete algorithms. The next section introduces **Policy Iteration**, which alternates between evaluation and improvement until convergence.

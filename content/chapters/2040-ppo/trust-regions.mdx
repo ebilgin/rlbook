@@ -1,0 +1,241 @@
+---
+title: "Trust Regions"
+slug: "trust-regions"
+section: "Policy Gradient Methods"
+description: "Why we need to limit policy updates"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Trust Regions
+
+Policy gradient methods are powerful but fragile. A single bad update can destroy a good policy, undoing thousands of steps of learning. Trust regions address this by constraining how much the policy can change in each update.
+
+## The Problem: Policy Collapse
+
+<Intuition>
+
+Imagine you've trained an agent for hours and it's finally performing well. Then you do one more update with a particularly unusual batch of data. Suddenly, performance crashes to zero.
+
+This happens because the policy gradient tells you the direction to move, but not how far. A large step in the "right" direction can overshoot and land in a terrible region of policy space.
+
+Unlike supervised learning where data is fixed, in RL the data distribution depends on the policy. A bad policy generates bad data, which leads to worse updates, creating a death spiral.
+
+</Intuition>
+
+<Example>
+
+**The Cliff Example**
+
+Consider a cliff-walking problem where the agent has learned to walk along a narrow safe path:
+
+1. A rare batch happens to contain mostly "go left" actions that led to rewards
+2. The policy update strongly reinforces "go left"
+3. Now the policy favors "go left" too much
+4. Agent walks off the cliff repeatedly
+5. New experience is all failures
+6. Policy never recovers
+
+A single aggressive update destroyed a carefully learned policy.
+
+</Example>
+
+## Why Gradient Descent Isn't Enough
+
+<Mathematical>
+
+In supervised learning, the loss landscape is fixed. Taking a step in the gradient direction is guaranteed to locally decrease the loss (for small enough step size).
+
+In policy gradient RL, the objective is:
+
+$$J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)]$$
+
+When we change $\theta$, we change $\pi_\theta$, which changes which trajectories are likely. The expectation is over a distribution that moves with us.
+
+The gradient $\nabla_\theta J(\theta)$ is only valid locally. If we step too far, we're optimizing a stale estimate that no longer reflects reality.
+
+</Mathematical>
+
+<Intuition>
+
+Think of optimizing while hiking in fog:
+
+- **Supervised learning**: The terrain is fixed. You can see a few feet ahead, take a step, look again. Gradual progress.
+- **Policy gradient**: The terrain shifts when you move. A step that looks good based on your current view might drop you into a chasm that wasn't there before.
+
+Trust regions say: "Only take small steps, so the terrain can't change too much between updates."
+
+</Intuition>
+
+## The Surrogate Objective
+
+<Mathematical>
+
+Policy gradient methods often use a **surrogate objective** for optimization:
+
+$$L(\theta) = \mathbb{E}_{s,a \sim \pi_{\theta_{old}}} \left[ \frac{\pi_\theta(a|s)}{\pi_{\theta_{old}}(a|s)} \hat{A}(s,a) \right]$$
+
+This is the expected advantage under the old policy, weighted by the probability ratio $r(\theta) = \frac{\pi_\theta(a|s)}{\pi_{\theta_{old}}(a|s)}$.
+
+**Key insight**: We can compute this using data from the old policy (importance sampling).
+
+**Problem**: This surrogate is only accurate when $\pi_\theta \approx \pi_{\theta_{old}}$. Large policy changes make the importance weights unreliable.
+
+</Mathematical>
+
+<Intuition>
+
+The surrogate objective lets us reuse old experience. But it's based on the assumption that the old and new policies are similar.
+
+When $r(\theta) = 1$, the policies are identical.
+When $r(\theta) = 2$, the new policy is twice as likely to take this action.
+When $r(\theta) = 10$, we're extrapolating wildly - the surrogate becomes unreliable.
+
+</Intuition>
+
+## TRPO: The Principled Solution
+
+<Definition title="Trust Region Policy Optimization (TRPO)">
+
+TRPO maximizes the surrogate objective subject to a KL divergence constraint:
+
+$$\max_\theta L(\theta) \quad \text{subject to } D_{KL}(\pi_{\theta_{old}} \| \pi_\theta) \leq \delta$$
+
+This ensures the new policy stays close to the old one, where our surrogate objective is accurate.
+
+</Definition>
+
+<Mathematical>
+
+The KL divergence measures how different two distributions are:
+
+$$D_{KL}(\pi_{old} \| \pi_{new}) = \mathbb{E}_{a \sim \pi_{old}} \left[ \log \frac{\pi_{old}(a|s)}{\pi_{new}(a|s)} \right]$$
+
+Properties:
+- $D_{KL} = 0$ when the policies are identical
+- $D_{KL} > 0$ otherwise
+- Not symmetric: $D_{KL}(P \| Q) \neq D_{KL}(Q \| P)$
+
+The constraint $D_{KL} \leq \delta$ creates a "trust region" around the current policy.
+
+</Mathematical>
+
+<Intuition>
+
+TRPO says: "Improve the policy as much as possible, but don't let it get more than $\delta$ away from where it started."
+
+The KL constraint is a soft boundary. Inside the trust region, we optimize freely. At the boundary, we stop.
+
+</Intuition>
+
+## Why TRPO Is Complex
+
+<Warning>
+
+TRPO solves the constrained optimization problem using:
+
+1. **Conjugate gradients**: Approximate the natural gradient without computing the full Hessian
+2. **Line search**: Find the largest step that satisfies the KL constraint
+3. **Fisher Information Matrix**: Second-order information about the policy
+
+This is mathematically elegant but:
+- Requires second-order derivatives (expensive)
+- Needs careful implementation of conjugate gradients
+- Line search adds computational overhead
+- Hard to parallelize with standard deep learning libraries
+
+</Warning>
+
+<Implementation>
+
+```python
+# TRPO pseudocode (simplified)
+def trpo_update(policy, states, actions, advantages, max_kl=0.01):
+    """
+    TRPO update - conceptual outline.
+
+    Real implementations are much more complex.
+    """
+    # 1. Compute policy gradient
+    loss = -compute_surrogate_loss(policy, states, actions, advantages)
+    g = compute_gradient(loss, policy.parameters())
+
+    # 2. Compute natural gradient using conjugate gradients
+    # This requires the Fisher Information Matrix
+    Hv = lambda v: fisher_vector_product(policy, states, v)
+    natural_gradient = conjugate_gradient(Hv, g)
+
+    # 3. Compute step size using KL constraint
+    step_size = compute_step_size(natural_gradient, Hv, max_kl)
+
+    # 4. Line search to ensure KL constraint is satisfied
+    for fraction in [1.0, 0.5, 0.25, 0.125]:
+        new_params = old_params + fraction * step_size * natural_gradient
+        if compute_kl(old_policy, new_policy) < max_kl:
+            break
+
+    policy.set_parameters(new_params)
+```
+
+</Implementation>
+
+## The Need for Simplicity
+
+<Intuition>
+
+TRPO is theoretically sound but practically cumbersome:
+
+- 100+ lines of specialized optimization code
+- Hard to integrate with standard PyTorch/TensorFlow optimizers
+- Doesn't parallelize well on GPUs
+- Many hyperparameters for the inner optimization
+
+The question became: **Is there a simpler way to get similar results?**
+
+PPO answers this with a resounding "yes."
+
+</Intuition>
+
+## Preview: PPO's Approach
+
+<Intuition>
+
+PPO replaces TRPO's complex constrained optimization with a simple idea:
+
+**Instead of constraining the KL divergence, clip the probability ratio.**
+
+When the ratio $r(\theta) = \frac{\pi_\theta(a|s)}{\pi_{\theta_{old}}(a|s)}$ gets too far from 1, stop the gradient.
+
+- Ratio near 1: policies are similar, optimize normally
+- Ratio far from 1: policies are too different, stop updating
+
+This achieves similar trust-region behavior with:
+- Standard gradient descent
+- No second-order derivatives
+- No line search
+- Much simpler code
+
+</Intuition>
+
+<Mathematical>
+
+TRPO constraint: $D_{KL}(\pi_{old} \| \pi_{new}) \leq \delta$
+
+PPO approximation: $1 - \epsilon \leq \frac{\pi_\theta(a|s)}{\pi_{\theta_{old}}(a|s)} \leq 1 + \epsilon$
+
+The ratio constraint is a pointwise version of the KL constraint. If the ratio is bounded for all actions, the KL divergence is also bounded (though the converse isn't true).
+
+</Mathematical>
+
+## Summary
+
+Trust regions address the instability of policy gradient methods:
+
+- **Problem**: Large policy updates can be catastrophic
+- **Cause**: Gradient is only locally accurate; data distribution shifts with policy
+- **Solution**: Constrain how much the policy can change
+- **TRPO**: KL constraint with second-order optimization
+- **PPO**: Simpler clipping approach (next section)
+
+The next section shows exactly how PPO implements trust-region-like behavior with nothing more than clipping and standard gradient descent.

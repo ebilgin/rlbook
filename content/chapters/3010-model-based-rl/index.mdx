@@ -1,0 +1,126 @@
+---
+title: "Model-Based RL"
+slug: "model-based-rl"
+section: "Advanced Topics"
+description: "Learning world models for sample-efficient planning"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "q-learning"
+    title: "Q-Learning"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Model-Based Reinforcement Learning
+
+<ChapterObjectives>
+- Distinguish between model-free and model-based RL
+- Explain the sample efficiency advantage of model-based methods
+- Implement the Dyna architecture
+- Describe how to learn environment models
+- Explain the model bias problem and how to mitigate it
+- Describe modern model-based methods including MuZero
+</ChapterObjectives>
+
+Every model-free method we've seen learns by trial and error in the real world. But what if the agent could *imagine* experiences? What if it had a model of how the world works and could plan ahead, like a chess player thinking several moves ahead?
+
+This is the fundamental insight behind **model-based reinforcement learning**: if you understand how the world works, you can simulate experiences in your head and learn from them without ever actually interacting with the environment.
+
+<Intuition>
+
+Think about how you plan a road trip. You don't need to actually drive every possible route to know which is fastest. Instead, you have a mental model of the road network, traffic patterns, and driving times. You use this model to plan, evaluating routes in your imagination before committing to one.
+
+Model-based RL gives agents this same capability: learn how the world works, then use that knowledge to plan efficiently.
+
+</Intuition>
+
+## Chapter Overview
+
+<div className="my-8">
+  <div className="text-slate-400 text-sm mb-4">In this chapter:</div>
+
+  <div className="space-y-3">
+    <a href="/chapters/model-based-rl/learning-models" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-cyan-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-cyan-400 font-bold text-lg">Learning World Models</div>
+      <div className="text-slate-400 text-sm mt-1">What is a model, how to learn one from experience, and the fundamental tradeoff with model-free methods</div>
+    </a>
+
+    <a href="/chapters/model-based-rl/planning" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-violet-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-violet-400 font-bold text-lg">Planning with Learned Models</div>
+      <div className="text-slate-400 text-sm mt-1">Using imagination for better decisions: how models enable planning and sample efficiency</div>
+    </a>
+
+    <a href="/chapters/model-based-rl/dyna" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-amber-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-amber-400 font-bold text-lg">The Dyna Architecture</div>
+      <div className="text-slate-400 text-sm mt-1">Combining real and simulated experience in a unified framework for sample-efficient learning</div>
+    </a>
+
+    <a href="/chapters/model-based-rl/muzero" className="block bg-gradient-to-r from-slate-800/50 to-transparent rounded-xl p-5 border-l-4 border-emerald-500 hover:from-slate-700/50 transition-colors">
+      <div className="text-emerald-400 font-bold text-lg">MuZero and Beyond</div>
+      <div className="text-emerald-400 text-sm mt-1">Modern approaches that learn abstract models optimized for planning, without explicit state prediction</div>
+    </a>
+  </div>
+</div>
+
+## The Big Picture
+
+<Definition title="Environment Model">
+A learned approximation of the environment's dynamics: the transition function $P(s'|s,a)$ that predicts next states, and the reward function $R(s,a)$ that predicts rewards. With a model, agents can "imagine" experiences without actually interacting with the environment.
+</Definition>
+
+Model-based RL learns a model of the environment (how states transition, what rewards occur) and uses it to plan or generate synthetic experience. This can be far more sample-efficient than model-free learning, but introduces the challenge of model errors.
+
+<Intuition>
+
+Consider the difference:
+
+- **Model-free**: Learn solely from real interactions. Each environment step is precious and used once.
+- **Model-based**: Learn a model from real interactions, then use that model to generate unlimited simulated experience.
+
+It's like the difference between learning to cook by only making real dishes (expensive, slow) versus first understanding the principles of cooking (what flavors combine well, how heat affects food) and then practicing in your head before touching ingredients.
+
+</Intuition>
+
+## When to Use Model-Based RL
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="bg-emerald-900/20 border border-emerald-700/50 rounded-lg p-4">
+    <div className="text-emerald-400 font-bold mb-2">Model-Based is Great When:</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>Real interactions are expensive or slow</li>
+      <li>Safety is critical (robotics, healthcare)</li>
+      <li>The environment dynamics are relatively simple</li>
+      <li>You need sample efficiency</li>
+    </ul>
+  </div>
+  <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-4">
+    <div className="text-amber-400 font-bold mb-2">Model-Free May Be Better When:</div>
+    <ul className="text-slate-300 text-sm space-y-1">
+      <li>Environment dynamics are very complex</li>
+      <li>You have abundant simulation access</li>
+      <li>Model errors would compound badly</li>
+      <li>Compute is more expensive than samples</li>
+    </ul>
+  </div>
+</div>
+
+<Tip title="Start Here">
+
+New to model-based RL? Begin with [Learning World Models](/chapters/model-based-rl/learning-models) to understand what models are and how they're learned, then continue through the sections in order.
+
+</Tip>
+
+---
+
+<KeyTakeaways>
+- Model-based RL learns a model of the environment to enable planning and sample-efficient learning
+- The Dyna architecture combines real experience with simulated experience from the model
+- Model-based methods are more sample-efficient but require accurate models
+- Model errors can compound during planning, leading to poor policies
+- Modern methods like MuZero learn abstract models optimized for planning, not state prediction
+</KeyTakeaways>
+
+<NextChapter slug="multi-agent-rl" title="Multi-Agent RL" />

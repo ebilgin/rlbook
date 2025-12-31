@@ -1,0 +1,515 @@
+---
+title: "Value Iteration"
+slug: "value-iteration"
+section: "Dynamic Programming"
+description: "Finding optimal values directly"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Value Iteration
+
+What if we did not fully evaluate each policy before improving? Value iteration takes a shortcut: it applies the Bellman **optimality** equation directly, finding optimal values without ever explicitly computing intermediate policies.
+
+## The Algorithm
+
+<Definition title="Value Iteration">
+An algorithm that repeatedly applies the Bellman optimality backup:
+
+$$V_{k+1}(s) = \max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V_k(s') \right]$$
+
+When values converge, they equal $V^*$. The optimal policy is then extracted as the greedy policy with respect to $V^*$.
+</Definition>
+
+<Intuition>
+
+Value iteration combines evaluation and improvement into a single step. Instead of asking "What is the value of following policy $\pi$?", it asks "What is the value of acting optimally?"
+
+The **max** operator handles improvement (pick the best action). The **Bellman backup** handles evaluation (propagate values). Each iteration makes progress on both fronts simultaneously.
+
+</Intuition>
+
+## Why It Works
+
+<Mathematical>
+
+The Bellman optimality operator $T^*$ is defined as:
+
+$$(T^* V)(s) = \max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V(s') \right]$$
+
+Key properties:
+
+1. **$T^*$ is a contraction**: $\|T^* V_1 - T^* V_2\|_\infty \leq \gamma \|V_1 - V_2\|_\infty$
+
+2. **$V^*$ is the unique fixed point**: $T^* V^* = V^*$
+
+3. **Convergence is guaranteed**: Starting from any $V_0$, repeated application of $T^*$ converges to $V^*$
+
+The proof follows the same Banach fixed-point argument as policy evaluation, but with the max operator instead of the expectation over a fixed policy.
+
+</Mathematical>
+
+## The Full Algorithm
+
+<Mathematical>
+
+**Algorithm: Value Iteration**
+
+**Input:** MDP $(S, A, P, R, \gamma)$, threshold $\theta$
+
+**Output:** Optimal value function $V^*$, optimal policy $\pi^*$
+
+1. **Initialize** $V(s) = 0$ for all $s \in S$
+
+2. **Repeat:**
+   - $\Delta \leftarrow 0$
+   - For each state $s \in S$:
+     - $v \leftarrow V(s)$
+     - $V(s) \leftarrow \max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V(s') \right]$
+     - $\Delta \leftarrow \max(\Delta, |v - V(s)|)$
+   - Until $\Delta < \theta$
+
+3. **Extract policy:**
+   - For each state $s$:
+     - $\pi(s) \leftarrow \arg\max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V(s') \right]$
+
+4. **Return** $V$, $\pi$
+
+</Mathematical>
+
+## Complete Implementation
+
+<Implementation>
+
+```python
+def value_iteration(mdp, gamma=0.99, theta=1e-6):
+    """
+    Find optimal values using value iteration.
+
+    Args:
+        mdp: MDP with states, actions(s), transitions(s, a)
+        gamma: discount factor
+        theta: convergence threshold
+
+    Returns:
+        V: optimal value function (dict: state -> value)
+        iterations: number of iterations until convergence
+    """
+    V = {s: 0.0 for s in mdp.states}
+
+    iteration = 0
+    while True:
+        delta = 0
+        iteration += 1
+
+        for s in mdp.states:
+            if hasattr(mdp, 'terminal_states') and s in mdp.terminal_states:
+                continue
+
+            old_value = V[s]
+
+            # Bellman optimality backup: take max over actions
+            best_value = float('-inf')
+            for a in mdp.actions(s):
+                action_value = 0.0
+                for s_next, prob, reward in mdp.transitions(s, a):
+                    action_value += prob * (reward + gamma * V[s_next])
+                best_value = max(best_value, action_value)
+
+            V[s] = best_value
+            delta = max(delta, abs(old_value - best_value))
+
+        if delta < theta:
+            break
+
+    return V, iteration
+
+
+def extract_policy(mdp, V, gamma=0.99):
+    """
+    Extract the greedy policy from a value function.
+
+    Args:
+        mdp: MDP object
+        V: value function (dict: state -> value)
+        gamma: discount factor
+
+    Returns:
+        policy: dict mapping state -> best action
+    """
+    policy = {}
+
+    for s in mdp.states:
+        if hasattr(mdp, 'terminal_states') and s in mdp.terminal_states:
+            policy[s] = None
+            continue
+
+        best_action = None
+        best_value = float('-inf')
+
+        for a in mdp.actions(s):
+            action_value = 0.0
+            for s_next, prob, reward in mdp.transitions(s, a):
+                action_value += prob * (reward + gamma * V[s_next])
+
+            if action_value > best_value:
+                best_value = action_value
+                best_action = a
+
+        policy[s] = best_action
+
+    return policy
+
+
+def value_iteration_full(mdp, gamma=0.99, theta=1e-6):
+    """
+    Value iteration with policy extraction.
+
+    Returns both optimal values and optimal policy.
+    """
+    V, iterations = value_iteration(mdp, gamma, theta)
+    policy = extract_policy(mdp, V, gamma)
+
+    print(f"Value iteration converged after {iterations} iterations")
+
+    return policy, V, iterations
+```
+
+</Implementation>
+
+## A Worked Example
+
+<Example title="3-State Chain">
+
+Consider a simple chain: A -> B -> C (terminal, reward +10). Moving costs -1. Let $\gamma = 0.9$.
+
+```
+[A] --(-1)--> [B] --(+10)--> [C]
+```
+
+**Iteration 0:** $V_0(A) = 0$, $V_0(B) = 0$, $V_0(C) = 0$
+
+**Iteration 1:**
+- $V_1(C) = 0$ (terminal)
+- $V_1(B) = \max_a[...] = 10 + 0.9 \times 0 = 10$
+- $V_1(A) = \max_a[...] = -1 + 0.9 \times 0 = -1$
+
+**Iteration 2:**
+- $V_2(C) = 0$
+- $V_2(B) = 10 + 0.9 \times 0 = 10$
+- $V_2(A) = -1 + 0.9 \times 10 = 8$
+
+**Iteration 3:**
+- $V_3(A) = -1 + 0.9 \times 10 = 8$ (no change)
+
+Values have converged! $V^*(A) = 8$, $V^*(B) = 10$, $V^*(C) = 0$.
+
+The optimal policy is: always move right.
+
+</Example>
+
+<Example title="4x4 GridWorld">
+
+Let us trace value iteration on a 4x4 grid with the goal in the bottom-right corner. Reward is -1 per step, $\gamma = 1$.
+
+**Initial values:** All zeros.
+
+**After iteration 1:**
+Only states adjacent to the goal have non-zero values:
+```
+ 0   0   0   0
+ 0   0   0   0
+ 0   0   0  -1
+ 0   0  -1   0
+```
+
+**After iteration 2:**
+Values spread one step further:
+```
+ 0   0   0   0
+ 0   0   0  -1
+ 0   0  -1  -2
+ 0  -1  -2   0
+```
+
+**After iteration 3:**
+```
+ 0   0   0  -1
+ 0   0  -1  -2
+ 0  -1  -2  -3
+-1  -2  -3   0
+```
+
+**Convergence (after about 6 iterations):**
+```
+-6  -5  -4  -3
+-5  -4  -3  -2
+-4  -3  -2  -1
+-3  -2  -1   0
+```
+
+These are the optimal values! The optimal policy points toward the goal from every state.
+
+</Example>
+
+## Policy Iteration vs Value Iteration
+
+<div className="my-6 overflow-x-auto">
+
+| Aspect | Policy Iteration | Value Iteration |
+|--------|------------------|-----------------|
+| Update rule | Bellman expectation (fixed $\pi$) | Bellman optimality (max over actions) |
+| Per iteration | Full policy evaluation | Single Bellman backup |
+| Intermediate | Explicit policies at each step | Only values (policy at the end) |
+| Iterations | Few (2-10) | Many (often 100s) |
+| Per-iteration cost | High (many sweeps) | Low (one sweep) |
+| Total cost | Often lower | Often higher |
+| When to use | Small MDPs, low $\gamma$ | Large MDPs, high $\gamma$ |
+
+</div>
+
+<Tip>
+**When to use which?**
+
+- **Policy Iteration**: When policy evaluation is cheap (small state space, low $\gamma$)
+- **Value Iteration**: When you want simplicity and do not need intermediate policies
+- **Modified Policy Iteration**: A good middle ground for most cases
+
+In practice, the differences are often small. Both find the same answer.
+</Tip>
+
+## Convergence Analysis
+
+<Mathematical>
+
+Value iteration converges at the same rate as policy evaluation:
+
+$$\|V_k - V^*\|_\infty \leq \gamma^k \|V_0 - V^*\|_\infty$$
+
+The number of iterations to achieve error $\epsilon$ is:
+
+$$k \geq \frac{\log(\|V_0 - V^*\|_\infty / \epsilon)}{\log(1/\gamma)}$$
+
+For $\gamma = 0.99$, this can be hundreds to thousands of iterations. But each iteration is fast (just one sweep), so the total time is often comparable to policy iteration.
+
+</Mathematical>
+
+<Warning>
+Value iteration typically needs more iterations than policy iteration, but each iteration is cheaper. The trade-off depends on:
+
+1. **State space size**: Larger means more expensive evaluation, favoring value iteration
+2. **Discount factor**: Higher $\gamma$ means more iterations needed for both
+3. **Precision needed**: Tighter $\theta$ means more iterations
+
+For very large MDPs, value iteration (or approximate variants) is often preferred because policy evaluation becomes the bottleneck.
+</Warning>
+
+## The Connection to Q-Learning
+
+<Intuition>
+
+Value iteration is essentially Q-learning with a model. Compare:
+
+**Value Iteration:**
+$$V(s) \leftarrow \max_a \left[ R(s,a) + \gamma \sum_{s'} P(s'|s,a) V(s') \right]$$
+
+**Q-Learning:**
+$$Q(s,a) \leftarrow Q(s,a) + \alpha \left[ r + \gamma \max_{a'} Q(s', a') - Q(s,a) \right]$$
+
+The key differences:
+- Value iteration uses the known model $P(s'|s,a)$ to compute expectations
+- Q-learning samples transitions from experience
+- Value iteration uses full sweeps; Q-learning uses individual samples
+
+Q-learning is value iteration without the model, using samples instead of expectations.
+
+</Intuition>
+
+<Note>
+This connection is important. When you understand value iteration deeply, you understand the core of Q-learning. The algorithmic structure is the same; only the source of transition information differs.
+</Note>
+
+## Implementation Details
+
+### Handling Terminal States
+
+<Implementation>
+
+```python
+def value_iteration_with_terminals(mdp, gamma=0.99, theta=1e-6):
+    """
+    Value iteration with proper terminal state handling.
+    """
+    V = {s: 0.0 for s in mdp.states}
+
+    # Terminal states have fixed value (often 0 or terminal reward)
+    for s in mdp.terminal_states:
+        V[s] = mdp.terminal_reward.get(s, 0.0)
+
+    while True:
+        delta = 0
+
+        for s in mdp.states:
+            # Skip terminal states - they have fixed values
+            if s in mdp.terminal_states:
+                continue
+
+            old_value = V[s]
+
+            # Find best action value
+            best_value = float('-inf')
+            for a in mdp.actions(s):
+                action_value = 0.0
+                for s_next, prob, reward in mdp.transitions(s, a):
+                    action_value += prob * (reward + gamma * V[s_next])
+                best_value = max(best_value, action_value)
+
+            V[s] = best_value
+            delta = max(delta, abs(old_value - best_value))
+
+        if delta < theta:
+            break
+
+    return V
+```
+
+</Implementation>
+
+### Tracking Convergence
+
+<Implementation>
+
+```python
+def value_iteration_verbose(mdp, gamma=0.99, theta=1e-6, log_interval=10):
+    """
+    Value iteration with detailed progress tracking.
+    """
+    V = {s: 0.0 for s in mdp.states}
+    history = []
+
+    print("Iter | Max Delta | Value Range")
+    print("-" * 40)
+
+    iteration = 0
+    while True:
+        delta = 0
+        iteration += 1
+
+        for s in mdp.states:
+            if hasattr(mdp, 'terminal_states') and s in mdp.terminal_states:
+                continue
+
+            old_value = V[s]
+
+            best_value = float('-inf')
+            for a in mdp.actions(s):
+                action_value = 0.0
+                for s_next, prob, reward in mdp.transitions(s, a):
+                    action_value += prob * (reward + gamma * V[s_next])
+                best_value = max(best_value, action_value)
+
+            V[s] = best_value
+            delta = max(delta, abs(old_value - best_value))
+
+        history.append({
+            'iteration': iteration,
+            'delta': delta,
+            'max_value': max(V.values()),
+            'min_value': min(V.values()),
+        })
+
+        if iteration % log_interval == 0 or delta < theta:
+            min_v = min(V.values())
+            max_v = max(V.values())
+            print(f"{iteration:4d} | {delta:9.2e} | [{min_v:.2f}, {max_v:.2f}]")
+
+        if delta < theta:
+            print(f"\nConverged after {iteration} iterations!")
+            break
+
+    return V, history
+```
+
+</Implementation>
+
+## Advanced: Prioritized Sweeps
+
+<Tip>
+Standard value iteration updates states in a fixed order. But some states change more than others. **Prioritized sweeping** maintains a priority queue of states ordered by how much their values changed. It updates high-priority states first.
+
+This can dramatically speed up convergence because:
+1. States near rewards get updated first
+2. Information propagates faster through the MDP
+3. We skip states that have already converged
+
+This idea extends to RL as **prioritized experience replay**.
+</Tip>
+
+## Common Mistakes
+
+<Warning>
+**Mistake 1: Extracting policy before convergence**
+
+The policy is only guaranteed optimal after values converge. Extracting early may give suboptimal actions:
+
+```python
+# Wrong: extract during iteration
+for iteration in range(100):
+    update_values()
+    policy = extract_policy(V)  # May not be optimal yet!
+
+# Right: extract after convergence
+V = value_iteration(mdp)
+policy = extract_policy(V)  # Now optimal
+```
+
+**Mistake 2: Using greedy policy during value iteration**
+
+Value iteration does not maintain an explicit policy. The max operation implicitly considers all actions. Do not confuse this with following a policy:
+
+```python
+# Value iteration: max over ALL actions
+V[s] = max(Q(s, a) for a in actions)
+
+# NOT following a specific policy
+V[s] = Q(s, policy[s])  # This is policy evaluation!
+```
+
+**Mistake 3: Forgetting to handle empty action spaces**
+
+Some states might have no available actions (terminal states, or dead ends):
+
+```python
+actions = mdp.actions(s)
+if not actions:
+    V[s] = 0  # or terminal reward
+    continue
+
+best_value = max(compute_Q(s, a) for a in actions)
+```
+</Warning>
+
+## Summary
+
+<Note>
+**Key Takeaways:**
+
+1. **Value iteration** applies the Bellman optimality backup: $V \leftarrow \max_a [R + \gamma \sum P V]$
+2. **Convergence** is guaranteed by the contraction property
+3. **Extract policy** at the end by taking greedy actions with respect to $V^*$
+4. **More iterations** than policy iteration, but simpler and cheaper per iteration
+5. **Same answer** as policy iteration, different computational path
+</Note>
+
+## The Road Ahead
+
+Dynamic Programming gives us exact solutions, but requires knowing the model. What if we do not have $P(s'|s,a)$? What if the state space is too large to enumerate?
+
+That is where **reinforcement learning** comes in. In the following chapters, we will explore:
+
+- **Monte Carlo methods**: Learn from complete episodes
+- **Temporal Difference learning**: Learn from incomplete episodes
+- **Q-learning**: Value iteration without a model
+
+The ideas from this chapter, especially the Bellman equations and the principle of greedy improvement, carry forward into all of RL.

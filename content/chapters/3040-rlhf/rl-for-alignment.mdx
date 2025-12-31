@@ -1,0 +1,583 @@
+---
+title: "RL for AI Alignment"
+slug: "rl-for-alignment"
+section: "Advanced Topics"
+description: "Teaching models what humans want"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# RL for AI Alignment
+
+You've been using RLHF all along. Every conversation with Claude, every query to ChatGPT, every interaction with a modern AI assistant involves a model shaped by reinforcement learning from human feedback. This technique transformed raw language models into helpful assistants that feel almost human.
+
+## The Alignment Problem
+
+<Definition title="AI Alignment">
+The challenge of ensuring AI systems pursue goals that are aligned with human values and intentions. An aligned AI does what humans *actually want*, not just what they literally said or what maximizes some proxy metric.
+</Definition>
+
+<Intuition>
+
+Consider what a language model learns from the internet:
+
+**What it knows**: How to predict text. Given "The capital of France is", it knows to say "Paris." Given a coding question, it can generate plausible code. Given any text, it can continue it coherently.
+
+**What it doesn't know**: What *you* want. Should it answer your question directly? Add caveats? Refuse if the question is dangerous? Be concise or thorough? Formal or casual?
+
+A raw language model doesn't have preferences about being helpful or harmless. It just predicts text. It might give a harmful answer as readily as a helpful one, because during pretraining, both appeared on the internet.
+
+**The alignment problem**: How do we teach the model what we *actually* want?
+
+</Intuition>
+
+<Example title="The Challenge of Specification">
+
+You want to train a helpful AI assistant. You try writing rules:
+
+**Attempt 1**: "Always answer questions accurately."
+- But what about harmful questions? "How do I hack into my neighbor's computer?"
+
+**Attempt 2**: "Always answer accurately, unless the answer could cause harm."
+- But what counts as harm? Medical questions could cause harm if wrong. Legal questions could cause harm if misapplied.
+
+**Attempt 3**: "Answer accurately when safe, refuse harmful requests, and be helpful."
+- Now you have three competing objectives. What happens when they conflict?
+
+**Attempt 4**: Add more rules for edge cases...
+- The rulebook grows exponentially. Every rule creates new edge cases.
+
+The problem isn't that we don't know what we want—it's that we can't write it down completely. Human values are too complex, too contextual, too nuanced for explicit rules.
+
+But here's the insight: **we can recognize good behavior when we see it**.
+
+</Example>
+
+## Why Supervised Learning Isn't Enough
+
+<Intuition>
+
+The first approach to improving language models was Supervised Fine-Tuning (SFT): train on examples of ideal responses written by humans.
+
+**How it works**:
+1. Hire people to write ideal responses to prompts
+2. Train the model to predict these responses
+3. Hope the model generalizes
+
+**Why it helps**:
+- The model learns the format of helpful responses
+- It picks up patterns of politeness, structure, appropriate refusals
+- Much better than raw pretrained models
+
+**Why it's not enough**:
+- Human writers can only write a finite number of examples
+- Writing perfect responses is expensive and slow
+- The model may memorize patterns rather than understanding principles
+- Hard to cover all edge cases
+- Writers may disagree on what's ideal
+
+Supervised learning teaches *what to say* in specific situations. It doesn't teach the underlying principles of *why* to say it.
+
+</Intuition>
+
+<Mathematical>
+
+In supervised fine-tuning, we minimize the negative log-likelihood:
+
+$$L_{SFT}(\theta) = -\mathbb{E}_{(x, y^*) \sim D_{SFT}}\left[ \log \pi_\theta(y^*|x) \right]$$
+
+where $x$ is a prompt, $y^*$ is a human-written ideal response, and $\pi_\theta$ is the language model.
+
+**Limitation**: This requires knowing the exact ideal response $y^*$ for every prompt. But for most prompts, there are many good responses and many bad ones. We want the model to learn to distinguish good from bad, not memorize specific responses.
+
+What we really want to optimize is:
+
+$$\max_\theta \mathbb{E}_{x \sim D}\left[ R^*(x, \pi_\theta(x)) \right]$$
+
+where $R^*$ is the "true" human preference function. But we don't know $R^*$—that's exactly the alignment problem.
+
+</Mathematical>
+
+## The RLHF Insight: Learn from Preferences
+
+<Definition title="RLHF (Reinforcement Learning from Human Feedback)">
+A technique for aligning AI systems with human preferences by:
+1. Collecting human comparisons of model outputs
+2. Training a reward model on those comparisons
+3. Optimizing the model using RL to maximize the learned reward
+
+RLHF learns *what humans prefer* rather than requiring explicit rules for *what to do*.
+</Definition>
+
+<Intuition>
+
+The key insight: **Humans are better at comparing than specifying**.
+
+Given two responses to "Explain quantum entanglement":
+- Response A: A dense, technical explanation with equations
+- Response B: A clear analogy followed by key points
+
+Most people can say "I prefer B for a general audience" without being able to write the perfect response themselves.
+
+RLHF exploits this by:
+1. Generating many responses with the model
+2. Showing pairs to humans: "Which is better?"
+3. Learning what humans prefer from thousands of comparisons
+4. Training the model to produce preferred responses
+
+This is like teaching by example rather than by rules. You don't tell a child all the rules of politeness—you show examples of polite and impolite behavior, and they learn the pattern.
+
+</Intuition>
+
+<Example title="Preference Data in Action">
+
+**Prompt**: "Write me a poem about loss."
+
+**Response A**:
+> Loss is sad. Things go away.
+> We feel bad when things go away.
+> The end.
+
+**Response B**:
+> Absence carves its hollow space
+> Where warmth once lived, now empty air
+> We learn to map the missing place
+> By shadows of what once was there.
+
+A human labels: **B is preferred**.
+
+From thousands of such comparisons, the reward model learns:
+- Emotional depth matters
+- Poetic devices (metaphor, imagery) are valued
+- Effort and craft are appreciated
+- Generic, low-effort responses are not preferred
+
+The model never sees explicit rules about poetry—it learns the pattern from human choices.
+
+</Example>
+
+## A Brief History
+
+<Intuition>
+
+RLHF wasn't invented for language models. The core ideas developed over decades:
+
+**Early foundations (1950s-2000s)**:
+- Reward learning from demonstrations
+- Inverse reinforcement learning: infer rewards from expert behavior
+- Preference-based learning in robotics
+
+**First RLHF for games (2017)**:
+- DeepMind trained agents for Atari games using human preferences
+- Showed you could learn complex behaviors from comparative feedback
+- Much more sample-efficient than random exploration
+
+**RLHF for language models (2019-2022)**:
+- OpenAI's "Fine-Tuning Language Models from Human Preferences" (2019)
+- InstructGPT paper (2022): systematic RLHF at scale
+- ChatGPT (2022): RLHF goes mainstream
+
+**Today**:
+- Standard practice for deploying capable language models
+- Active research on improvements (DPO, Constitutional AI)
+- Shapes how billions of people interact with AI
+
+The progression: from learning to play games, to learning to chat helpfully. Same core idea, transformative applications.
+
+</Intuition>
+
+## The Three-Stage RLHF Pipeline
+
+<Intuition>
+
+Modern RLHF has three stages:
+
+**Stage 1: Supervised Fine-Tuning (SFT)**
+- Start with a pretrained language model (knows language, not values)
+- Fine-tune on demonstrations of ideal assistant behavior
+- Result: a model that can respond like an assistant, but inconsistently
+
+**Stage 2: Reward Modeling**
+- Generate many responses with the SFT model
+- Collect human preferences: "Which response is better?"
+- Train a reward model to predict human preferences
+- Result: a function that scores (prompt, response) pairs
+
+**Stage 3: RL Fine-Tuning (PPO)**
+- Use the reward model to provide training signal
+- Optimize the SFT model with RL (typically PPO)
+- Add KL penalty to prevent drifting too far from SFT model
+- Result: a model that consistently generates preferred responses
+
+</Intuition>
+
+<Mathematical>
+
+**Stage 1: SFT Loss**
+
+$$L_{SFT}(\theta) = -\mathbb{E}_{(x, y) \sim D_{demo}}\left[ \log \pi_\theta(y|x) \right]$$
+
+**Stage 2: Reward Model Loss (Bradley-Terry)**
+
+$$L_{RM}(\phi) = -\mathbb{E}_{(x, y_w, y_l) \sim D_{pref}}\left[ \log \sigma(r_\phi(x, y_w) - r_\phi(x, y_l)) \right]$$
+
+where $y_w$ is the preferred response and $y_l$ is the rejected one.
+
+**Stage 3: RL Objective**
+
+$$\max_\theta \mathbb{E}_{x \sim D, y \sim \pi_\theta}\left[ r_\phi(x, y) - \beta \cdot D_{KL}(\pi_\theta(\cdot|x) \| \pi_{ref}(\cdot|x)) \right]$$
+
+The KL term keeps the model close to the SFT model, preventing reward hacking.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from dataclasses import dataclass
+from typing import List, Tuple, Optional
+
+
+@dataclass
+class RLHFConfig:
+    """Configuration for RLHF training."""
+    sft_epochs: int = 3
+    rm_epochs: int = 1
+    ppo_epochs: int = 4
+    kl_coef: float = 0.1
+    clip_range: float = 0.2
+    learning_rate: float = 1e-5
+    batch_size: int = 32
+
+
+class RLHFPipeline:
+    """
+    Complete RLHF pipeline implementing all three stages.
+
+    This is a conceptual implementation showing the structure.
+    Real implementations use distributed training, mixed precision,
+    and sophisticated infrastructure.
+    """
+
+    def __init__(self, base_model, tokenizer, config: RLHFConfig):
+        self.config = config
+        self.tokenizer = tokenizer
+
+        # Models for each stage
+        self.sft_model = base_model  # Will be fine-tuned
+        self.reward_model = None     # Created in stage 2
+        self.policy_model = None     # Created in stage 3
+        self.ref_model = None        # Frozen reference for KL
+
+    def stage1_supervised_finetuning(self, demonstrations: List[Tuple[str, str]]):
+        """
+        Stage 1: Fine-tune on human demonstrations.
+
+        Args:
+            demonstrations: List of (prompt, ideal_response) pairs
+        """
+        print("Stage 1: Supervised Fine-Tuning")
+
+        optimizer = torch.optim.AdamW(
+            self.sft_model.parameters(),
+            lr=self.config.learning_rate
+        )
+
+        for epoch in range(self.config.sft_epochs):
+            total_loss = 0
+
+            for prompt, response in demonstrations:
+                # Tokenize prompt and response
+                input_text = prompt + response
+                tokens = self.tokenizer(
+                    input_text,
+                    return_tensors='pt',
+                    truncation=True,
+                    max_length=512
+                )
+
+                # Get model output
+                outputs = self.sft_model(**tokens, labels=tokens['input_ids'])
+                loss = outputs.loss
+
+                # Optimize
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                total_loss += loss.item()
+
+            print(f"  Epoch {epoch + 1}: Loss = {total_loss / len(demonstrations):.4f}")
+
+        # Freeze a copy as reference model for stage 3
+        self.ref_model = self._copy_model(self.sft_model)
+        self.ref_model.eval()
+        for param in self.ref_model.parameters():
+            param.requires_grad = False
+
+    def stage2_reward_modeling(self, preferences: List[Tuple[str, str, str]]):
+        """
+        Stage 2: Train reward model on human preferences.
+
+        Args:
+            preferences: List of (prompt, chosen_response, rejected_response) tuples
+        """
+        print("Stage 2: Reward Model Training")
+
+        # Initialize reward model from SFT model
+        self.reward_model = RewardModelWrapper(self._copy_model(self.sft_model))
+
+        optimizer = torch.optim.AdamW(
+            self.reward_model.parameters(),
+            lr=self.config.learning_rate
+        )
+
+        for epoch in range(self.config.rm_epochs):
+            total_loss = 0
+
+            for prompt, chosen, rejected in preferences:
+                # Get reward for chosen response
+                chosen_input = prompt + chosen
+                chosen_tokens = self.tokenizer(
+                    chosen_input, return_tensors='pt', truncation=True
+                )
+                r_chosen = self.reward_model(**chosen_tokens)
+
+                # Get reward for rejected response
+                rejected_input = prompt + rejected
+                rejected_tokens = self.tokenizer(
+                    rejected_input, return_tensors='pt', truncation=True
+                )
+                r_rejected = self.reward_model(**rejected_tokens)
+
+                # Bradley-Terry loss: maximize P(chosen > rejected)
+                loss = -F.logsigmoid(r_chosen - r_rejected).mean()
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                total_loss += loss.item()
+
+            print(f"  Epoch {epoch + 1}: Loss = {total_loss / len(preferences):.4f}")
+
+    def stage3_rl_finetuning(self, prompts: List[str], num_iterations: int = 1000):
+        """
+        Stage 3: Fine-tune with PPO using reward model.
+
+        Args:
+            prompts: List of prompts to generate responses for
+            num_iterations: Number of PPO iterations
+        """
+        print("Stage 3: RL Fine-Tuning (PPO)")
+
+        # Initialize policy from SFT model
+        self.policy_model = self._copy_model(self.sft_model)
+
+        optimizer = torch.optim.AdamW(
+            self.policy_model.parameters(),
+            lr=self.config.learning_rate
+        )
+
+        for iteration in range(num_iterations):
+            # Sample prompts for this batch
+            batch_prompts = [
+                prompts[i % len(prompts)]
+                for i in range(self.config.batch_size)
+            ]
+
+            # Collect experiences
+            experiences = []
+            for prompt in batch_prompts:
+                exp = self._collect_experience(prompt)
+                experiences.append(exp)
+
+            # PPO update
+            loss = self._ppo_update(experiences, optimizer)
+
+            if iteration % 100 == 0:
+                avg_reward = sum(e['reward'] for e in experiences) / len(experiences)
+                print(f"  Iteration {iteration}: Loss = {loss:.4f}, "
+                      f"Avg Reward = {avg_reward:.4f}")
+
+    def _collect_experience(self, prompt: str) -> dict:
+        """Generate response and compute rewards."""
+        # Generate response from policy
+        tokens = self.tokenizer(prompt, return_tensors='pt')
+        with torch.no_grad():
+            output = self.policy_model.generate(
+                **tokens,
+                max_new_tokens=100,
+                do_sample=True,
+                temperature=0.7
+            )
+        response = self.tokenizer.decode(output[0], skip_special_tokens=True)
+
+        # Compute reward from reward model
+        reward_input = prompt + response
+        reward_tokens = self.tokenizer(reward_input, return_tensors='pt')
+        with torch.no_grad():
+            reward = self.reward_model(**reward_tokens).item()
+
+        # Compute KL penalty
+        kl = self._compute_kl(prompt, response)
+        total_reward = reward - self.config.kl_coef * kl
+
+        return {
+            'prompt': prompt,
+            'response': response,
+            'reward': total_reward,
+            'kl': kl,
+            'raw_reward': reward
+        }
+
+    def _compute_kl(self, prompt: str, response: str) -> float:
+        """Compute KL divergence between policy and reference."""
+        full_text = prompt + response
+        tokens = self.tokenizer(full_text, return_tensors='pt')
+
+        with torch.no_grad():
+            # Log probs from policy
+            policy_outputs = self.policy_model(**tokens)
+            policy_logprobs = F.log_softmax(policy_outputs.logits, dim=-1)
+
+            # Log probs from reference
+            ref_outputs = self.ref_model(**tokens)
+            ref_logprobs = F.log_softmax(ref_outputs.logits, dim=-1)
+
+        # KL divergence per token, averaged
+        kl = (policy_logprobs.exp() * (policy_logprobs - ref_logprobs)).sum(-1).mean()
+        return kl.item()
+
+    def _ppo_update(self, experiences: List[dict], optimizer) -> float:
+        """Perform PPO update on collected experiences."""
+        total_loss = 0
+
+        for exp in experiences:
+            prompt = exp['prompt']
+            response = exp['response']
+            reward = exp['reward']
+
+            full_text = prompt + response
+            tokens = self.tokenizer(full_text, return_tensors='pt')
+
+            # Multiple PPO epochs per batch
+            for _ in range(self.config.ppo_epochs):
+                outputs = self.policy_model(**tokens, labels=tokens['input_ids'])
+
+                # Simplified PPO loss (actual implementation is more complex)
+                # This approximates: maximize reward * advantage
+                loss = -reward * outputs.loss
+
+                optimizer.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(
+                    self.policy_model.parameters(), 1.0
+                )
+                optimizer.step()
+
+                total_loss += loss.item()
+
+        return total_loss / (len(experiences) * self.config.ppo_epochs)
+
+    def _copy_model(self, model):
+        """Create a copy of a model."""
+        import copy
+        return copy.deepcopy(model)
+
+
+class RewardModelWrapper(nn.Module):
+    """Wrapper that adds a reward head to a language model."""
+
+    def __init__(self, base_model):
+        super().__init__()
+        self.base = base_model
+        # Get hidden size from model config
+        hidden_size = getattr(base_model.config, 'hidden_size', 768)
+        self.reward_head = nn.Linear(hidden_size, 1)
+
+    def forward(self, input_ids, attention_mask=None, **kwargs):
+        outputs = self.base(
+            input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+            **kwargs
+        )
+        # Use last token's hidden state
+        hidden = outputs.hidden_states[-1][:, -1, :]
+        reward = self.reward_head(hidden).squeeze(-1)
+        return reward
+```
+
+</Implementation>
+
+## What Alignment Means in Practice
+
+<Intuition>
+
+"Alignment" in RLHF typically means training models to be:
+
+**Helpful**: Answer questions usefully, follow instructions, assist with tasks
+- RLHF teaches models to engage rather than refuse unnecessarily
+- Prefers substantive answers over vague ones
+- Learns to ask for clarification when needed
+
+**Harmless**: Avoid generating dangerous, illegal, or harmful content
+- RLHF teaches models to refuse inappropriate requests
+- Learns nuanced judgments about edge cases
+- Balances helpfulness against potential for harm
+
+**Honest**: Acknowledge uncertainty, avoid making things up, cite sources when appropriate
+- RLHF teaches models to say "I don't know"
+- Learns to express calibrated confidence
+- Prefers accurate information over confidently wrong answers
+
+These three H's (Helpful, Harmless, Honest) create tensions that RLHF must balance. A maximally helpful model might also be harmful. A maximally cautious model might be unhelpful. RLHF learns where the balance lies from human preferences.
+
+</Intuition>
+
+<Warning title="Alignment is Not Solved">
+
+RLHF is a powerful technique, but alignment remains an open problem:
+
+**What RLHF does well**:
+- Teaches models to follow instructions
+- Reduces obvious harmful outputs
+- Makes models more pleasant to interact with
+- Captures many nuanced human preferences
+
+**What RLHF doesn't fully solve**:
+- **Reward hacking**: Models may find ways to get high reward without being truly helpful
+- **Distributional shift**: Models may behave differently on prompts unlike training data
+- **Hidden misalignment**: Models may appear aligned while pursuing different goals
+- **Value learning**: We don't know if models truly "understand" human values
+
+RLHF is a tool for alignment, not a complete solution. Active research continues on more robust approaches.
+
+</Warning>
+
+## Summary
+
+Reinforcement learning provides the framework for teaching AI systems what humans want:
+
+- **The alignment problem**: Specifying human values is harder than recognizing them
+- **Why RLHF**: Learn from human preferences rather than explicit rules
+- **The three stages**: SFT for format, reward modeling for values, PPO for optimization
+- **What we mean by aligned**: Helpful, harmless, and honest—in balance
+
+This framing—AI alignment as an RL problem—has transformed how we build AI systems. The next sections dive deeper into each stage: how reward models learn from preferences, and how PPO optimizes language models.
+
+<Note title="Prerequisites Review">
+
+This chapter builds on:
+- **Policy gradients**: The language model is a policy over tokens
+- **PPO**: The algorithm used for RL fine-tuning
+- **Offline RL concepts**: RLHF collects preferences offline, then optimizes
+
+If these concepts feel unfamiliar, review the Policy Gradients and PPO chapters before continuing.
+
+</Note>

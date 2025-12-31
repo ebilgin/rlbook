@@ -1,0 +1,507 @@
+---
+title: "Greedy and Epsilon-Greedy Methods"
+slug: "greedy-methods"
+section: "Bandit Problems"
+description: "Simple but powerful exploration strategies"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Greedy and Epsilon-Greedy Methods
+
+Now that we understand the bandit problem and the exploration-exploitation dilemma, let's explore our first strategies for solving it. We'll start with the simplest possible approach and see why it fails, then fix it with a small but crucial modification.
+
+## The Greedy Approach
+
+<Definition title="Greedy Action Selection">
+Always select the action with the highest estimated value: $A_t = \arg\max_a Q_t(a)$
+</Definition>
+
+<Intuition>
+
+The greedy approach is maximally simple: always pick what looks best right now.
+
+At each step:
+1. Look at your value estimates $Q_t(a)$ for each arm
+2. Pick the arm with the highest estimate
+3. Update your estimate based on the reward
+4. Repeat
+
+This seems reasonable—why would you ever intentionally pick a worse option?
+
+</Intuition>
+
+<Implementation>
+
+```python
+import numpy as np
+
+def greedy_action(Q):
+    """
+    Select the action with highest estimated value.
+    Ties are broken randomly.
+    """
+    max_value = np.max(Q)
+    # Find all actions that achieve the maximum
+    best_actions = np.where(Q == max_value)[0]
+    # Break ties randomly
+    return np.random.choice(best_actions)
+
+
+class GreedyAgent:
+    """A purely greedy bandit agent."""
+
+    def __init__(self, n_arms):
+        self.n_arms = n_arms
+        self.Q = np.zeros(n_arms)  # Value estimates
+        self.N = np.zeros(n_arms)  # Action counts
+
+    def select_action(self):
+        return greedy_action(self.Q)
+
+    def update(self, action, reward):
+        self.N[action] += 1
+        # Incremental update for sample average
+        self.Q[action] += (reward - self.Q[action]) / self.N[action]
+```
+
+</Implementation>
+
+## Why Greedy Fails
+
+<Warning>
+**The Lock-In Problem**
+
+Greedy can get permanently stuck on a suboptimal arm. Here's a concrete example:
+
+Consider a 2-armed bandit where:
+- Arm 0 has true mean $\mu_0 = 0.5$
+- Arm 1 has true mean $\mu_1 = 0.7$ (the optimal arm)
+
+On the first pull, you try Arm 0 and get lucky: reward = 0.8
+On the second pull, you try Arm 1 and get unlucky: reward = 0.3
+
+Now your estimates are $Q(0) = 0.8$ and $Q(1) = 0.3$. Greedy will always pick Arm 0 from now on, never discovering that Arm 1 is actually better!
+</Warning>
+
+<Intuition>
+
+The fundamental problem: **greedy never explores**.
+
+Once it "decides" an arm is best (based on possibly noisy initial data), it never reconsiders. The algorithm has no mechanism for:
+- Trying arms it hasn't explored much
+- Revisiting arms whose estimates might be wrong
+- Escaping from local optima
+
+In the long run, greedy's regret grows **linearly** with time. Every step it's stuck on the wrong arm adds to its losses.
+
+</Intuition>
+
+<Example title="Greedy Lock-In Simulation">
+
+Let's see this lock-in happen in practice:
+
+```python
+import numpy as np
+
+# True arm values (Arm 1 is best)
+true_means = [0.3, 0.8]
+n_arms = 2
+
+# Simulate many runs to see how often greedy gets stuck
+n_runs = 1000
+stuck_on_suboptimal = 0
+
+for run in range(n_runs):
+    rng = np.random.default_rng(run)
+    Q = np.zeros(n_arms)
+    N = np.zeros(n_arms)
+
+    # Pull each arm once to initialize
+    for arm in range(n_arms):
+        reward = rng.normal(true_means[arm], 1.0)
+        Q[arm] = reward
+        N[arm] = 1
+
+    # After initialization, check which arm greedy will choose forever
+    if np.argmax(Q) != 1:  # Not the optimal arm
+        stuck_on_suboptimal += 1
+
+print(f"Greedy gets stuck on suboptimal arm: {stuck_on_suboptimal}/{n_runs} "
+      f"= {100*stuck_on_suboptimal/n_runs:.1f}%")
+```
+
+With Gaussian rewards (variance 1) and means 0.3 and 0.8, greedy gets stuck on the worse arm about 30-35% of the time! And once stuck, it stays stuck forever.
+
+</Example>
+
+## The Epsilon-Greedy Fix
+
+<Definition title="Epsilon-Greedy Action Selection">
+With probability $1 - \varepsilon$, select the greedy action. With probability $\varepsilon$, select a random action uniformly.
+</Definition>
+
+<Intuition>
+
+The fix is simple: **sometimes explore randomly**.
+
+With probability $\varepsilon$ (epsilon), ignore your estimates and pick a random arm. This ensures you keep trying all arms occasionally, so you can discover if you're stuck on a suboptimal one.
+
+The parameter $\varepsilon$ controls the exploration-exploitation balance:
+- $\varepsilon = 0$: Pure greedy (no exploration)
+- $\varepsilon = 1$: Pure random (no exploitation)
+- $\varepsilon = 0.1$: Explore 10% of the time
+
+</Intuition>
+
+<Mathematical>
+
+The epsilon-greedy policy can be written as:
+
+With probability $1 - \varepsilon$: $A_t = \arg\max_a Q_t(a)$ (exploit)
+
+With probability $\varepsilon$: $A_t \sim \text{Uniform}(\{1, \ldots, k\})$ (explore)
+
+The probability of selecting each action is:
+
+- For the greedy action $a^* = \arg\max_a Q_t(a)$: $P(A_t = a^*) = 1 - \varepsilon + \frac{\varepsilon}{k}$
+- For any non-greedy action $a \neq a^*$: $P(A_t = a) = \frac{\varepsilon}{k}$
+
+Note: Even during exploration, there's a chance of accidentally picking the greedy action.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+def epsilon_greedy_action(Q, epsilon):
+    """
+    Select action using epsilon-greedy strategy.
+
+    Args:
+        Q: Array of action value estimates
+        epsilon: Probability of exploring (0 to 1)
+
+    Returns:
+        Selected action index
+    """
+    if np.random.random() < epsilon:
+        # Explore: random action
+        return np.random.randint(len(Q))
+    else:
+        # Exploit: greedy action (with random tie-breaking)
+        max_value = np.max(Q)
+        best_actions = np.where(Q == max_value)[0]
+        return np.random.choice(best_actions)
+
+
+class EpsilonGreedyAgent:
+    """An epsilon-greedy bandit agent."""
+
+    def __init__(self, n_arms, epsilon=0.1):
+        self.n_arms = n_arms
+        self.epsilon = epsilon
+        self.Q = np.zeros(n_arms)
+        self.N = np.zeros(n_arms)
+
+    def select_action(self):
+        return epsilon_greedy_action(self.Q, self.epsilon)
+
+    def update(self, action, reward):
+        self.N[action] += 1
+        self.Q[action] += (reward - self.Q[action]) / self.N[action]
+```
+
+</Implementation>
+
+## Choosing Epsilon
+
+<Tip>
+**Practical Values for Epsilon**
+
+- $\varepsilon = 0.1$ (10%): A common default, good for many problems
+- $\varepsilon = 0.01$ (1%): Less exploration, better if you have many steps
+- $\varepsilon = 0.3$ (30%): More exploration, good if arms are hard to distinguish
+
+The best $\varepsilon$ depends on:
+1. How many arms you have (more arms = need more exploration)
+2. How many steps you can take (more steps = can afford less exploration per step)
+3. How different the arm values are (similar values = need more exploration to distinguish)
+</Tip>
+
+<Example title="Effect of Epsilon">
+
+Let's see how different epsilon values perform on a 10-armed bandit:
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+def run_experiment(n_arms, n_steps, epsilon, n_runs=100, seed=42):
+    """Run epsilon-greedy on a bandit problem."""
+    rng = np.random.default_rng(seed)
+    total_rewards = np.zeros(n_steps)
+
+    for run in range(n_runs):
+        # Create a new bandit for each run
+        true_means = rng.standard_normal(n_arms)
+        optimal_mean = np.max(true_means)
+
+        Q = np.zeros(n_arms)
+        N = np.zeros(n_arms)
+
+        for t in range(n_steps):
+            # Epsilon-greedy action selection
+            if rng.random() < epsilon:
+                action = rng.integers(n_arms)
+            else:
+                action = np.argmax(Q)
+
+            # Get reward
+            reward = rng.normal(true_means[action], 1.0)
+            total_rewards[t] += reward
+
+            # Update
+            N[action] += 1
+            Q[action] += (reward - Q[action]) / N[action]
+
+    return total_rewards / n_runs  # Average reward per step
+
+
+# Compare different epsilon values
+n_arms = 10
+n_steps = 1000
+epsilons = [0.0, 0.01, 0.1, 0.3]
+
+for eps in epsilons:
+    rewards = run_experiment(n_arms, n_steps, eps)
+    avg_reward = np.mean(rewards[-100:])  # Average over last 100 steps
+    print(f"epsilon = {eps}: final average reward = {avg_reward:.3f}")
+```
+
+Typical results:
+- $\varepsilon = 0$: Gets stuck, poor long-term performance
+- $\varepsilon = 0.01$: Eventually finds the best arm, slow to converge
+- $\varepsilon = 0.1$: Good balance, finds best arm reasonably fast
+- $\varepsilon = 0.3$: Explores too much, leaves reward on the table
+
+</Example>
+
+## Decaying Epsilon
+
+<Intuition>
+
+A clever modification: **decrease epsilon over time**.
+
+Early on, explore a lot to find good arms. Later, when you're more confident, exploit more. This gives you the best of both worlds:
+- High exploration when uncertainty is high
+- High exploitation when you've learned the values
+
+</Intuition>
+
+<Mathematical>
+
+A common decay schedule is:
+
+$$\varepsilon_t = \frac{\varepsilon_0}{1 + \beta t}$$
+
+where $\varepsilon_0$ is the initial epsilon and $\beta$ controls the decay rate.
+
+Another popular choice is:
+
+$$\varepsilon_t = \max(\varepsilon_{\min}, \varepsilon_0 \cdot \gamma^t)$$
+
+which decays exponentially but has a minimum exploration floor.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class DecayingEpsilonGreedyAgent:
+    """
+    Epsilon-greedy with decaying exploration rate.
+
+    Epsilon decays over time: epsilon_t = epsilon_0 / (1 + decay * t)
+    """
+
+    def __init__(self, n_arms, epsilon_0=1.0, decay=0.001, epsilon_min=0.01):
+        self.n_arms = n_arms
+        self.epsilon_0 = epsilon_0
+        self.decay = decay
+        self.epsilon_min = epsilon_min
+        self.Q = np.zeros(n_arms)
+        self.N = np.zeros(n_arms)
+        self.t = 0
+
+    @property
+    def epsilon(self):
+        """Current epsilon value."""
+        return max(self.epsilon_min,
+                   self.epsilon_0 / (1 + self.decay * self.t))
+
+    def select_action(self):
+        self.t += 1
+        if np.random.random() < self.epsilon:
+            return np.random.randint(self.n_arms)
+        return np.argmax(self.Q)
+
+    def update(self, action, reward):
+        self.N[action] += 1
+        self.Q[action] += (reward - self.Q[action]) / self.N[action]
+```
+
+</Implementation>
+
+<Warning>
+**Be Careful with Decay**
+
+Decaying epsilon can backfire in non-stationary environments where the best arm changes over time. If epsilon decays too much, you won't detect changes. Only use decay when you're confident the problem is stationary.
+</Warning>
+
+## Optimistic Initialization
+
+<Definition title="Optimistic Initialization">
+Initialize value estimates to a high value (above the true maximum reward) to encourage early exploration.
+</Definition>
+
+<Intuition>
+
+Here's a clever trick that requires no random exploration at all: **start optimistic**.
+
+If you initialize $Q_0(a) = 5$ for all arms, but rewards are actually in the range $[0, 1]$, then:
+1. You pick any arm (they all look equally great)
+2. You get a reward (say, 0.7)
+3. Your estimate drops toward the truth
+4. That arm now looks worse than unexplored arms!
+5. So you try a different arm next
+
+The "disappointment" from seeing real rewards drives exploration naturally.
+
+</Intuition>
+
+<Example title="Optimistic vs Realistic Initialization">
+
+Consider a 3-armed bandit with true means $[0.2, 0.5, 0.8]$:
+
+**Realistic initialization** ($Q_0 = [0, 0, 0]$):
+1. All arms look equal, pick arm 0 randomly
+2. Get reward 0.3, now $Q = [0.3, 0, 0]$
+3. Arm 0 looks best! Keep playing it...
+4. Potentially stuck on suboptimal arm
+
+**Optimistic initialization** ($Q_0 = [5, 5, 5]$):
+1. All arms look equal, pick arm 0
+2. Get reward 0.3, now $Q = [2.65, 5, 5]$
+3. Arms 1 and 2 look better! Try arm 1
+4. Get reward 0.4, now $Q = [2.65, 2.7, 5]$
+5. Arm 2 looks best! Try arm 2
+6. Get reward 0.9, now $Q = [2.65, 2.7, 2.95]$
+7. Keep refining estimates across all arms
+
+The optimistic agent naturally explores all arms before settling.
+
+</Example>
+
+<Implementation>
+
+```python
+import numpy as np
+
+class OptimisticGreedyAgent:
+    """
+    Greedy agent with optimistic initial values.
+
+    The high initial values encourage exploration without
+    requiring explicit random exploration.
+    """
+
+    def __init__(self, n_arms, initial_value=5.0):
+        self.n_arms = n_arms
+        self.Q = np.full(n_arms, initial_value)  # Optimistic initialization
+        self.N = np.zeros(n_arms)
+
+    def select_action(self):
+        # Pure greedy, but optimism drives early exploration
+        return np.argmax(self.Q)
+
+    def update(self, action, reward):
+        self.N[action] += 1
+        self.Q[action] += (reward - self.Q[action]) / self.N[action]
+
+
+# Compare optimistic vs realistic initialization
+def test_initialization(initial_value, n_runs=500):
+    n_arms = 10
+    n_steps = 200
+    total_optimal = 0
+
+    for run in range(n_runs):
+        rng = np.random.default_rng(run)
+        true_means = rng.standard_normal(n_arms)
+        optimal_arm = np.argmax(true_means)
+
+        Q = np.full(n_arms, initial_value)
+        N = np.zeros(n_arms)
+
+        for t in range(n_steps):
+            action = np.argmax(Q)
+            reward = rng.normal(true_means[action], 1.0)
+            N[action] += 1
+            Q[action] += (reward - Q[action]) / N[action]
+
+        # Check if we found the optimal arm
+        if np.argmax(Q) == optimal_arm:
+            total_optimal += 1
+
+    return total_optimal / n_runs
+
+
+print(f"Realistic (Q0=0): {test_initialization(0.0):.1%} find optimal")
+print(f"Optimistic (Q0=5): {test_initialization(5.0):.1%} find optimal")
+```
+
+</Implementation>
+
+<Note>
+**Optimistic Initialization Limitations**
+
+Optimistic initialization only helps at the start. After each arm is tried once and estimates drop, the exploration benefit is mostly gone. For long-running problems, combine it with epsilon-greedy or use more sophisticated methods like UCB.
+</Note>
+
+## When to Use Epsilon-Greedy
+
+<Tip>
+**Epsilon-Greedy is a Great Default**
+
+Use epsilon-greedy when:
+- You want something simple and robust
+- You're prototyping and need a baseline
+- The problem is relatively easy (arms are clearly different)
+- You don't have a good prior or model for the rewards
+
+Consider alternatives (UCB, Thompson Sampling) when:
+- You need better performance and can afford complexity
+- Sample efficiency is critical
+- You have prior knowledge about reward distributions
+</Tip>
+
+## Summary
+
+We've covered the foundational exploration strategies:
+
+1. **Greedy**: Always exploit, can get permanently stuck
+2. **Epsilon-greedy**: Explore randomly with probability $\varepsilon$
+3. **Decaying epsilon**: Reduce exploration over time
+4. **Optimistic initialization**: Start with high estimates to encourage exploration
+
+Epsilon-greedy is simple and effective, but it explores *randomly*—even arms it knows are bad. In the next section, we'll see how UCB explores more intelligently by focusing on uncertain arms.
+
+<Note>
+Epsilon-greedy appears throughout RL, from tabular methods to DQN. The idea of "mostly exploit, sometimes explore randomly" is a workhorse strategy. But as we'll see, there are smarter ways to explore.
+</Note>

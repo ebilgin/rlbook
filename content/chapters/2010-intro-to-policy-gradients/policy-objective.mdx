@@ -1,0 +1,328 @@
+---
+title: "The Policy Objective"
+slug: "policy-objective"
+section: "Policy Gradient Methods"
+description: "What we're trying to maximize"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# The Policy Objective
+
+We have a parameterized stochastic policy $\pi_\theta(a|s)$. Now we need to define what "good" means - what objective should we maximize by adjusting $\theta$?
+
+## The Goal: Maximize Expected Return
+
+<Intuition>
+
+The answer is straightforward: we want the policy that gets the most reward on average. If we follow the policy many times, we want the average total reward to be as high as possible.
+
+This is the **expected return** - the reward we expect to accumulate when following the policy.
+
+</Intuition>
+
+<Definition title="Policy Objective">
+
+The policy objective $J(\theta)$ is the expected return when starting from the initial state distribution and following policy $\pi_\theta$:
+
+$$J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)]$$
+
+where:
+- $\tau = (s_0, a_0, r_1, s_1, a_1, r_2, ...)$ is a trajectory
+- $R(\tau) = \sum_{t=0}^{T-1} \gamma^t r_{t+1}$ is the discounted return
+- The expectation is over trajectories sampled by following $\pi_\theta$
+
+Our goal is to find the optimal parameters:
+$$\theta^* = \arg\max_\theta J(\theta)$$
+
+</Definition>
+
+## Understanding the Expectation
+
+<Mathematical>
+
+The expected return can be written explicitly as:
+
+$$J(\theta) = \sum_\tau P(\tau | \theta) R(\tau)$$
+
+where $P(\tau | \theta)$ is the probability of trajectory $\tau$ under policy $\pi_\theta$.
+
+This probability factors as:
+
+$$P(\tau | \theta) = p(s_0) \prod_{t=0}^{T-1} \pi_\theta(a_t | s_t) \cdot p(s_{t+1} | s_t, a_t)$$
+
+Notice that $P(\tau | \theta)$ depends on:
+- The policy $\pi_\theta$ (which we control)
+- The environment dynamics $p(s_{t+1} | s_t, a_t)$ (which we don't control and often don't know)
+
+</Mathematical>
+
+<Intuition>
+
+The trajectory probability combines two factors at each step:
+1. **How likely is the agent to choose this action?** - determined by the policy
+2. **How likely is the environment to transition to this state?** - determined by physics
+
+We can change the first factor by changing $\theta$. The second factor is fixed by the environment.
+
+</Intuition>
+
+## Alternative Objective Formulations
+
+Depending on the setting, there are several equivalent ways to express the objective.
+
+<Mathematical>
+
+**Episodic tasks (finite horizon)**:
+$$J(\theta) = \mathbb{E}_{s_0, a_0, ...} \left[ \sum_{t=0}^{T-1} \gamma^t r_{t+1} \right]$$
+
+where episodes terminate after at most $T$ steps.
+
+**Continuing tasks with discounting**:
+$$J(\theta) = \mathbb{E}_{s_0 \sim d_0} \left[ V^{\pi_\theta}(s_0) \right]$$
+
+where $d_0$ is the initial state distribution and $V^{\pi_\theta}$ is the value function under $\pi_\theta$.
+
+**Average reward (undiscounted continuing tasks)**:
+$$J(\theta) = \lim_{T \to \infty} \frac{1}{T} \mathbb{E} \left[ \sum_{t=0}^{T-1} r_{t+1} \right]$$
+
+For most practical purposes, the episodic formulation with discounting works well.
+
+</Mathematical>
+
+## Gradient Ascent on $J(\theta)$
+
+<Intuition>
+
+We want to find $\theta$ that maximizes $J(\theta)$. The natural approach is **gradient ascent**:
+
+1. Compute the gradient $\nabla_\theta J(\theta)$ - how does expected return change as we tweak $\theta$?
+2. Update $\theta$ in the direction that increases $J$: $\theta \leftarrow \theta + \alpha \nabla_\theta J(\theta)$
+3. Repeat until convergence
+
+This is just like gradient descent in supervised learning, but we're maximizing (ascending) instead of minimizing.
+
+</Intuition>
+
+<Mathematical>
+
+The gradient ascent update rule:
+
+$$\theta_{t+1} = \theta_t + \alpha \nabla_\theta J(\theta_t)$$
+
+where $\alpha > 0$ is the learning rate.
+
+If we can compute $\nabla_\theta J(\theta)$, we can iteratively improve the policy. The challenge is that $J(\theta)$ involves:
+- An expectation over trajectories
+- Environment dynamics that we don't know
+
+</Mathematical>
+
+## The Challenge: Computing the Gradient
+
+<Intuition>
+
+Here's the problem. We want:
+
+$$\nabla_\theta J(\theta) = \nabla_\theta \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)]$$
+
+But the expectation is over trajectories that **depend on $\theta$**. When we change $\theta$, we change which trajectories are likely to occur.
+
+It's like trying to compute "if I change my driving route, how does my average commute time change?" - but when you change your route, you encounter different traffic patterns and the whole distribution shifts.
+
+</Intuition>
+
+<Mathematical>
+
+Writing out the gradient:
+
+$$\nabla_\theta J(\theta) = \nabla_\theta \sum_\tau P(\tau | \theta) R(\tau)$$
+
+If we try to pull the gradient inside:
+
+$$= \sum_\tau \nabla_\theta P(\tau | \theta) \cdot R(\tau)$$
+
+The problem: $P(\tau | \theta) = p(s_0) \prod_t \pi_\theta(a_t|s_t) \cdot p(s_{t+1}|s_t, a_t)$
+
+We can differentiate $\pi_\theta(a_t|s_t)$, but $p(s_{t+1}|s_t, a_t)$ is the unknown environment dynamics. How do we differentiate through something we don't know?
+
+</Mathematical>
+
+<Warning>
+
+This is the fundamental challenge of policy gradient methods: **the gradient of an expectation over a distribution that depends on the parameters we're differentiating**.
+
+The policy gradient theorem (next chapter) provides an elegant solution.
+
+</Warning>
+
+## Preview: The Policy Gradient Theorem
+
+<Intuition>
+
+The remarkable insight of the policy gradient theorem is that we can compute the gradient **without knowing the environment dynamics**. The gradient turns out to be:
+
+$$\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t|s_t) \cdot G_t \right]$$
+
+This is an expectation over trajectories from our current policy, involving only:
+- The gradient of the log-policy (which we know)
+- The returns (which we can observe)
+
+We don't need to know environment dynamics - we just sample trajectories and compute this estimate!
+
+</Intuition>
+
+## Estimating the Objective
+
+Even if we can't compute the true gradient, we can **estimate** the objective from samples.
+
+<Implementation>
+
+```python
+import numpy as np
+import torch
+
+def estimate_objective(policy, env, n_episodes=100, gamma=0.99):
+    """
+    Estimate J(theta) by sampling episodes.
+
+    Args:
+        policy: A policy with .sample(state) method
+        env: Gym-like environment
+        n_episodes: Number of episodes to sample
+        gamma: Discount factor
+
+    Returns:
+        Mean return (estimate of J(theta))
+    """
+    returns = []
+
+    for _ in range(n_episodes):
+        state, _ = env.reset()
+        done = False
+        episode_return = 0
+        discount = 1.0
+
+        while not done:
+            # Sample action from policy
+            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+            action = policy.sample(state_tensor)
+
+            # Take step in environment
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+
+            # Accumulate discounted return
+            episode_return += discount * reward
+            discount *= gamma
+
+            state = next_state
+
+        returns.append(episode_return)
+
+    return np.mean(returns), np.std(returns) / np.sqrt(n_episodes)
+
+
+# Note: This estimates J(theta), not its gradient
+# The gradient estimation is more involved (next chapter)
+```
+
+</Implementation>
+
+## Finite Differences (A Naive Approach)
+
+<Intuition>
+
+One way to estimate the gradient is **finite differences**: perturb each parameter slightly, measure how $J$ changes, and use that as a gradient estimate.
+
+$$\frac{\partial J}{\partial \theta_i} \approx \frac{J(\theta + \epsilon e_i) - J(\theta - \epsilon e_i)}{2\epsilon}$$
+
+where $e_i$ is a unit vector in direction $i$.
+
+This works but is extremely inefficient - you need at least two objective evaluations per parameter, and each evaluation requires many episodes.
+
+</Intuition>
+
+<Implementation>
+
+```python
+def finite_difference_gradient(policy, env, theta, epsilon=0.01, n_episodes=50):
+    """
+    Estimate gradient via finite differences.
+
+    WARNING: Very slow! O(|theta| * n_episodes) environment interactions.
+    """
+    gradient = np.zeros_like(theta)
+
+    for i in range(len(theta)):
+        # Perturb positively
+        theta_plus = theta.copy()
+        theta_plus[i] += epsilon
+        policy.set_params(theta_plus)
+        J_plus = estimate_objective(policy, env, n_episodes)[0]
+
+        # Perturb negatively
+        theta_minus = theta.copy()
+        theta_minus[i] -= epsilon
+        policy.set_params(theta_minus)
+        J_minus = estimate_objective(policy, env, n_episodes)[0]
+
+        # Central difference estimate
+        gradient[i] = (J_plus - J_minus) / (2 * epsilon)
+
+    # Restore original parameters
+    policy.set_params(theta)
+
+    return gradient
+```
+
+</Implementation>
+
+<Warning>
+
+Finite differences are:
+- **Slow**: $O(|\theta|)$ times slower than gradient-based methods
+- **High variance**: Each $J$ estimate is noisy
+- **Not scalable**: Neural networks have millions of parameters
+
+The policy gradient theorem gives us a much better approach.
+
+</Warning>
+
+## The Landscape of $J(\theta)$
+
+<Intuition>
+
+The objective $J(\theta)$ is a function of potentially millions of parameters. Its landscape can be:
+
+- **Non-convex**: Multiple local optima exist
+- **Plateaus**: Regions where gradients are near-zero
+- **Cliffs**: Regions where small changes cause large performance drops
+
+Policy gradient methods navigate this landscape using stochastic gradient ascent. They don't guarantee finding the global optimum, but they often find good local optima.
+
+</Intuition>
+
+<Example>
+
+Consider a simple policy with two parameters $(\theta_1, \theta_2)$. The objective landscape might look like a bumpy surface with multiple peaks:
+
+- **Global maximum**: The best possible policy
+- **Local maxima**: Good policies that aren't optimal
+- **Saddle points**: Flat regions that aren't optima
+
+Gradient ascent will converge to a local maximum (or saddle point). Different initializations may find different optima.
+
+</Example>
+
+## Summary
+
+The policy objective captures what we want to optimize:
+
+- **Objective**: Expected return $J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)]$
+- **Goal**: Find $\theta^* = \arg\max_\theta J(\theta)$
+- **Method**: Gradient ascent $\theta \leftarrow \theta + \alpha \nabla_\theta J(\theta)$
+- **Challenge**: Computing $\nabla_\theta J(\theta)$ when the expectation depends on $\theta$
+
+The next chapter reveals how the policy gradient theorem solves this challenge, enabling us to estimate gradients from samples alone.
