@@ -204,14 +204,7 @@ Quick rules:
 
 ## Content Status
 
-All content shows its review status:
-
-| Status | Icon | Meaning |
-|--------|------|---------|
-| Draft | 📝 | AI-generated, pending review |
-| Editor Reviewed | ✅ | Approved by editor |
-| Community Reviewed | 👥 | Incorporates community feedback |
-| Verified | 🔒 | Code tested, demos working |
+All content shows its review status (📝 Draft → ✅ Editor Reviewed → 👥 Community Reviewed → 🔒 Verified). See [docs/CONTENT_WORKFLOW.md](docs/CONTENT_WORKFLOW.md#content-status-flow) for details.
 
 ## Deployment
 

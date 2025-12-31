@@ -9,6 +9,18 @@
 - **Discord**: https://discord.gg/mJ7n3zNf7r
 - **Author/Curator**: Enes Bilgin (author of "Mastering Reinforcement Learning with Python")
 
+## Documentation Overview
+
+| Document | Audience | Purpose |
+|----------|----------|---------|
+| **CLAUDE.md** (this file) | AI (Claude) | How to generate/edit content, what docs to read |
+| **README.md** | New visitors | Project overview, quick start, deployment |
+| **docs/CONTRIBUTING.md** | Human contributors | PR process, code standards, community guidelines |
+| **docs/CONTENT_WORKFLOW.md** | Content creators | Phases from prompt to publication, iteration notes |
+| **docs/CONTENT_TYPES.md** | Content creators | Six content categories with structure/templates |
+| **docs/ARCHITECTURE.md** | Developers | Technical stack, component patterns, deployment |
+| **prompts/*.md** | AI generators | Foundation docs (PRINCIPLES, STYLE_GUIDE, etc.) |
+
 ## Core Philosophy
 
 1. **Prompts are First-Class Assets**: The prompts that generate content are as important as the content itself. They are versioned, reviewed, and evolved with community input.
@@ -21,98 +33,43 @@
 
 5. **Browser-Native**: All simulations run client-side. No server load, instant feedback, works offline.
 
-## Tech Stack
+## Repository Structure (Content Focus)
 
-- **Framework**: Astro with islands architecture
-- **Content**: MDX files with React components
-- **ML Runtime**: TensorFlow.js for in-browser RL
-- **Python Package**: PyTorch + Gymnasium (code/rlbook/)
-- **Physics**: MuJoCo WASM / Rapier.js for simulations
-- **3D**: React Three Fiber for visualizations
-- **Hosting**: Cloudflare Pages + R2
-- **Comments**: Giscus (GitHub Discussions)
-
-## Repository Structure
+For full project structure, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Here's what matters for content generation:
 
 ```
 rlbook/
 ├── CLAUDE.md                 # This file - AI collaboration guide
-├── prompts/                  # Global prompt templates and principles
-│   ├── PRINCIPLES.md         # Core content principles for all generation
+├── prompts/                  # Foundation documents for content generation
+│   ├── PRINCIPLES.md         # Core content principles (always read first)
 │   ├── STYLE_GUIDE.md        # Writing style, tone, formatting
 │   ├── MATH_CONVENTIONS.md   # Mathematical notation standards
 │   ├── CODE_STANDARDS.md     # Code example standards
-│   ├── MDX_AUTHORING.md      # MDX syntax rules (critical for avoiding build errors)
-│   ├── EDITOR_REVIEW.md      # Editor AI review checklist and process
-│   └── templates/            # Reusable prompt templates
-│       ├── chapter.md        # Template for chapter-level prompts
-│       ├── paper.md          # Template for paper explanations
-│       ├── concept.md        # Template for concept explanations
-│       ├── interactive.md    # Template for interactive demos
-│       └── exercise.md       # Template for exercises
+│   ├── MDX_AUTHORING.md      # MDX syntax rules (critical!)
+│   └── templates/            # Prompt templates
+│       ├── chapter.md        # Template for chapter prompts
+│       ├── subsection.md     # Template for subsection prompts
+│       └── paper.md          # Template for paper prompts
 ├── content/                  # All educational content
-│   ├── chapters/                   # Progressive lessons (0010, 1010, 2010, etc.)
+│   ├── chapters/             # Progressive lessons
 │   │   └── XXXX-chapter-name/
-│   │       ├── index.mdx           # Main chapter content
-│   │       ├── prompt.md           # Chapter-specific prompt
-│   │       └── assets/             # Images, data files
-│   ├── papers/                     # Research paper deep dives
-│   │   └── paper-slug/
-│   │       ├── index.mdx           # Paper explanation content
-│   │       └── prompt.md           # Paper-specific prompt
-│   ├── applications/               # Problem formulation guides (robotics, trading, etc.)
-│   ├── infrastructure/             # Engineering guides (distributed training, deployment)
-│   ├── environments/               # Interactive playgrounds (GridWorld, etc.)
-│   └── connections.yaml            # Chapter ↔ Paper relationships
-├── notebooks/                # Google Colab notebooks (PyTorch)
-│   ├── 1010_intro_to_td.ipynb
-│   ├── 1020_q_learning_basics.ipynb
-│   └── ...
-├── src/
-│   ├── components/
-│   │   ├── interactive/      # RL demos (GridWorld, etc.)
-│   │   ├── visualization/    # Charts, graphs, animations
-│   │   ├── ui/               # Complexity toggle, navigation
-│   │   └── math/             # Math rendering components
-│   ├── layouts/              # Page layouts
-│   ├── styles/               # Global styles
-│   └── lib/                  # Shared utilities, RL primitives
-├── public/                   # Static assets
-├── code/                     # Production-grade Python implementations
-│   ├── rlbook/               # Main package
-│   │   ├── envs/             # Gymnasium-compatible environments
-│   │   ├── agents/           # Agent implementations (Q-Learning, DQN, etc.)
-│   │   ├── utils/            # Replay buffers, plotting, helpers
-│   │   └── examples/         # Training scripts and tutorials
-│   └── tests/                # pytest test suite
-├── docs/                     # Project documentation
-│   ├── CONTRIBUTING.md       # How to contribute
-│   ├── CONTENT_WORKFLOW.md   # Prompt → Content workflow
-│   └── ARCHITECTURE.md       # Technical architecture
-└── .github/
-    ├── ISSUE_TEMPLATE/
-    └── workflows/
+│   │       ├── prompt.md     # Chapter prompt (required)
+│   │       ├── index.mdx     # Chapter overview
+│   │       ├── {subsection}.mdx  # Subsection pages
+│   │       └── assets/       # Images, data files
+│   ├── papers/               # Research paper deep dives
+│   ├── applications/         # Problem formulation guides
+│   └── connections.yaml      # Chapter ↔ Paper relationships
+├── code/rlbook/              # Python implementations (reference in content)
+├── src/lib/chapters.ts       # Chapter/subsection definitions
+└── docs/                     # Project documentation
+    ├── CONTENT_TYPES.md      # Six content categories
+    └── CONTENT_WORKFLOW.md   # Prompt → Publication workflow
 ```
 
 ## Content Status System
 
-All content is tracked through a review pipeline. This helps readers know the quality/review status of what they're reading:
-
-| Status | Badge | Meaning |
-|--------|-------|---------|
-| `draft` | 📝 | AI-generated, pending review |
-| `editor_reviewed` | ✅ | Reviewed and approved by editor |
-| `community_reviewed` | 👥 | Incorporates community feedback |
-| `verified` | 🔒 | Code tested, demos verified working |
-
-Status is tracked in MDX frontmatter:
-```yaml
----
-title: "Q-Learning Basics"
-status: "editor_reviewed"
-lastReviewed: "2024-01-15"
----
-```
+All content has a review status tracked in MDX frontmatter (`draft` → `editor_reviewed` → `community_reviewed` → `verified`). See [docs/CONTENT_WORKFLOW.md](docs/CONTENT_WORKFLOW.md#content-status-flow) for full details.
 
 ## Content Complexity Levels
 
@@ -206,7 +163,7 @@ lastReviewed: null
 
 ### Cross-Referencing
 
-Use standard markdown links for cross-references (custom components like `<PaperRef>` and `<ChapterRef>` are not currently implemented):
+Use standard markdown links for cross-references:
 
 **In chapters**, reference papers for deep-dives:
 ```mdx
@@ -352,6 +309,36 @@ When generating or modifying content:
 
 9. **Papers are standalone**: Paper explanations should be self-contained for readers coming from a direct link (e.g., reading group). Include a **Prerequisites** section with links to required chapters
 
+### Iterating on Existing Content
+
+When the user is iterating on a chapter or subsection (giving feedback, requesting changes):
+
+1. **At session start**: Read the chapter's `prompt.md` file, including its **Iteration Notes** section
+2. **During session**: Make requested changes to the content (.mdx files)
+3. **At session end**: When the user says they're done or the session is wrapping up:
+   - **Update the prompt's Iteration Notes** with significant decisions, issues fixed, and what worked well
+   - Ask: "Should I update the chapter prompt with notes from this session?"
+
+**What to capture in Iteration Notes:**
+- Decisions with rationale (e.g., "Used CliffWalking instead of GridWorld for TD error demo")
+- Style preferences specific to this chapter
+- Known issues not yet fixed
+- Approaches that worked well
+
+**Example update:**
+```markdown
+## Iteration Notes
+
+### Decisions Made
+- 2024-12-30: Simplified the bootstrap diagram after user feedback
+- 2024-12-30: Added explicit numpy import to all code examples
+
+### Known Issues
+- [ ] Section 3 code example needs error handling for edge case
+```
+
+This ensures context persists across sessions. If a pattern emerges across multiple chapters, elevate it to CLAUDE.md or the foundation docs.
+
 ## Technical Implementation Notes
 
 ### Content Structure
@@ -441,40 +428,9 @@ content/chapters/
 
 ## Build Commands
 
-### Quick Setup
-
 ```bash
-./scripts/setup.sh   # Full setup (Node.js + Python venv + tests)
+npm run build        # Production build (must pass before committing content!)
+npm run dev          # Start dev server for local preview
 ```
 
-### Node.js
-
-```bash
-npm install          # Install dependencies
-npm run dev          # Start dev server
-npm run build        # Production build
-npm run preview      # Preview production build
-npm run check        # Type checking and linting
-```
-
-### Python
-
-```bash
-source .venv/bin/activate              # Activate virtual environment
-pytest code/tests/                     # Run tests
-python -m rlbook.examples.train_gridworld  # Run example
-```
-
-## Inspirations
-
-This project draws inspiration from:
-- **3Blue1Brown**: Mathematical intuition through animation
-- **Chris Olah**: Clear diagrams and visual explanations
-- **Jay Alammar**: Step-by-step visual walkthroughs
-- **Distill.pub**: Interactive, explorable explanations
-- **D2L.ai**: Executable, community-driven textbook
-- **Coursera**: Structured learning paths
-
-## License
-
-Content is licensed under CC BY-NC-SA 4.0. Code examples under MIT.
+For full setup instructions, see [README.md](README.md#quick-start).

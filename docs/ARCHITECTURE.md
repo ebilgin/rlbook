@@ -97,12 +97,11 @@ rlbook/
 │
 ├── content/
 │   └── chapters/
-│       └── XX-chapter-name/
-│           ├── index.mdx     # Chapter content
-│           ├── prompt.md     # Generation prompt
-│           ├── sections/     # Sub-sections (optional)
-│           ├── exercises/    # Exercise content
-│           └── assets/       # Chapter-specific assets
+│       └── XXXX-chapter-name/
+│           ├── prompt.md           # Chapter prompt (required)
+│           ├── index.mdx           # Chapter overview
+│           ├── {subsection}.mdx    # Subsection pages
+│           └── assets/             # Chapter-specific assets
 │
 ├── prompts/
 │   ├── PRINCIPLES.md         # Core content principles

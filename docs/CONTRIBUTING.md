@@ -72,6 +72,17 @@ Draft (AI-Generated) → Editor Reviewed → Community Reviewed → Verified
 
 Prompts are first-class assets. Changes to prompts affect all generated content.
 
+### Preferred AI Tool: Claude Code
+
+This project is optimized for **Claude Code** (Anthropic's CLI tool). The `CLAUDE.md` file in the project root is automatically loaded as context, providing Claude with:
+
+- Project structure and conventions
+- Content generation guidelines
+- MDX syntax rules and common pitfalls
+- Iteration workflow for capturing session learnings
+
+While other AI tools can be used by manually loading `CLAUDE.md` and relevant prompts, Claude Code provides the smoothest experience.
+
 ### Understanding the Prompt System
 
 The project uses a layered prompt structure:
@@ -146,11 +157,11 @@ npm run build
 - Deterministic results (set random seeds)
 - Tested on Colab's free tier (no GPU required for basic notebooks)
 
-**Naming Convention:**
+**Naming Convention:** Use 4-digit chapter numbers matching directory names:
 ```
 notebooks/
-├── 10_intro_to_td.ipynb
-├── 11_q_learning_basics.ipynb
+├── 1010_intro_to_td.ipynb
+├── 1020_q_learning_basics.ipynb
 └── ...
 ```
 
@@ -292,9 +303,22 @@ rlbook/
 
 ## Getting Help
 
-- **Questions about contributing**: Open a discussion
+- **Discord**: Join our community at https://discord.gg/mJ7n3zNf7r for real-time discussion
+- **Questions about contributing**: Open a GitHub discussion
 - **Technical issues**: Open an issue with reproduction steps
-- **Content questions**: Comment on the relevant chapter discussion
+- **Content questions**: Comment on the relevant chapter discussion (via Giscus)
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [README.md](../README.md) | Project overview, quick start |
+| [CLAUDE.md](../CLAUDE.md) | AI collaboration guide (for Claude Code users) |
+| [CONTENT_WORKFLOW.md](CONTENT_WORKFLOW.md) | Prompt → Publication workflow |
+| [CONTENT_TYPES.md](CONTENT_TYPES.md) | Six content categories explained |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Technical architecture details |
 
 ---
 
