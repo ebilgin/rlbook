@@ -252,6 +252,80 @@ papers:
 
 ## Working with This Repository
 
+### Prompt System Overview
+
+This project uses a layered prompt system for content generation:
+
+```
+prompts/
+├── PRINCIPLES.md         # Core content principles (always read first)
+├── STYLE_GUIDE.md        # Writing style and tone
+├── MATH_CONVENTIONS.md   # Mathematical notation standards
+├── CODE_STANDARDS.md     # Code example standards
+├── MDX_AUTHORING.md      # MDX syntax rules (critical!)
+└── templates/
+    ├── chapter.md        # Template for chapter prompts
+    ├── subsection.md     # Template for subsection prompts
+    ├── paper.md          # Template for paper prompts
+    └── ...
+
+content/chapters/{dirName}/
+├── prompt.md             # Chapter-specific prompt (required)
+├── index.mdx             # Chapter overview content
+├── {subsection}.mdx      # Individual subsection content
+└── assets/               # Images, data files
+```
+
+### Chapter vs Subsection Prompts
+
+**Chapter prompt** (`content/chapters/{dirName}/prompt.md`):
+- Defines overall chapter scope, learning objectives, narrative arc
+- Lists all subsections and what each covers
+- Specifies cross-references, interactive elements, exercises
+- **Required** for every chapter
+
+**Subsection prompts** (optional, for finer control):
+- Use when a specific subsection needs detailed guidance
+- Useful for complex topics, iterative refinement, or quality fixes
+- Follow template at `prompts/templates/subsection.md`
+
+### How to Generate Content
+
+**Step 1: Read the foundation documents**
+1. `prompts/PRINCIPLES.md` - Core philosophy
+2. `prompts/STYLE_GUIDE.md` - Writing style
+3. `prompts/MDX_AUTHORING.md` - **Critical** syntax rules
+
+**Step 2: Read the chapter prompt**
+- `content/chapters/{dirName}/prompt.md`
+- Contains learning objectives, concepts, narrative arc
+
+**Step 3: Check existing content for context**
+- Read `src/lib/chapters.ts` for chapter/subsection structure
+- Review adjacent chapters for continuity
+
+**Step 4: Generate content following the prompt**
+- Create `index.mdx` for chapter overview
+- Create `{subsection-slug}.mdx` for each subsection
+- Use all three complexity layers (`<Intuition>`, `<Mathematical>`, `<Implementation>`)
+
+**Step 5: Test**
+```bash
+npm run build  # Must pass!
+```
+
+### Updating Prompts
+
+**Process for prompt changes:**
+1. **Open an issue** describing the proposed change
+2. **Discuss impact** on existing content
+3. **Get editor approval** (Enes)
+4. **Update the prompt**
+5. **Regenerate affected content**
+6. **Review and publish**
+
+**Why this matters:** Prompts are versioned assets. Changes affect all content generated from them. Small prompt tweaks can have large downstream effects.
+
 ### For AI Assistants (Claude)
 
 When generating or modifying content:

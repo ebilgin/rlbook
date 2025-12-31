@@ -4,6 +4,16 @@ Use this template for generating explanations of research papers. Paper explanat
 
 ---
 
+## Required Context
+
+**Before generating content, read [CLAUDE.md](../../CLAUDE.md)** — specifically the "How to Generate Content" and "For AI Assistants" sections.
+
+Also read:
+- **`content/connections.yaml`** - To update chapter-paper relationships
+- **Related chapter content** - To ensure accurate cross-references
+
+---
+
 ## Paper Metadata
 
 **Slug:** [url-friendly-name, e.g., "prioritized-experience-replay"]

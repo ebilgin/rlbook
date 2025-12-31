@@ -40,12 +40,39 @@ This document describes the workflow for creating and maintaining content on rlb
 2. Define interactive demo specifications
 3. Specify cross-references and continuity points
 4. Review against [PRINCIPLES.md](../prompts/PRINCIPLES.md)
+5. (Optional) Create subsection prompts for finer control
 
 ### Outputs
 
-- `content/chapters/XX-name/prompt.md`
+- `content/chapters/XXXX-name/prompt.md` (chapter prompt)
+- `content/chapters/XXXX-name/prompts/subsection-name.md` (optional subsection prompts)
 - Demo specifications in prompt
 - Exercise outlines
+
+### Chapter vs Subsection Prompts
+
+**Chapter prompts** define the overall scope:
+- Learning objectives for the entire chapter
+- Narrative arc and story structure
+- Which subsections exist and their order
+- Cross-chapter connections
+
+**Subsection prompts** provide finer-grained control when needed:
+- Specific objectives for individual subsections
+- Detailed content scope (what to cover, what to defer)
+- Narrative flow (how to connect to previous/next subsections)
+- Particular code examples or mathematical derivations
+
+Use subsection prompts when:
+- A topic is complex and needs detailed specification
+- Multiple authors/sessions are working on different parts
+- Iterative refinement of specific sections is needed
+- Quality issues in a specific subsection need targeted fixing
+
+Skip subsection prompts when:
+- Topics follow naturally from the chapter outline
+- The chapter prompt's "Core Concepts" section provides enough detail
+- Doing initial content generation
 
 ---
 
@@ -57,11 +84,14 @@ This document describes the workflow for creating and maintaining content on rlb
 
 ### Inputs
 
-- Chapter prompt
+- Chapter prompt (required)
+- Subsection prompts (optional, for finer control)
 - Global principles (PRINCIPLES.md, STYLE_GUIDE.md, etc.)
 - Existing content for continuity
 
 ### Process
+
+#### Generating a Full Chapter
 
 1. Load all relevant prompts and principles
 2. Generate content following structure in prompt
@@ -69,11 +99,27 @@ This document describes the workflow for creating and maintaining content on rlb
 4. Generate exercises with solutions
 5. Output as MDX with component placeholders
 
+#### Generating Individual Subsections
+
+When using subsection prompts for finer control:
+
+1. Load the chapter prompt for context
+2. Load the specific subsection prompt
+3. Load global principles (PRINCIPLES.md, STYLE_GUIDE.md, MDX_AUTHORING.md, MATH_CONVENTIONS.md)
+4. Review previous subsection content for continuity
+5. Generate the subsection with proper transitions
+6. Output as `{subsection-slug}.mdx` in the chapter directory
+
 ### Outputs
 
-- `content/chapters/XX-name/index.mdx` (status: draft)
+**Chapter-level generation:**
+- `content/chapters/XXXX-name/index.mdx` (status: draft)
 - Exercise files
 - Code examples
+
+**Subsection-level generation:**
+- `content/chapters/XXXX-name/{subsection-slug}.mdx`
+- Must be registered in `src/lib/chapters.ts` under the chapter's `subsections` array
 
 ### Quality Checks
 
@@ -82,6 +128,22 @@ This document describes the workflow for creating and maintaining content on rlb
 - [ ] Cross-references in place
 - [ ] Code examples complete and syntactically correct
 - [ ] Mathematical notation follows conventions
+- [ ] Subsection transitions flow naturally
+
+### Ensuring Prompts and Context are Used
+
+**For Claude Code users:**
+1. `CLAUDE.md` is automatically loaded — it references all foundation documents
+2. Reference specific prompts in your request:
+   ```
+   Generate content for intro-to-td following the prompt at
+   content/chapters/1010-intro-to-td/prompt.md
+   ```
+
+**For other AI tools:**
+1. Load `CLAUDE.md` first — it lists all required foundation documents
+2. Load the specific chapter/subsection prompt
+3. Generate content following the loaded context
 
 ---
 
@@ -231,6 +293,32 @@ Prompts evolve based on:
 3. **Technical updates** (new best practices, tools)
 4. **Curriculum changes** (new chapters, reorganization)
 
+### Capturing Iteration Context
+
+When iterating on content, learnings arise that should persist across sessions. Use the **Iteration Notes** section in chapter/subsection prompts to capture:
+
+- **Decisions Made**: Choices with rationale (e.g., "2024-01-15: Used numpy instead of pure Python for performance")
+- **Style Preferences**: Chapter-specific style choices
+- **Known Issues**: Problems identified but not yet fixed
+- **What Worked Well**: Approaches to replicate
+
+**Workflow:**
+1. After each significant revision, update the prompt's Iteration Notes section
+2. Next session reads these notes for context
+3. Global patterns should be elevated to CLAUDE.md or foundation docs
+
+**Example:**
+```markdown
+## Iteration Notes
+
+### Decisions Made
+- 2024-01-15: Kept epsilon-greedy before UCB to build intuition gradually
+- 2024-01-16: Added GridWorld visualization after user feedback on clarity
+
+### Known Issues
+- [ ] Code example in section 3 needs NumPy 2.0 compatibility check
+```
+
 ### Prompt Change Process
 
 1. Open issue describing proposed change
@@ -239,6 +327,40 @@ Prompts evolve based on:
 4. Update prompt
 5. Regenerate affected content
 6. Review and publish
+
+### Updating Prompts: Step by Step
+
+**For minor fixes (typos, clarifications):**
+1. Edit the prompt file directly
+2. Commit with message: `prompt: Fix typo in chapter X prompt`
+3. No regeneration needed unless content is affected
+
+**For content-affecting changes:**
+1. Edit the prompt in `content/chapters/XXXX-name/prompt.md`
+2. If updating subsection prompts, edit in `content/chapters/XXXX-name/prompts/`
+3. Regenerate affected content
+4. Review generated output
+5. Commit both prompt and content changes together
+6. PR with description of what changed and why
+
+**For template changes (affects all future content):**
+1. Update template in `prompts/templates/chapter.md` or `prompts/templates/subsection.md`
+2. Consider if existing prompts need updating to match
+3. Document the change in the template file itself
+4. Update CLAUDE.md if the change affects conventions
+
+### Prompt Directory Structure
+
+```
+content/chapters/XXXX-chapter-name/
+├── prompt.md              # Main chapter prompt
+├── prompts/               # Optional subsection prompts
+│   ├── subsection-1.md
+│   └── subsection-2.md
+├── index.mdx              # Chapter overview content
+├── subsection-1.mdx       # Subsection content files
+└── subsection-2.mdx
+```
 
 ---
 

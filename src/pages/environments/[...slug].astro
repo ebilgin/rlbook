@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { ComplexityToggle } from '../../components/ui/ComplexityToggle';
 
 export function getStaticPaths() {
   const mdxModules = import.meta.glob('/content/environments/*/index.mdx', { eager: true });
@@ -71,13 +72,18 @@ const statusLabels: Record<string, string> = {
 
     <!-- Content -->
     <main class="max-w-4xl mx-auto px-4 py-12">
+      <!-- Complexity Toggle -->
+      <div class="mb-8">
+        <ComplexityToggle client:load />
+      </div>
+
       <article class="prose prose-lg dark:prose-invert max-w-none bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8">
         <Content />
       </article>
 
       <!-- Footer -->
       <footer class="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
-        <div class="flex justify-between items-center">
+        <div class="flex justify-between items-center mb-8">
           <a href="/environments" class="text-primary-600 dark:text-primary-400 hover:underline">
             ← Back to Environments
           </a>
@@ -88,6 +94,26 @@ const statusLabels: Record<string, string> = {
           >
             Edit on GitHub →
           </a>
+        </div>
+
+        <!-- Comments -->
+        <div id="giscus-container" class="mt-8">
+          <script
+            src="https://giscus.app/client.js"
+            data-repo="ebilgin/rlbook"
+            data-repo-id="R_kgDOQw0g7Q"
+            data-category="General"
+            data-category-id="DIC_kwDOQw0g7c4C0Yda"
+            data-mapping="pathname"
+            data-strict="0"
+            data-reactions-enabled="1"
+            data-emit-metadata="0"
+            data-input-position="bottom"
+            data-theme="dark"
+            data-lang="en"
+            crossorigin="anonymous"
+            async
+          ></script>
         </div>
       </footer>
     </main>

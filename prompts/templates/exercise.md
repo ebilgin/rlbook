@@ -4,6 +4,14 @@ Use this template for generating chapter exercises.
 
 ---
 
+## Required Context
+
+**Before generating content, read [CLAUDE.md](../../CLAUDE.md)** — specifically the "How to Generate Content" section.
+
+Also read the **parent chapter content** to ensure exercises test concepts actually covered.
+
+---
+
 ## Exercise Metadata
 
 **Exercise ID:** [chapter-number.exercise-number, e.g., "11.3"]

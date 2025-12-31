@@ -4,6 +4,14 @@ Use this template for generating focused explanations of individual concepts wit
 
 ---
 
+## Required Context
+
+**Before generating content, read [CLAUDE.md](../../CLAUDE.md)** — specifically the "How to Generate Content" section.
+
+Also read the **parent chapter prompt** to understand how this concept fits into the broader narrative.
+
+---
+
 ## Concept Metadata
 
 **Concept Name:** [e.g., "Temporal Difference Error"]

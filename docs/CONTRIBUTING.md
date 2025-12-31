@@ -72,11 +72,39 @@ Draft (AI-Generated) → Editor Reviewed → Community Reviewed → Verified
 
 Prompts are first-class assets. Changes to prompts affect all generated content.
 
+### Understanding the Prompt System
+
+The project uses a layered prompt structure:
+
+```
+prompts/
+├── PRINCIPLES.md         # Core content principles
+├── STYLE_GUIDE.md        # Writing style and tone
+├── MATH_CONVENTIONS.md   # Mathematical notation
+├── CODE_STANDARDS.md     # Code example standards
+├── MDX_AUTHORING.md      # MDX syntax rules
+└── templates/
+    ├── chapter.md        # Template for chapter prompts
+    └── subsection.md     # Template for subsection prompts
+
+content/chapters/{dirName}/
+├── prompt.md             # Chapter-specific prompt (required)
+├── prompts/              # Optional subsection prompts
+│   └── subsection-name.md
+├── index.mdx             # Chapter overview
+└── {subsection}.mdx      # Subsection content
+```
+
+**Chapter prompts** define overall scope, learning objectives, and which subsections exist.
+
+**Subsection prompts** (optional) provide finer control when a topic needs detailed specification, multiple sessions are working on different parts, or quality issues need targeted fixes.
+
 ### Proposing Prompt Changes
 
 1. **Open an issue first** — discuss the change before implementing
 2. Explain: What's wrong with current prompt? What's the expected improvement?
 3. Provide: Example of content before/after (if possible)
+4. Specify: Is this a chapter prompt, subsection prompt, or template change?
 
 ### Prompt PR Requirements
 
@@ -84,6 +112,7 @@ Prompts are first-class assets. Changes to prompts affect all generated content.
 - [ ] Editor approval on the approach
 - [ ] No breaking changes to existing content structure
 - [ ] Updated any affected content (if regeneration needed)
+- [ ] For template changes: documented in the template file itself
 
 ---
 
@@ -191,9 +220,22 @@ npm run dev
 
 ```
 rlbook/
-├── content/chapters/     # MDX content
-├── prompts/              # Prompt templates and principles
-├── src/components/       # React components
+├── content/
+│   ├── chapters/         # Chapter content (MDX + prompts)
+│   │   └── XXXX-name/
+│   │       ├── prompt.md       # Chapter prompt
+│   │       ├── index.mdx       # Chapter overview
+│   │       ├── subsection.mdx  # Subsection pages
+│   │       └── prompts/        # Optional subsection prompts
+│   ├── papers/           # Paper explanations
+│   ├── applications/     # Real-world applications
+│   └── infrastructure/   # Technical infrastructure guides
+├── prompts/              # Global prompt templates and principles
+├── src/
+│   ├── components/       # React components
+│   ├── layouts/          # Astro page layouts
+│   ├── lib/              # Utilities and chapter definitions
+│   └── pages/            # Astro page routes
 ├── notebooks/            # Colab notebooks (PyTorch)
 ├── public/               # Static assets
 └── docs/                 # Project documentation

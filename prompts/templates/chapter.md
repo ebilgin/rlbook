@@ -4,6 +4,12 @@ Use this template for generating complete chapter content.
 
 ---
 
+## Required Context
+
+**Before generating content, read [CLAUDE.md](../../CLAUDE.md)** — specifically the "How to Generate Content" section. It references all required foundation documents (PRINCIPLES.md, STYLE_GUIDE.md, MDX_AUTHORING.md, etc.).
+
+---
+
 ## Chapter Metadata
 
 **Chapter Number:** [XX]
@@ -138,6 +144,28 @@ Specify which standard examples to use and how:
 - "Avoid discussion of function approximation—that comes later"
 - "Use the trading example from the previous chapter"
 ]
+
+---
+
+## Iteration Notes
+
+> **Purpose:** Capture learnings from content generation sessions that should persist across iterations. Update this section after each significant revision.
+
+### Decisions Made
+<!-- Document choices made during iteration that future sessions should respect -->
+- [Date]: [Decision and rationale]
+
+### Style Preferences
+<!-- Specific style choices for this chapter that differ from or extend the global style guide -->
+- [Preference and why]
+
+### Known Issues
+<!-- Problems identified but not yet fixed, with context -->
+- [ ] [Issue description]
+
+### What Worked Well
+<!-- Approaches that produced good results, to replicate -->
+- [Approach and outcome]
 
 ---
 

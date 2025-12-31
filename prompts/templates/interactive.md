@@ -4,6 +4,14 @@ Use this template for specifying interactive demonstrations.
 
 ---
 
+## Required Context
+
+**Before generating content, read [CLAUDE.md](../../CLAUDE.md)** — specifically the "Core Philosophy" (Interactivity First) and "For AI Assistants" sections.
+
+Also review existing components in `src/components/interactive/` for patterns and reusability.
+
+---
+
 ## Demo Metadata
 
 **Demo Name:** [e.g., "Q-Value Heatmap Explorer"]
