@@ -10,576 +10,371 @@ import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callout
 
 # Quantization in Practice
 
-Time to get your hands dirty. This section walks through quantizing a real language model, measuring the quality tradeoffs, and deploying the result. We'll use tools that work in practice: bitsandbytes for quick quantization, and GPTQ for maximum compression.
+Time to get hands-on. We'll quantize a real LLM and measure the tradeoffs.
 
-## Setup: What You'll Need
+## The Practical Workflow
+
+<div className="my-8 p-6 bg-slate-800/30 rounded-xl border border-slate-700">
+  <div className="flex items-center justify-center gap-3 flex-wrap text-sm">
+    <div className="text-center px-4 py-3 bg-cyan-900/30 rounded-lg border border-cyan-700/30">
+      <div className="text-2xl mb-1">1️⃣</div>
+      <div className="text-cyan-300">Load Model</div>
+    </div>
+    <div className="text-slate-500 text-xl">→</div>
+    <div className="text-center px-4 py-3 bg-violet-900/30 rounded-lg border border-violet-700/30">
+      <div className="text-2xl mb-1">2️⃣</div>
+      <div className="text-violet-300">Quantize</div>
+    </div>
+    <div className="text-slate-500 text-xl">→</div>
+    <div className="text-center px-4 py-3 bg-amber-900/30 rounded-lg border border-amber-700/30">
+      <div className="text-2xl mb-1">3️⃣</div>
+      <div className="text-amber-300">Evaluate</div>
+    </div>
+    <div className="text-slate-500 text-xl">→</div>
+    <div className="text-center px-4 py-3 bg-emerald-900/30 rounded-lg border border-emerald-700/30">
+      <div className="text-2xl mb-1">4️⃣</div>
+      <div className="text-emerald-300">Deploy</div>
+    </div>
+  </div>
+</div>
+
+## Quick Start: bitsandbytes
+
+The fastest path to quantization. One flag, and your model loads in lower precision.
+
+<div className="grid md:grid-cols-3 gap-4 my-6">
+  <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+    <div className="font-mono text-blue-400 text-sm mb-2">float16</div>
+    <div className="text-xs text-slate-400">torch_dtype=torch.float16</div>
+    <div className="text-xs text-slate-500 mt-2">Baseline</div>
+  </div>
+  <div className="bg-gradient-to-br from-emerald-900/20 to-emerald-800/5 rounded-lg p-4 border border-emerald-700/40">
+    <div className="font-mono text-emerald-400 text-sm mb-2">8-bit</div>
+    <div className="text-xs text-slate-400">load_in_8bit=True</div>
+    <div className="text-xs text-emerald-400/70 mt-2">2× smaller</div>
+  </div>
+  <div className="bg-gradient-to-br from-amber-900/20 to-amber-800/5 rounded-lg p-4 border border-amber-700/40">
+    <div className="font-mono text-amber-400 text-sm mb-2">4-bit</div>
+    <div className="text-xs text-slate-400">load_in_4bit=True</div>
+    <div className="text-xs text-amber-400/70 mt-2">4× smaller</div>
+  </div>
+</div>
 
 <Implementation>
 
 ```python
-# Install quantization libraries
-!pip install -q transformers accelerate bitsandbytes
-!pip install -q auto-gptq optimum
-!pip install -q datasets  # For evaluation
-
-# Verify GPU is available
-import torch
-print(f"CUDA available: {torch.cuda.is_available()}")
-if torch.cuda.is_available():
-    print(f"GPU: {torch.cuda.get_device_name(0)}")
-    print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
-```
-
-</Implementation>
-
-## Quick Quantization with bitsandbytes
-
-<Intuition>
-
-bitsandbytes provides the fastest path to quantization. With just a few flags, you can load a model in 8-bit or 4-bit precision directly from HuggingFace.
-
-This is "load-time quantization"—the model is quantized as it's loaded into memory. No calibration data needed.
-
-</Intuition>
-
-<Implementation>
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 import torch
 
-MODEL_NAME = "Qwen/Qwen2.5-0.5B"  # Small model for demonstration
+MODEL = "Qwen/Qwen2.5-0.5B"
 
-# Load tokenizer
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-
-# Load in float16 (baseline)
-print("Loading float16 model...")
+# Float16 baseline
 model_fp16 = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
-    torch_dtype=torch.float16,
-    device_map="auto"
+    MODEL, torch_dtype=torch.float16, device_map="auto"
 )
 
-# Load in 8-bit
-print("Loading 8-bit model...")
+# 8-bit - just add one flag
 model_8bit = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
-    load_in_8bit=True,
-    device_map="auto"
+    MODEL, load_in_8bit=True, device_map="auto"
 )
 
-# Load in 4-bit (NF4 quantization)
-print("Loading 4-bit model...")
-bnb_config = BitsAndBytesConfig(
+# 4-bit with NF4 (best quality)
+config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",  # Normal Float 4-bit
+    bnb_4bit_quant_type="nf4",
     bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_use_double_quant=True,  # Quantize the quantization constants too
 )
 model_4bit = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
-    quantization_config=bnb_config,
-    device_map="auto"
+    MODEL, quantization_config=config, device_map="auto"
 )
-
-print("All models loaded!")
 ```
 
 </Implementation>
 
-### Measuring Memory Usage
+## GPTQ for Production
+
+For best 4-bit quality, use GPTQ with calibration data.
+
+<div className="my-8 p-6 bg-slate-800/30 rounded-xl border border-slate-700">
+  <div className="text-center text-sm text-slate-400 mb-4">GPTQ Process</div>
+
+  <div className="flex items-center justify-center gap-4 flex-wrap">
+    <div className="text-center px-3 py-2 bg-slate-700/50 rounded-lg">
+      <div className="text-slate-300 text-sm">Calibration Data</div>
+      <div className="text-xs text-slate-500">~128 samples</div>
+    </div>
+    <div className="text-slate-500">+</div>
+    <div className="text-center px-3 py-2 bg-slate-700/50 rounded-lg">
+      <div className="text-slate-300 text-sm">Pre-trained Model</div>
+      <div className="text-xs text-slate-500">float16</div>
+    </div>
+    <div className="text-slate-500 text-xl">→</div>
+    <div className="text-center px-3 py-2 bg-amber-900/30 rounded-lg border border-amber-700/30">
+      <div className="text-amber-300 text-sm">GPTQ</div>
+      <div className="text-xs text-slate-400">Layer-by-layer</div>
+    </div>
+    <div className="text-slate-500 text-xl">→</div>
+    <div className="text-center px-3 py-2 bg-emerald-900/30 rounded-lg border border-emerald-700/30">
+      <div className="text-emerald-300 text-sm">4-bit Model</div>
+      <div className="text-xs text-slate-400">Optimized</div>
+    </div>
+  </div>
+</div>
 
 <Implementation>
 
 ```python
-def get_model_memory(model):
-    """Get memory used by model in GB."""
-    mem = sum(p.numel() * p.element_size() for p in model.parameters())
-    return mem / 1e9
+from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
 
-def get_gpu_memory_used():
-    """Get current GPU memory usage in GB."""
-    if torch.cuda.is_available():
-        return torch.cuda.memory_allocated() / 1e9
-    return 0
-
-# Compare memory footprints
-print("Memory Comparison:")
-print("-" * 40)
-print(f"float16: {get_model_memory(model_fp16):.2f} GB")
-print(f"8-bit:   ~{get_model_memory(model_fp16) / 2:.2f} GB (estimated)")
-print(f"4-bit:   ~{get_model_memory(model_fp16) / 4:.2f} GB (estimated)")
-
-# Actual GPU memory is harder to measure due to overhead
-# but should be roughly proportional
-```
-
-</Implementation>
-
-### Comparing Quality
-
-<Implementation>
-
-```python
-def generate_response(model, tokenizer, prompt, max_tokens=100):
-    """Generate a response and measure time."""
-    import time
-
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
-    start = time.time()
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=max_tokens,
-            do_sample=True,
-            temperature=0.7,
-            pad_token_id=tokenizer.pad_token_id
-        )
-    elapsed = time.time() - start
-
-    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return response, elapsed
-
-# Test prompts
-prompts = [
-    "Explain reinforcement learning in one paragraph:",
-    "What is the capital of France?",
-    "Write a Python function to compute factorial:",
+# Prepare calibration data (use domain-representative text)
+calibration_data = [
+    tokenizer(text, return_tensors="pt", max_length=512, truncation=True)
+    for text in your_sample_texts[:128]
 ]
 
-print("Quality Comparison")
-print("=" * 60)
-
-for prompt in prompts:
-    print(f"\nPrompt: {prompt}\n")
-
-    for name, model in [("FP16", model_fp16), ("8-bit", model_8bit), ("4-bit", model_4bit)]:
-        response, time_taken = generate_response(model, tokenizer, prompt, max_tokens=50)
-        # Extract just the generated part
-        generated = response[len(prompt):].strip()[:100]
-        print(f"{name} ({time_taken:.2f}s): {generated}...")
-
-    print("-" * 60)
-```
-
-</Implementation>
-
-## GPTQ Quantization for Maximum Compression
-
-<Intuition>
-
-bitsandbytes is easy but not optimal. For production deployment, GPTQ gives better quality at the same bit width. The tradeoff: you need a calibration dataset and the quantization takes longer.
-
-</Intuition>
-
-<Implementation>
-
-```python
-from transformers import AutoTokenizer
-from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
-import torch
-
-MODEL_NAME = "Qwen/Qwen2.5-0.5B"
-
-# Load tokenizer
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-
-# Create calibration data
-def get_calibration_data(tokenizer, n_samples=128, seq_len=512):
-    """Create calibration data for GPTQ."""
-    # In practice, use representative data from your domain
-    # Here we use random text as a simple example
-
-    calibration_prompts = [
-        "The quick brown fox jumps over the lazy dog.",
-        "Reinforcement learning is a type of machine learning.",
-        "In the beginning, there was nothing but potential.",
-        "Python is a versatile programming language.",
-        "The weather today is sunny with a chance of rain.",
-        # Add more diverse examples...
-    ] * (n_samples // 5)
-
-    data = []
-    for prompt in calibration_prompts[:n_samples]:
-        tokens = tokenizer(prompt, return_tensors="pt", padding="max_length",
-                          max_length=seq_len, truncation=True)
-        data.append(tokens.input_ids)
-
-    return data
-
-# Quantization configuration
-quantize_config = BaseQuantizeConfig(
-    bits=4,                 # 4-bit quantization
-    group_size=128,         # Quantize in groups of 128 weights
-    desc_act=True,          # Order columns by activation magnitude
-    damp_percent=0.1,       # Dampening for numerical stability
+# Configure GPTQ
+config = BaseQuantizeConfig(
+    bits=4,
+    group_size=128,
+    desc_act=True,  # Helps with quality
 )
-
-# Load model for quantization
-print("Loading model for GPTQ quantization...")
-model = AutoGPTQForCausalLM.from_pretrained(
-    MODEL_NAME,
-    quantize_config=quantize_config,
-    torch_dtype=torch.float16
-)
-
-# Get calibration data
-print("Creating calibration data...")
-calibration_data = get_calibration_data(tokenizer, n_samples=128)
 
 # Quantize
-print("Running GPTQ quantization (this may take a few minutes)...")
+model = AutoGPTQForCausalLM.from_pretrained(MODEL, config)
 model.quantize(calibration_data)
-
-# Save the quantized model
-print("Saving quantized model...")
-model.save_quantized("./qwen-0.5b-gptq-4bit")
-tokenizer.save_pretrained("./qwen-0.5b-gptq-4bit")
-
-print("Done! Model saved to ./qwen-0.5b-gptq-4bit")
+model.save_quantized("./model-gptq-4bit")
 ```
 
 </Implementation>
 
-### Loading and Using GPTQ Models
+## Measuring Quality
 
-<Implementation>
+<Warning title="Never Skip Evaluation">
 
-```python
-from auto_gptq import AutoGPTQForCausalLM
-from transformers import AutoTokenizer
+Quantization can fail silently. A model might look fine on average but fail on specific inputs.
 
-# Load the quantized model
-model = AutoGPTQForCausalLM.from_quantized(
-    "./qwen-0.5b-gptq-4bit",
-    device="cuda:0",
-    use_safetensors=True,
-)
-tokenizer = AutoTokenizer.from_pretrained("./qwen-0.5b-gptq-4bit")
+</Warning>
 
-# Use it like any other model
-prompt = "Explain the policy gradient theorem:"
-inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+### Perplexity Test
 
-with torch.no_grad():
-    outputs = model.generate(**inputs, max_new_tokens=100, do_sample=True)
-
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-```
-
-</Implementation>
-
-## Evaluating Quantized Models
-
-<Intuition>
-
-Never deploy a quantized model without evaluation. Here's how to systematically measure quality loss.
-
-</Intuition>
+<div className="my-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+  <div className="text-sm text-slate-400 mb-3">Expected Results (Qwen-0.5B)</div>
+  <div className="grid grid-cols-3 gap-4 text-center">
+    <div>
+      <div className="text-lg font-mono text-blue-400">~15.2</div>
+      <div className="text-xs text-slate-500">float16</div>
+    </div>
+    <div>
+      <div className="text-lg font-mono text-emerald-400">~15.4</div>
+      <div className="text-xs text-slate-500">8-bit (+1%)</div>
+    </div>
+    <div>
+      <div className="text-lg font-mono text-amber-400">~15.8</div>
+      <div className="text-xs text-slate-500">4-bit (+4%)</div>
+    </div>
+  </div>
+  <div className="text-xs text-slate-500 text-center mt-3">Lower is better</div>
+</div>
 
 <Implementation>
 
 ```python
 from datasets import load_dataset
-import numpy as np
-from tqdm import tqdm
 
-def evaluate_perplexity(model, tokenizer, dataset, max_samples=100):
-    """
-    Compute perplexity on a dataset.
+def evaluate_perplexity(model, tokenizer, max_samples=100):
+    dataset = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+    total_loss, total_tokens = 0, 0
 
-    Lower perplexity = better model.
-    """
-    model.eval()
-    total_loss = 0
-    total_tokens = 0
-
-    for i, sample in enumerate(tqdm(dataset, total=max_samples)):
-        if i >= max_samples:
-            break
-
-        text = sample['text'][:512]  # Truncate for speed
-        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+    for sample in dataset.select(range(max_samples)):
+        inputs = tokenizer(sample["text"], return_tensors="pt", truncation=True)
         inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
         with torch.no_grad():
-            outputs = model(**inputs, labels=inputs["input_ids"])
-            loss = outputs.loss
+            loss = model(**inputs, labels=inputs["input_ids"]).loss
 
         total_loss += loss.item() * inputs["input_ids"].shape[1]
         total_tokens += inputs["input_ids"].shape[1]
 
-    avg_loss = total_loss / total_tokens
-    perplexity = np.exp(avg_loss)
+    return np.exp(total_loss / total_tokens)
 
-    return perplexity
-
-# Load a test dataset
-dataset = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
-
-# Evaluate each model
-print("Perplexity Evaluation")
-print("-" * 40)
-
+# Compare
 for name, model in [("FP16", model_fp16), ("8-bit", model_8bit), ("4-bit", model_4bit)]:
-    ppl = evaluate_perplexity(model, tokenizer, dataset, max_samples=100)
+    ppl = evaluate_perplexity(model, tokenizer)
     print(f"{name}: {ppl:.2f}")
 ```
 
 </Implementation>
 
-### Task-Specific Evaluation
+## Speed Benchmarks
 
-<Implementation>
-
-```python
-def evaluate_qa(model, tokenizer, questions):
-    """
-    Evaluate on simple Q&A pairs.
-
-    Check if the model gives correct answers.
-    """
-    correct = 0
-    total = len(questions)
-
-    for q, expected in questions:
-        inputs = tokenizer(q, return_tensors="pt").to(model.device)
-
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=20,
-                temperature=0.1,  # Low temperature for deterministic output
-                do_sample=False
-            )
-
-        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        answer = response[len(q):].strip().lower()
-
-        if expected.lower() in answer:
-            correct += 1
-            status = "✓"
-        else:
-            status = "✗"
-
-        print(f"{status} Q: {q[:50]}...")
-        print(f"   Expected: {expected}, Got: {answer[:30]}")
-
-    accuracy = correct / total
-    return accuracy
-
-# Simple factual questions
-qa_pairs = [
-    ("The capital of France is", "Paris"),
-    ("The largest planet in our solar system is", "Jupiter"),
-    ("2 + 2 =", "4"),
-    ("The chemical symbol for water is", "H2O"),
-    ("Python was created by", "Guido"),
-]
-
-print("\nQ&A Accuracy")
-print("-" * 40)
-for name, model in [("FP16", model_fp16), ("4-bit", model_4bit)]:
-    acc = evaluate_qa(model, tokenizer, qa_pairs)
-    print(f"{name}: {acc:.0%}")
-```
-
-</Implementation>
-
-## Inference Speed Benchmarks
+<div className="my-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+  <div className="text-sm text-slate-400 mb-3">Typical Speedups</div>
+  <div className="space-y-3">
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-500 w-12">float16</span>
+      <div className="flex-1 h-4 bg-slate-700 rounded relative">
+        <div className="absolute left-0 top-0 h-full w-[50%] bg-blue-400 rounded"></div>
+      </div>
+      <span className="text-xs text-slate-400">1.0×</span>
+    </div>
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-500 w-12">8-bit</span>
+      <div className="flex-1 h-4 bg-slate-700 rounded relative">
+        <div className="absolute left-0 top-0 h-full w-[75%] bg-emerald-400 rounded"></div>
+      </div>
+      <span className="text-xs text-emerald-400">1.5×</span>
+    </div>
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-500 w-12">4-bit</span>
+      <div className="flex-1 h-4 bg-slate-700 rounded relative">
+        <div className="absolute left-0 top-0 h-full w-[100%] bg-amber-400 rounded"></div>
+      </div>
+      <span className="text-xs text-amber-400">2.0×</span>
+    </div>
+  </div>
+  <div className="text-xs text-slate-500 text-center mt-3">Results vary by hardware and model</div>
+</div>
 
 <Implementation>
 
 ```python
 import time
-import torch
 
-def benchmark_inference(model, tokenizer, prompt, n_tokens=100, n_runs=5):
-    """
-    Benchmark inference speed.
-
-    Returns tokens per second.
-    """
+def benchmark_speed(model, tokenizer, prompt, n_tokens=100, n_runs=5):
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
     # Warmup
     with torch.no_grad():
-        _ = model.generate(**inputs, max_new_tokens=10)
+        model.generate(**inputs, max_new_tokens=10)
 
     # Benchmark
-    times = []
+    torch.cuda.synchronize()
+    start = time.time()
     for _ in range(n_runs):
-        torch.cuda.synchronize()
-        start = time.time()
-
         with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=n_tokens,
-                do_sample=False
-            )
+            model.generate(**inputs, max_new_tokens=n_tokens, do_sample=False)
+    torch.cuda.synchronize()
 
-        torch.cuda.synchronize()
-        elapsed = time.time() - start
-        times.append(elapsed)
-
-    avg_time = np.mean(times)
-    tokens_per_sec = n_tokens / avg_time
-
-    return tokens_per_sec, avg_time
-
-prompt = "Explain the difference between SARSA and Q-learning:"
-
-print("Inference Speed Benchmark")
-print("-" * 40)
-for name, model in [("FP16", model_fp16), ("8-bit", model_8bit), ("4-bit", model_4bit)]:
-    tps, time_taken = benchmark_inference(model, tokenizer, prompt)
-    print(f"{name}: {tps:.1f} tokens/sec ({time_taken:.2f}s for 100 tokens)")
+    total_time = time.time() - start
+    tokens_per_sec = (n_tokens * n_runs) / total_time
+    return tokens_per_sec
 ```
 
 </Implementation>
 
-## Complete Workflow: From Model to Deployment
-
-<Example title="Production Quantization Workflow">
-
-```python
-# Step 1: Start with your trained model
-model_name = "your-org/your-model"
-
-# Step 2: Evaluate baseline
-baseline_ppl = evaluate_perplexity(model_fp16, tokenizer, test_data)
-print(f"Baseline perplexity: {baseline_ppl:.2f}")
-
-# Step 3: Try 8-bit quantization
-model_8bit = AutoModelForCausalLM.from_pretrained(
-    model_name, load_in_8bit=True, device_map="auto"
-)
-ppl_8bit = evaluate_perplexity(model_8bit, tokenizer, test_data)
-quality_loss_8bit = (ppl_8bit - baseline_ppl) / baseline_ppl * 100
-print(f"8-bit perplexity: {ppl_8bit:.2f} ({quality_loss_8bit:+.1f}%)")
-
-# Step 4: If 8-bit is acceptable, you're done!
-if quality_loss_8bit < 5:  # Less than 5% degradation
-    print("8-bit quantization acceptable. Done!")
-    model_8bit.save_pretrained("./model-8bit")
-else:
-    # Step 5: Try GPTQ 4-bit
-    print("8-bit not good enough, trying GPTQ...")
-    # [GPTQ quantization code here]
-
-# Step 6: Final benchmarks
-print("\nFinal deployment metrics:")
-print(f"  Memory: {get_model_memory(model_8bit):.2f} GB")
-print(f"  Speed: {benchmark_inference(model_8bit, tokenizer, prompt)[0]:.1f} tokens/sec")
-print(f"  Quality: {quality_loss_8bit:+.1f}% perplexity change")
-```
-
-</Example>
-
-## Quantization for RL Policies
+## For RL Policies
 
 <Intuition>
 
-RL policies have special considerations:
-1. **Determinism**: Quantization can affect action selection
-2. **Value accuracy**: Value estimates must remain reliable
-3. **Speed**: Rollouts need many fast inferences
+RL has special needs:
+- **Policy network**: Speed matters most (many rollouts)
+- **Value network**: Accuracy matters most (training signal)
+
+Solution: Quantize the policy more aggressively than the critic.
 
 </Intuition>
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg p-4 border border-cyan-700/50">
+    <div className="text-cyan-400 font-bold mb-2">Policy Network</div>
+    <div className="text-sm text-slate-400">int8 quantization</div>
+    <div className="text-xs text-slate-500 mt-2">Fast inference for rollouts</div>
+  </div>
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg p-4 border border-violet-700/50">
+    <div className="text-violet-400 font-bold mb-2">Value Network</div>
+    <div className="text-sm text-slate-400">float16 precision</div>
+    <div className="text-xs text-slate-500 mt-2">Accurate value estimates</div>
+  </div>
+</div>
 
 <Implementation>
 
 ```python
-import torch.nn as nn
-
-class QuantizedPolicy(nn.Module):
-    """
-    A quantized RL policy with special handling for value head.
-    """
-
-    def __init__(self, policy_net, value_net, bits=8):
+class QuantizedRLPolicy(nn.Module):
+    def __init__(self, policy_net, value_net):
         super().__init__()
-
-        # Quantize the policy network (speed matters most)
-        self.policy_net = torch.quantization.quantize_dynamic(
-            policy_net,
-            {nn.Linear},
-            dtype=torch.qint8
+        # Quantize policy for speed
+        self.policy = torch.quantization.quantize_dynamic(
+            policy_net, {nn.Linear}, dtype=torch.qint8
         )
-
-        # Keep value network in higher precision (accuracy matters)
-        self.value_net = value_net.half()
+        # Keep value at higher precision
+        self.value = value_net.half()
 
     def forward(self, state):
-        # Policy: fast, quantized
-        action_logits = self.policy_net(state)
-
-        # Value: accurate, higher precision
-        state_half = state.half()
-        value = self.value_net(state_half)
-
+        action_logits = self.policy(state)
+        value = self.value(state.half())
         return action_logits, value
-
-    def get_action(self, state):
-        with torch.no_grad():
-            logits, value = self.forward(state)
-            # Sample action from distribution
-            probs = torch.softmax(logits, dim=-1)
-            action = torch.multinomial(probs, 1)
-        return action, value
-
-# Example usage
-# quantized_policy = QuantizedPolicy(actor_net, critic_net)
-# action, value = quantized_policy.get_action(state)
 ```
 
 </Implementation>
 
-## Common Pitfalls and Solutions
+## Complete Notebook
 
-<Warning title="Watch Out For">
+Run the full workflow yourself:
 
-1. **Batch normalization**: Quantize after fusing with conv/linear layers
-2. **Skip connections**: Can accumulate quantization error
-3. **Softmax**: Keep in higher precision for probability calculations
-4. **Very small models**: Quantization may hurt more than help
-5. **Fine-tuning after quantization**: Use QAT, not PTQ
+<a href="/notebooks/quantize-llm.ipynb" className="inline-flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-lg hover:from-cyan-500 hover:to-blue-500 transition-all">
+  <span className="text-xl">📓</span>
+  <div>
+    <div className="font-semibold">Quantization Notebook</div>
+    <div className="text-xs text-cyan-100">Load, quantize, evaluate, and deploy</div>
+  </div>
+</a>
 
-</Warning>
+<div className="mt-4 text-sm text-slate-400">
+The notebook includes:
+</div>
+
+<div className="grid md:grid-cols-2 gap-3 mt-3">
+  <div className="flex items-center gap-2 text-sm text-slate-400">
+    <span className="text-emerald-400">✓</span> Load Qwen-0.5B in fp16, 8-bit, 4-bit
+  </div>
+  <div className="flex items-center gap-2 text-sm text-slate-400">
+    <span className="text-emerald-400">✓</span> Memory comparison
+  </div>
+  <div className="flex items-center gap-2 text-sm text-slate-400">
+    <span className="text-emerald-400">✓</span> Perplexity evaluation
+  </div>
+  <div className="flex items-center gap-2 text-sm text-slate-400">
+    <span className="text-emerald-400">✓</span> Speed benchmarks
+  </div>
+  <div className="flex items-center gap-2 text-sm text-slate-400">
+    <span className="text-emerald-400">✓</span> GPTQ quantization
+  </div>
+  <div className="flex items-center gap-2 text-sm text-slate-400">
+    <span className="text-emerald-400">✓</span> Runs on free Colab T4
+  </div>
+</div>
+
+## Quick Reference
 
 <Tip title="Best Practices">
 
-1. **Always benchmark**: Memory, speed, AND quality
-2. **Start conservative**: float16 → int8 → int4
-3. **Use calibration data**: Representative of real usage
-4. **Test edge cases**: Unusual inputs may reveal problems
-5. **Monitor in production**: Track quality metrics after deployment
+1. **Start with float16** → nearly lossless baseline
+2. **Try int8 first** → usually good enough
+3. **Use GPTQ/AWQ for int4** → better than bitsandbytes
+4. **Always measure** → perplexity, task accuracy, speed
+5. **Test edge cases** → unusual inputs reveal problems
 
 </Tip>
 
-## Hands-On Notebook
-
-For a complete, runnable example that you can execute step-by-step:
-
-<a href="/notebooks/quantize-llm.ipynb" className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors">
-  Download Quantization Notebook
-</a>
-
-The notebook covers:
-- Loading and comparing quantization methods
-- Measuring memory and speed
-- Evaluating quality with perplexity
-- Saving and deploying quantized models
-
-<Note title="Key Takeaways">
-
-1. **bitsandbytes**: Fastest path to quantization, good for experimentation
-2. **GPTQ/AWQ**: Better quality, use for production
-3. **Always measure**: Perplexity, task accuracy, and speed
-4. **Start with int8**: Only go to int4 if you need the memory
-5. **Special care for RL**: Balance speed (policy) vs accuracy (value)
-
-</Note>
+<div className="my-6 p-4 bg-slate-800/30 rounded-lg border border-slate-700">
+  <div className="text-slate-200 font-semibold mb-3">Decision Tree</div>
+  <div className="space-y-2 text-sm">
+    <div className="flex items-start gap-2">
+      <span className="text-slate-500">•</span>
+      <div><span className="text-slate-300">Need quick results?</span> <span className="text-cyan-400">→ bitsandbytes load_in_8bit</span></div>
+    </div>
+    <div className="flex items-start gap-2">
+      <span className="text-slate-500">•</span>
+      <div><span className="text-slate-300">Need best 4-bit quality?</span> <span className="text-amber-400">→ GPTQ with calibration</span></div>
+    </div>
+    <div className="flex items-start gap-2">
+      <span className="text-slate-500">•</span>
+      <div><span className="text-slate-300">PTQ not good enough?</span> <span className="text-violet-400">→ Try AWQ, then QAT</span></div>
+    </div>
+    <div className="flex items-start gap-2">
+      <span className="text-slate-500">•</span>
+      <div><span className="text-slate-300">RL policy?</span> <span className="text-emerald-400">→ int8 policy, fp16 value</span></div>
+    </div>
+  </div>
+</div>

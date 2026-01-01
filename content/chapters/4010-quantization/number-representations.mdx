@@ -7,463 +7,335 @@ description: "From float32 to int8: how computers store numbers"
 
 import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
 import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+import BitLayoutVisualizer from '@/components/interactive/BitLayoutVisualizer';
 
 # Number Representations
 
-To understand quantization, you need to understand how computers store numbers. This section covers the formats you'll encounter: float32, float16, bfloat16, and the integer formats used for quantization.
+To understand quantization, you need to understand how computers store numbers. Let's explore the formats you'll encounter.
 
-## Floating Point: The Default
+## Explore Float Formats
 
-<Definition title="Floating Point">
-A number representation that stores a value as: $(-1)^{sign} \times mantissa \times 2^{exponent}$. This allows representing both very large and very small numbers with fixed storage.
-</Definition>
+**Try entering different numbers** to see how they're stored in each format:
+
+<BitLayoutVisualizer client:load />
+
+## Floating Point Basics
 
 <Intuition>
 
-Floating point is like scientific notation. Instead of writing 0.000000123, you write $1.23 \times 10^{-7}$. The computer does the same thing, but in binary.
+Floating point is like scientific notation. Instead of writing 0.000000123, you write 1.23 × 10⁻⁷.
 
-A float32 number has three parts:
-- **Sign bit** (1 bit): positive or negative
+A float32 has three parts:
+- **Sign** (1 bit): positive or negative
 - **Exponent** (8 bits): the power of 2
-- **Mantissa/Significand** (23 bits): the precision
+- **Mantissa** (23 bits): the precision digits
 
 </Intuition>
 
 <div className="my-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-  <div className="text-center text-sm text-slate-400 mb-2">float32 bit layout (32 bits total)</div>
-  <div className="flex justify-center gap-1 font-mono text-sm">
-    <div className="bg-red-600/40 px-3 py-2 rounded">S</div>
-    <div className="bg-blue-600/40 px-2 py-2 rounded">E E E E E E E E</div>
-    <div className="bg-emerald-600/40 px-1 py-2 rounded text-xs">M M M M M M M M M M M M M M M M M M M M M M M</div>
+  <div className="text-center text-sm text-slate-400 mb-3">float32 = 32 bits total</div>
+  <div className="flex justify-center gap-1 font-mono text-xs sm:text-sm">
+    <div className="bg-red-600/40 px-2 sm:px-3 py-2 rounded border border-red-500/30">S</div>
+    <div className="bg-emerald-600/40 px-1.5 sm:px-2 py-2 rounded border border-emerald-500/30">E E E E E E E E</div>
+    <div className="bg-blue-600/40 px-1 py-2 rounded border border-blue-500/30 text-xs">M M M M M M M M M M M M M M M M M M M M M M M</div>
   </div>
-  <div className="flex justify-center gap-4 mt-2 text-xs text-slate-400">
-    <span className="text-red-400">1 bit sign</span>
-    <span className="text-blue-400">8 bits exponent</span>
-    <span className="text-emerald-400">23 bits mantissa</span>
-  </div>
-</div>
-
-<Implementation>
-
-```python
-import struct
-import numpy as np
-
-def float_to_bits(f):
-    """Convert float32 to its bit representation."""
-    # Pack as float, unpack as unsigned int
-    bits = struct.unpack('I', struct.pack('f', f))[0]
-    return format(bits, '032b')
-
-def parse_float32(f):
-    """Parse float32 into sign, exponent, and mantissa."""
-    bits = float_to_bits(f)
-    sign = int(bits[0])
-    exponent = int(bits[1:9], 2)
-    mantissa = int(bits[9:], 2)
-
-    # Compute actual exponent (bias is 127)
-    actual_exp = exponent - 127
-
-    # Compute actual mantissa (implicit leading 1)
-    actual_mantissa = 1.0 + mantissa / (2**23)
-
-    return {
-        'bits': bits,
-        'sign': sign,
-        'exponent': exponent,
-        'actual_exponent': actual_exp,
-        'mantissa': mantissa,
-        'actual_mantissa': actual_mantissa,
-        'reconstructed': ((-1)**sign) * actual_mantissa * (2**actual_exp)
-    }
-
-# Example: pi
-pi = 3.14159265359
-result = parse_float32(pi)
-print(f"Value: {pi}")
-print(f"Bits: {result['bits']}")
-print(f"Sign: {result['sign']} ({'negative' if result['sign'] else 'positive'})")
-print(f"Exponent: {result['exponent']} (actual: 2^{result['actual_exponent']})")
-print(f"Mantissa: {result['actual_mantissa']:.6f}")
-print(f"Reconstructed: {result['reconstructed']:.9f}")
-```
-
-**Output:**
-```
-Value: 3.14159265359
-Bits: 01000000010010010000111111011011
-Sign: 0 (positive)
-Exponent: 128 (actual: 2^1)
-Mantissa: 1.570796
-Reconstructed: 3.141592741
-```
-
-</Implementation>
-
-## Float16 and BFloat16
-
-<Intuition>
-
-float32 uses 32 bits. For many applications, that's overkill. Enter the 16-bit formats:
-
-**float16 (IEEE half precision)**:
-- 1 sign + 5 exponent + 10 mantissa
-- Higher precision, smaller range
-- Can underflow/overflow during training
-
-**bfloat16 (Brain Float)**:
-- 1 sign + 8 exponent + 7 mantissa
-- Same range as float32, less precision
-- Designed by Google for ML training
-
-</Intuition>
-
-<div className="my-6 space-y-4">
-  <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-    <div className="text-center text-sm text-slate-400 mb-2">float16 bit layout</div>
-    <div className="flex justify-center gap-1 font-mono text-sm">
-      <div className="bg-red-600/40 px-3 py-2 rounded">S</div>
-      <div className="bg-blue-600/40 px-2 py-2 rounded">E E E E E</div>
-      <div className="bg-emerald-600/40 px-2 py-2 rounded">M M M M M M M M M M</div>
-    </div>
-    <div className="text-center mt-2 text-xs text-slate-400">More precision, less range</div>
-  </div>
-
-  <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-    <div className="text-center text-sm text-slate-400 mb-2">bfloat16 bit layout</div>
-    <div className="flex justify-center gap-1 font-mono text-sm">
-      <div className="bg-red-600/40 px-3 py-2 rounded">S</div>
-      <div className="bg-blue-600/40 px-2 py-2 rounded">E E E E E E E E</div>
-      <div className="bg-emerald-600/40 px-2 py-2 rounded">M M M M M M M</div>
-    </div>
-    <div className="text-center mt-2 text-xs text-slate-400">Same range as float32, less precision</div>
+  <div className="flex justify-center gap-4 mt-3 text-xs">
+    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-red-500/70"></span> Sign (1)</span>
+    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-emerald-500/70"></span> Exponent (8)</span>
+    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-blue-500/70"></span> Mantissa (23)</span>
   </div>
 </div>
 
-<Implementation>
+<Mathematical>
+
+A floating point number represents:
+
+$$(-1)^{sign} \times (1 + mantissa) \times 2^{exponent - bias}$$
+
+For float32, the bias is 127. So exponent bits of 10000001 (129) means 2^(129-127) = 2² = 4.
+
+</Mathematical>
+
+## Float16 vs BFloat16
+
+The two 16-bit formats make different tradeoffs:
+
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-xl p-5 border border-violet-700/50">
+    <div className="text-violet-400 font-bold text-lg mb-3">float16</div>
+    <div className="flex gap-1 font-mono text-xs mb-3">
+      <div className="bg-red-600/40 px-2 py-1 rounded">S</div>
+      <div className="bg-emerald-600/40 px-1 py-1 rounded">E E E E E</div>
+      <div className="bg-blue-600/40 px-1 py-1 rounded">M M M M M M M M M M</div>
+    </div>
+    <div className="text-slate-400 text-sm space-y-1">
+      <div>• <strong className="text-slate-200">5 exponent bits</strong> → smaller range</div>
+      <div>• <strong className="text-slate-200">10 mantissa bits</strong> → more precision</div>
+      <div>• Max: ~65,504</div>
+      <div>• Best for: Inference</div>
+    </div>
+  </div>
+  <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-xl p-5 border border-amber-700/50">
+    <div className="text-amber-400 font-bold text-lg mb-3">bfloat16</div>
+    <div className="flex gap-1 font-mono text-xs mb-3">
+      <div className="bg-red-600/40 px-2 py-1 rounded">S</div>
+      <div className="bg-emerald-600/40 px-1 py-1 rounded">E E E E E E E E</div>
+      <div className="bg-blue-600/40 px-1 py-1 rounded">M M M M M M M</div>
+    </div>
+    <div className="text-slate-400 text-sm space-y-1">
+      <div>• <strong className="text-slate-200">8 exponent bits</strong> → same range as float32</div>
+      <div>• <strong className="text-slate-200">7 mantissa bits</strong> → less precision</div>
+      <div>• Max: ~3.4×10³⁸</div>
+      <div>• Best for: Training on TPUs</div>
+    </div>
+  </div>
+</div>
+
+<Example title="Why This Matters">
 
 ```python
-import torch
+x = 100000.0
 
-# Compare float32, float16, and bfloat16
-x = torch.tensor([3.14159265359, 0.000001, 100000.0])
+# float16: OVERFLOW! Returns inf
+x.half()  # → inf
 
-print("Value\t\tfloat32\t\tfloat16\t\tbfloat16")
-print("-" * 60)
-for val in x:
-    f32 = val.float()
-    f16 = val.half()
-    bf16 = val.bfloat16()
-    print(f"{val.item():.6f}\t{f32.item():.6f}\t{f16.item():.6f}\t{bf16.item():.6f}")
-
-# Check ranges
-print(f"\nfloat16 max: {torch.finfo(torch.float16).max}")
-print(f"bfloat16 max: {torch.finfo(torch.bfloat16).max}")
-print(f"float32 max: {torch.finfo(torch.float32).max}")
+# bfloat16: Works fine (with precision loss)
+x.bfloat16()  # → 100352.0
 ```
 
-**Output:**
-```
-Value           float32         float16         bfloat16
-------------------------------------------------------------
-3.141593        3.141593        3.140625        3.140625
-0.000001        0.000001        0.000001        0.000001
-100000.0        100000.0        inf             100352.0
+Training involves large intermediate values. bfloat16's range prevents overflow.
 
-float16 max: 65504.0
-bfloat16 max: 3.3895313892515355e+38
-float32 max: 3.4028234663852886e+38
-```
-
-Notice how float16 overflows at 100,000, but bfloat16 handles it (with some precision loss).
-
-</Implementation>
-
-<Tip title="When to use which?">
-
-- **float32**: Reference implementations, when precision matters
-- **float16**: Inference, when values stay in reasonable ranges
-- **bfloat16**: Training, TPUs, when you need float32's range
-
-</Tip>
+</Example>
 
 ## Integer Quantization
 
-<Definition title="Symmetric Quantization">
-Maps floating point values to integers using a single scale factor:
-
-$$q = \text{round}\left(\frac{x}{s}\right), \quad x_{approx} = q \times s$$
-
-where $s = \frac{\max(|x|)}{2^{b-1}-1}$ for $b$-bit signed integers.
-</Definition>
-
 <Intuition>
 
-Integer quantization is different from floating point. Instead of storing sign, exponent, and mantissa separately, we store a simple integer and a shared scale factor.
+Integer quantization is simpler: we pick a **scale factor** and divide all values by it. The result is an integer.
 
-**The key insight**: If all values in a tensor share a similar magnitude, we don't need the flexibility of floating point. A simple linear mapping works fine.
+For int8: we map the range [-max, +max] to [-127, +127].
 
 </Intuition>
+
+<div className="my-8 p-6 bg-slate-800/30 rounded-xl border border-slate-700">
+  <div className="text-center text-sm text-slate-400 mb-4">Symmetric Quantization</div>
+
+  <div className="flex items-center justify-center gap-3 mb-4">
+    <div className="text-center">
+      <div className="text-lg font-mono text-cyan-400">0.247</div>
+      <div className="text-xs text-slate-500">float32</div>
+    </div>
+    <div className="text-slate-500">→</div>
+    <div className="text-center bg-slate-700/50 px-3 py-2 rounded">
+      <div className="text-xs text-slate-400 mb-1">÷ scale</div>
+      <div className="font-mono text-slate-300">÷ 0.00195</div>
+    </div>
+    <div className="text-slate-500">→</div>
+    <div className="text-center bg-slate-700/50 px-3 py-2 rounded">
+      <div className="text-xs text-slate-400 mb-1">round</div>
+      <div className="font-mono text-slate-300">127</div>
+    </div>
+    <div className="text-slate-500">→</div>
+    <div className="text-center">
+      <div className="text-lg font-mono text-emerald-400">127</div>
+      <div className="text-xs text-slate-500">int8</div>
+    </div>
+  </div>
+
+  <div className="text-center text-sm text-slate-400">
+    scale = max_value / 127
+  </div>
+</div>
+
+<Mathematical>
+
+For b-bit symmetric quantization:
+
+$$q = \text{round}\left(\frac{x}{s}\right), \quad s = \frac{\max(|x|)}{2^{b-1}-1}$$
+
+To recover the approximate value:
+
+$$\hat{x} = q \times s$$
+
+</Mathematical>
 
 <Implementation>
 
 ```python
 import numpy as np
 
-def symmetric_quantize(x, bits=8):
-    """
-    Symmetric quantization: maps [-max, max] to [-127, 127] for int8.
-    """
-    max_val = np.max(np.abs(x))
+def quantize_symmetric(x, bits=8):
     qmax = 2**(bits-1) - 1  # 127 for int8
-
-    # Scale factor
-    scale = max_val / qmax
-
-    # Quantize
-    q = np.round(x / scale).astype(np.int8)
-
-    # Dequantize for comparison
-    x_approx = q.astype(np.float32) * scale
-
-    return q, scale, x_approx
+    scale = np.max(np.abs(x)) / qmax
+    q = np.round(x / scale).clip(-qmax, qmax).astype(np.int8)
+    return q, scale
 
 # Example
-np.random.seed(42)
-weights = np.random.randn(8).astype(np.float32) * 0.5
-
-q, scale, x_approx = symmetric_quantize(weights)
-
-print("Original (float32):", weights)
-print("Quantized (int8):  ", q)
-print("Dequantized:       ", x_approx)
-print("Scale factor:      ", scale)
-print("Max error:         ", np.max(np.abs(weights - x_approx)))
-```
-
-**Output:**
-```
-Original (float32): [ 0.248  -0.069   0.324  0.761  -0.117  -0.117  0.792  0.188]
-Quantized (int8):   [ 40   -11    52   122   -19   -19   127    30]
-Dequantized:        [ 0.250  -0.069   0.325  0.762  -0.119  -0.119  0.793  0.187]
-Scale factor:       0.006238
-Max error:          0.002206
+weights = np.array([0.247, -0.103, 0.089, -0.156])
+q, scale = quantize_symmetric(weights)
+print(f"Quantized: {q}")  # [127, -53, 46, -80]
+print(f"Scale: {scale:.5f}")  # 0.00194
 ```
 
 </Implementation>
 
-## Asymmetric Quantization
+## Symmetric vs Asymmetric
 
-<Definition title="Asymmetric Quantization">
-Maps floating point values using both a scale and a zero point:
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700">
+    <div className="text-slate-200 font-bold mb-3">Symmetric</div>
+    <div className="text-4xl mb-3 text-center">−127 ↔ 0 ↔ +127</div>
+    <div className="text-slate-400 text-sm">
+      <div>• Zero maps to zero exactly</div>
+      <div>• Good for weights (centered around 0)</div>
+      <div>• Simpler computation</div>
+    </div>
+  </div>
+  <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700">
+    <div className="text-slate-200 font-bold mb-3">Asymmetric</div>
+    <div className="text-4xl mb-3 text-center">0 ↔ zero_pt ↔ 255</div>
+    <div className="text-slate-400 text-sm">
+      <div>• Adds a "zero point" offset</div>
+      <div>• Good for ReLU activations (all positive)</div>
+      <div>• Uses full range efficiently</div>
+    </div>
+  </div>
+</div>
 
-$$q = \text{round}\left(\frac{x}{s}\right) + z, \quad x_{approx} = (q - z) \times s$$
+<Tip title="Rule of Thumb">
 
-This allows mapping any range $[x_{min}, x_{max}]$ to the full integer range.
-</Definition>
+- **Weights**: Usually symmetric (centered near zero)
+- **Activations**: Often asymmetric (ReLU outputs are positive)
 
-<Intuition>
+</Tip>
 
-Symmetric quantization assumes values are centered around zero. But what if they're not? ReLU activations, for example, are always positive.
-
-Asymmetric quantization adds a "zero point" to shift the mapping. This uses the integer range more efficiently for non-zero-centered data.
-
-</Intuition>
-
-<Implementation>
-
-```python
-def asymmetric_quantize(x, bits=8):
-    """
-    Asymmetric quantization: maps [min, max] to [0, 255] for uint8.
-    """
-    x_min, x_max = np.min(x), np.max(x)
-    qmin, qmax = 0, 2**bits - 1  # 0 to 255 for uint8
-
-    # Scale and zero point
-    scale = (x_max - x_min) / (qmax - qmin)
-    zero_point = qmin - np.round(x_min / scale)
-    zero_point = int(np.clip(zero_point, qmin, qmax))
-
-    # Quantize
-    q = np.round(x / scale + zero_point).astype(np.uint8)
-
-    # Dequantize
-    x_approx = (q.astype(np.float32) - zero_point) * scale
-
-    return q, scale, zero_point, x_approx
-
-# Example: ReLU outputs (all positive)
-relu_outputs = np.array([0.0, 0.5, 1.2, 2.0, 0.1, 3.5])
-
-q, scale, zp, x_approx = asymmetric_quantize(relu_outputs)
-
-print("Original:   ", relu_outputs)
-print("Quantized:  ", q)
-print("Zero point: ", zp)
-print("Scale:      ", scale)
-print("Dequantized:", x_approx)
-```
-
-**Output:**
-```
-Original:    [0.  0.5 1.2 2.  0.1 3.5]
-Quantized:   [  0  36  87 146   7 255]
-Zero point:  0
-Scale:       0.01373
-Dequantized: [0.   0.494 1.195 2.005 0.096 3.502]
-```
-
-</Implementation>
-
-## Per-Channel vs Per-Tensor
+## Per-Tensor vs Per-Channel
 
 <Intuition>
 
-So far, we've used one scale for an entire tensor. But different channels in a convolutional layer can have very different weight magnitudes.
+Should you use one scale for the whole layer, or one scale per channel?
 
-**Per-tensor quantization**: One scale for the whole tensor. Simple but can waste precision.
-
-**Per-channel quantization**: One scale per output channel. Better precision, slight overhead.
-
-For weight quantization, per-channel is almost always better.
+Different channels can have very different weight magnitudes. Per-channel quantization adapts to each.
 
 </Intuition>
+
+<div className="my-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+  <div className="text-sm text-slate-400 mb-3">Example: 4 channels with different scales</div>
+  <div className="space-y-2">
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-500 w-16">Channel 0</span>
+      <div className="flex-1 h-3 bg-cyan-500/20 rounded relative">
+        <div className="absolute left-0 top-0 h-full w-[10%] bg-cyan-400 rounded"></div>
+      </div>
+      <span className="text-xs text-slate-400">small weights</span>
+    </div>
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-500 w-16">Channel 1</span>
+      <div className="flex-1 h-3 bg-cyan-500/20 rounded relative">
+        <div className="absolute left-0 top-0 h-full w-[50%] bg-cyan-400 rounded"></div>
+      </div>
+      <span className="text-xs text-slate-400">medium weights</span>
+    </div>
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-500 w-16">Channel 2</span>
+      <div className="flex-1 h-3 bg-cyan-500/20 rounded relative">
+        <div className="absolute left-0 top-0 h-full w-[90%] bg-cyan-400 rounded"></div>
+      </div>
+      <span className="text-xs text-slate-400">large weights</span>
+    </div>
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-500 w-16">Channel 3</span>
+      <div className="flex-1 h-3 bg-cyan-500/20 rounded relative">
+        <div className="absolute left-0 top-0 h-full w-[5%] bg-cyan-400 rounded"></div>
+      </div>
+      <span className="text-xs text-slate-400">tiny weights</span>
+    </div>
+  </div>
+  <div className="mt-4 text-sm text-slate-300 text-center">
+    Per-channel: each row gets its own scale → much better precision
+  </div>
+</div>
 
 <Implementation>
 
 ```python
 def per_channel_quantize(weights, bits=8):
-    """
-    Per-channel symmetric quantization for a weight matrix.
-    weights shape: [output_channels, input_features]
-    """
-    n_channels = weights.shape[0]
+    """Per-channel quantization: one scale per output channel."""
     qmax = 2**(bits-1) - 1
 
-    # Compute scale per channel
+    # One scale per row (output channel)
     scales = np.max(np.abs(weights), axis=1) / qmax
-    scales = np.maximum(scales, 1e-8)  # Avoid division by zero
 
-    # Quantize each channel
-    q = np.round(weights / scales[:, np.newaxis]).astype(np.int8)
+    # Quantize each channel with its scale
+    q = np.round(weights / scales[:, None]).astype(np.int8)
 
-    # Dequantize
-    x_approx = q.astype(np.float32) * scales[:, np.newaxis]
+    return q, scales
 
-    return q, scales, x_approx
+# Comparison
+weights = np.random.randn(4, 64) * np.array([[0.1], [1.0], [10.0], [0.01]])
 
-# Example: weight matrix with varying magnitudes per channel
-np.random.seed(42)
-weights = np.random.randn(4, 8).astype(np.float32)
-weights[0] *= 0.1  # Small weights
-weights[1] *= 1.0  # Normal weights
-weights[2] *= 10.0 # Large weights
-weights[3] *= 0.01 # Very small weights
+mse_per_tensor = compute_mse(per_tensor_quantize(weights))
+mse_per_channel = compute_mse(per_channel_quantize(weights))
 
-# Compare per-tensor vs per-channel
-_, scale_pt, approx_pt = symmetric_quantize(weights.flatten())
-approx_pt = approx_pt.reshape(weights.shape)
-
-q_pc, scales_pc, approx_pc = per_channel_quantize(weights)
-
-mse_pt = np.mean((weights - approx_pt)**2)
-mse_pc = np.mean((weights - approx_pc)**2)
-
-print(f"Per-tensor MSE:  {mse_pt:.6f}")
-print(f"Per-channel MSE: {mse_pc:.6f}")
-print(f"Per-channel is {mse_pt/mse_pc:.1f}x better")
-print(f"\nPer-channel scales: {scales_pc}")
+print(f"Per-tensor MSE: {mse_per_tensor:.6f}")
+print(f"Per-channel MSE: {mse_per_channel:.6f}")
+# Per-channel is typically 10-100x better!
 ```
-
-**Output:**
-```
-Per-tensor MSE:  0.054321
-Per-channel MSE: 0.000543
-Per-channel is 100.0x better
-
-Per-channel scales: [0.00124 0.01240 0.12397 0.00012]
-```
-
-Per-channel quantization is dramatically better when channels have different scales.
 
 </Implementation>
 
-## The Quantization Grid
-
-<Intuition>
-
-Quantization creates a "grid" of representable values. Any original value gets snapped to the nearest grid point. Understanding this grid helps you understand quantization error.
-
-</Intuition>
-
-<Implementation>
-
-```python
-import matplotlib.pyplot as plt
-
-# Visualize quantization grid
-def visualize_quantization(bits=4):
-    """Show how values get quantized."""
-    qmax = 2**(bits-1) - 1  # 7 for 4-bit
-    scale = 1.0 / qmax
-
-    # Original continuous values
-    x = np.linspace(-1, 1, 1000)
-
-    # Quantized values
-    q = np.round(x / scale).clip(-qmax, qmax)
-    x_quant = q * scale
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-
-    # Left: mapping
-    ax1.plot(x, x_quant, 'b-', linewidth=2)
-    ax1.plot(x, x, 'r--', alpha=0.5, label='Perfect')
-    ax1.set_xlabel('Original value')
-    ax1.set_ylabel('Quantized value')
-    ax1.set_title(f'{bits}-bit Quantization Mapping')
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-
-    # Right: available values
-    unique_vals = np.unique(x_quant)
-    ax2.eventplot([unique_vals], lineoffsets=0, linelengths=0.5, colors='blue')
-    ax2.set_xlim(-1.1, 1.1)
-    ax2.set_ylim(-0.5, 0.5)
-    ax2.set_xlabel('Value')
-    ax2.set_title(f'Representable Values ({len(unique_vals)} levels)')
-    ax2.set_yticks([])
-
-    plt.tight_layout()
-    plt.show()
-
-visualize_quantization(bits=4)
-visualize_quantization(bits=8)
-```
-
-This shows how quantization snaps continuous values to discrete levels.
-
-</Implementation>
-
-## Summary: Choosing a Format
+## Quick Reference
 
 <div className="my-6">
-
-| Format | Bits | Range | Precision | Best For |
-|--------|------|-------|-----------|----------|
-| float32 | 32 | ±3.4×10³⁸ | ~7 decimal | Training reference |
-| bfloat16 | 16 | ±3.4×10³⁸ | ~3 decimal | Training on TPUs |
-| float16 | 16 | ±65504 | ~3 decimal | Inference |
-| int8 | 8 | -128 to 127 | Fixed | Most inference |
-| int4 | 4 | -8 to 7 | Very coarse | LLM compression |
-
+  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+    <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+      <div className="font-bold text-slate-200 mb-2">float32</div>
+      <div className="text-xs text-slate-400 space-y-1">
+        <div>Range: ±3.4×10³⁸</div>
+        <div>Precision: ~7 digits</div>
+        <div>Use: Training baseline</div>
+      </div>
+    </div>
+    <div className="bg-gradient-to-br from-blue-900/20 to-blue-800/5 rounded-lg p-4 border border-blue-700/40">
+      <div className="font-bold text-blue-400 mb-2">float16</div>
+      <div className="text-xs text-slate-400 space-y-1">
+        <div>Range: ±65,504</div>
+        <div>Precision: ~3 digits</div>
+        <div>Use: Inference</div>
+      </div>
+    </div>
+    <div className="bg-gradient-to-br from-amber-900/20 to-amber-800/5 rounded-lg p-4 border border-amber-700/40">
+      <div className="font-bold text-amber-400 mb-2">bfloat16</div>
+      <div className="text-xs text-slate-400 space-y-1">
+        <div>Range: ±3.4×10³⁸</div>
+        <div>Precision: ~2 digits</div>
+        <div>Use: Training on TPUs</div>
+      </div>
+    </div>
+    <div className="bg-gradient-to-br from-emerald-900/20 to-emerald-800/5 rounded-lg p-4 border border-emerald-700/40">
+      <div className="font-bold text-emerald-400 mb-2">int8</div>
+      <div className="text-xs text-slate-400 space-y-1">
+        <div>Range: -128 to 127</div>
+        <div>Levels: 256</div>
+        <div>Use: Standard inference</div>
+      </div>
+    </div>
+    <div className="bg-gradient-to-br from-violet-900/20 to-violet-800/5 rounded-lg p-4 border border-violet-700/40">
+      <div className="font-bold text-violet-400 mb-2">int4</div>
+      <div className="text-xs text-slate-400 space-y-1">
+        <div>Range: -8 to 7</div>
+        <div>Levels: 16</div>
+        <div>Use: LLM compression</div>
+      </div>
+    </div>
+  </div>
 </div>
 
-<Note title="Next: Quantization Methods">
+## Next Up
 
-Now that you understand number formats, let's see how to actually quantize a model. The next section covers post-training quantization (PTQ) and quantization-aware training (QAT).
+<Note>
+
+Now that you understand number formats, let's see the **methods** for quantizing models: PTQ, QAT, GPTQ, and AWQ.
 
 Continue to [Quantization Methods](/chapters/quantization/quantization-methods).
 

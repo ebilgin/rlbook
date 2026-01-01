@@ -12,6 +12,9 @@ export { PolicyGradientDemo } from './PolicyGradientDemo';
 export { BanditPlayground } from './BanditPlayground';
 export { ValueIterationDemo } from './ValueIterationDemo';
 export { TDLearningDemo } from './TDLearningDemo';
+export { QuantizationDemo } from './QuantizationDemo';
+export { MemoryCalculator } from './MemoryCalculator';
+export { BitLayoutVisualizer } from './BitLayoutVisualizer';
 
 // TODO: Add more interactive components as they are implemented
 // export { CliffWalking } from './CliffWalking';

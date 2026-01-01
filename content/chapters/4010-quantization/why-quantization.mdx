@@ -7,96 +7,113 @@ description: "Memory, speed, and the precision tradeoff"
 
 import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
 import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+import MemoryCalculator from '@/components/interactive/MemoryCalculator';
 
 # Why Quantization Matters
 
-Neural networks are getting bigger every year. GPT-3 has 175 billion parameters. LLaMA 3 has 405 billion. Storing and running these models requires serious hardware—unless you quantize.
+Neural networks are getting bigger every year. LLaMA 3 has 405 billion parameters. Storing and running these models requires serious hardware—unless you quantize.
 
 ## The Memory Problem
 
+**Try it yourself:** Select a model size and see how quantization shrinks memory requirements.
+
+<MemoryCalculator client:load />
+
 <Intuition>
 
-Every parameter in a neural network takes up space. The standard format—float32—uses 4 bytes per number. Let's do the math:
+**The math is simple:** Every parameter takes up space. float32 uses 4 bytes per number.
 
-| Model | Parameters | float32 Size |
-|-------|------------|--------------|
-| ResNet-50 | 25M | 100 MB |
-| BERT | 340M | 1.4 GB |
-| GPT-2 | 1.5B | 6 GB |
-| LLaMA-7B | 7B | 28 GB |
-| LLaMA-70B | 70B | 280 GB |
+A 7B model = 7 billion × 4 bytes = **28 GB**.
 
-A single NVIDIA RTX 4090 has 24 GB of VRAM. Without quantization, you can't even fit LLaMA-7B on it. With int4 quantization, the same model is 3.5 GB—leaving plenty of room for inference.
+But int4 uses only 0.5 bytes per number. Same model = 7 billion × 0.5 bytes = **3.5 GB**.
+
+That's the difference between "needs a data center" and "runs on a laptop."
 
 </Intuition>
 
 <Mathematical>
 
-The memory footprint of a model is:
+Memory footprint:
 
-$$\text{Memory} = N_{params} \times \frac{b}{8} \text{ bytes}$$
+$$\text{Memory} = N_{\text{params}} \times \frac{b}{8} \text{ bytes}$$
 
-where $N_{params}$ is the number of parameters and $b$ is the bits per parameter.
-
-For a 7B model:
-- float32 (32 bits): $7 \times 10^9 \times 4 = 28$ GB
-- float16 (16 bits): $7 \times 10^9 \times 2 = 14$ GB
-- int8 (8 bits): $7 \times 10^9 \times 1 = 7$ GB
-- int4 (4 bits): $7 \times 10^9 \times 0.5 = 3.5$ GB
+where $N_{\text{params}}$ is the parameter count and $b$ is bits per parameter.
 
 </Mathematical>
 
 ## The Speed Problem
 
-Memory isn't just about fitting the model—it's about speed too.
+Memory size isn't just about fitting—it's about **speed**.
 
-<Intuition>
+<div className="my-8 p-6 bg-slate-800/30 rounded-xl border border-slate-700">
+  <div className="text-center mb-4">
+    <div className="text-slate-400 text-sm mb-2">The GPU Bottleneck</div>
+  </div>
 
-Modern GPUs are incredibly fast at computation, but they're bottlenecked by memory bandwidth. Moving data from memory to compute units takes time.
+  <div className="flex items-center justify-center gap-4 mb-6">
+    <div className="text-center">
+      <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center mb-2">
+        <span className="text-2xl">📦</span>
+      </div>
+      <div className="text-xs text-slate-500">Memory</div>
+    </div>
+    <div className="flex-1 max-w-[200px]">
+      <div className="h-4 bg-gradient-to-r from-red-500/50 via-amber-500/50 to-emerald-500/50 rounded-full relative">
+        <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
+          Bandwidth
+        </div>
+      </div>
+      <div className="text-center text-xs text-slate-500 mt-1">This is the bottleneck</div>
+    </div>
+    <div className="text-center">
+      <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center mb-2">
+        <span className="text-2xl">⚡</span>
+      </div>
+      <div className="text-xs text-slate-500">Compute</div>
+    </div>
+  </div>
 
-**The key insight**: If your model is smaller, you can:
-1. Fit more of it in fast cache memory
-2. Transfer weights faster during inference
-3. Batch more inputs together
+  <div className="text-sm text-slate-400 text-center">
+    Modern GPUs compute faster than they can load data.<br/>
+    <strong className="text-slate-200">Smaller weights = faster loading = faster inference.</strong>
+  </div>
+</div>
 
-On a transformer, reducing from float32 to int8 can give a **2-4× speedup** even though you're doing roughly the same number of operations.
+<Example title="Real Numbers: A100 Token Generation">
 
-</Intuition>
+**70B model in float32** (280 GB):
+- Load time: 280 GB ÷ 2000 GB/s = 140 ms
+- Result: ~7 tokens/second
 
-<Example title="Memory Bandwidth Calculation">
+**Same model in int4** (35 GB):
+- Load time: 35 GB ÷ 2000 GB/s = 17.5 ms
+- Result: ~57 tokens/second
 
-NVIDIA A100 specifications:
-- Memory bandwidth: 2 TB/s
-- Compute (INT8): 624 TOPS
-
-For a 70B model in float32 (280 GB):
-- Time to load weights once: 280 GB / 2000 GB/s = 140 ms
-- This limits you to ~7 tokens/second for autoregressive generation
-
-In int8 (70 GB):
-- Time to load weights: 70 GB / 2000 GB/s = 35 ms
-- Now you can do ~28 tokens/second
-
-That's 4× faster just from quantization!
+**8× faster** from quantization alone!
 
 </Example>
 
-## The Precision Tradeoff
+## Why It Works
 
-<Definition title="Quantization Error">
-The difference between the original high-precision value and its quantized approximation. Quantization is lossy—some information is inevitably lost when reducing precision.
-</Definition>
+Here's the surprising part: neural networks barely notice.
 
-<Intuition>
-
-Here's the surprising thing: neural networks are **remarkably robust** to quantization noise.
-
-Why? Because:
-1. **Weights are redundant**: Networks are overparameterized; small perturbations don't matter
-2. **Training finds flat minima**: Well-trained networks sit in regions where small changes to weights don't affect outputs much
-3. **Activations matter more than precision**: The overall pattern of activations is preserved even with reduced precision
-
-</Intuition>
+<div className="grid md:grid-cols-3 gap-4 my-8">
+  <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-xl p-5 border border-cyan-700/50">
+    <div className="text-3xl mb-2">🔢</div>
+    <div className="text-cyan-400 font-bold mb-2">Overparameterized</div>
+    <div className="text-slate-400 text-sm">Networks have way more parameters than needed. Small noise doesn't matter.</div>
+  </div>
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-xl p-5 border border-violet-700/50">
+    <div className="text-3xl mb-2">📉</div>
+    <div className="text-violet-400 font-bold mb-2">Flat Minima</div>
+    <div className="text-slate-400 text-sm">Well-trained networks sit in regions where small weight changes don't affect outputs.</div>
+  </div>
+  <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-xl p-5 border border-amber-700/50">
+    <div className="text-3xl mb-2">🎯</div>
+    <div className="text-amber-400 font-bold mb-2">Pattern Matters</div>
+    <div className="text-slate-400 text-sm">The activation pattern is preserved even with reduced precision.</div>
+  </div>
+</div>
 
 <Implementation>
 
@@ -104,140 +121,109 @@ Why? Because:
 import torch
 import torch.nn as nn
 
-# Simple experiment: how much does quantization hurt a linear layer?
+# Quick experiment: how much does int8 hurt?
 torch.manual_seed(42)
-
-# Create a random linear layer
 layer = nn.Linear(512, 512)
 x = torch.randn(32, 512)
 
-# Original output
 with torch.no_grad():
     y_original = layer(x)
 
-# Quantize weights to int8
-def quantize_tensor(t, bits=8):
-    """Symmetric quantization."""
-    max_val = t.abs().max()
-    scale = max_val / (2**(bits-1) - 1)
-    t_quant = torch.round(t / scale).clamp(-(2**(bits-1)), 2**(bits-1)-1)
-    t_dequant = t_quant * scale
-    return t_dequant, scale
+# Simple symmetric quantization
+def quantize_int8(t):
+    scale = t.abs().max() / 127
+    return torch.round(t / scale).clamp(-128, 127) * scale
 
-# Quantize and replace weights
-w_quant, w_scale = quantize_tensor(layer.weight.data, bits=8)
-layer_quant = nn.Linear(512, 512)
-layer_quant.weight.data = w_quant
-layer_quant.bias.data = layer.bias.data
+layer.weight.data = quantize_int8(layer.weight.data)
 
-# Quantized output
 with torch.no_grad():
-    y_quant = layer_quant(x)
+    y_quantized = layer(x)
 
-# Compare
-mse = ((y_original - y_quant) ** 2).mean().item()
-relative_error = (y_original - y_quant).abs().mean() / y_original.abs().mean()
-
-print(f"MSE between original and quantized: {mse:.6f}")
-print(f"Relative error: {relative_error:.4%}")
-print(f"Correlation: {torch.corrcoef(torch.stack([y_original.flatten(), y_quant.flatten()]))[0,1]:.6f}")
+error = (y_original - y_quantized).abs().mean() / y_original.abs().mean()
+print(f"Relative error: {error:.2%}")  # Typically < 1%
 ```
-
-**Output:**
-```
-MSE between original and quantized: 0.000342
-Relative error: 0.89%
-Correlation: 0.999823
-```
-
-Less than 1% error and nearly perfect correlation—the outputs are almost identical.
 
 </Implementation>
 
-## When Does Quantization Hurt?
+## When Does It Hurt?
 
-<Warning title="Cases Where Quantization Can Fail">
+<Warning title="Watch Out For">
 
-Quantization isn't free. It can cause problems when:
+<div className="grid md:grid-cols-2 gap-3 mt-4">
+  <div className="flex items-start gap-2">
+    <span className="text-red-400 text-lg">✗</span>
+    <div>
+      <div className="text-slate-200 font-medium">Outlier weights</div>
+      <div className="text-slate-500 text-sm">A few large weights waste quantization range</div>
+    </div>
+  </div>
+  <div className="flex items-start gap-2">
+    <span className="text-red-400 text-lg">✗</span>
+    <div>
+      <div className="text-slate-200 font-medium">Math-heavy tasks</div>
+      <div className="text-slate-500 text-sm">Precise calculations suffer more</div>
+    </div>
+  </div>
+  <div className="flex items-start gap-2">
+    <span className="text-red-400 text-lg">✗</span>
+    <div>
+      <div className="text-slate-200 font-medium">Very small models</div>
+      <div className="text-slate-500 text-sm">Less redundancy to absorb error</div>
+    </div>
+  </div>
+  <div className="flex items-start gap-2">
+    <span className="text-red-400 text-lg">✗</span>
+    <div>
+      <div className="text-slate-200 font-medium">Extreme compression</div>
+      <div className="text-slate-500 text-sm">int2/int3 needs special techniques</div>
+    </div>
+  </div>
+</div>
 
-1. **Outlier weights**: A few very large weights can waste quantization range
-2. **Fine-grained tasks**: Tasks requiring precise numerical reasoning may suffer
-3. **Very low precision**: int4 can lose important information in some layers
-4. **Activation quantization**: Quantizing activations is harder than quantizing weights
-5. **Specific architectures**: Some attention patterns are more sensitive than others
-
-Always measure accuracy after quantization—don't assume it works.
+**Always measure accuracy after quantization.**
 
 </Warning>
 
-## The Quantization Zoo
-
-Different bit widths have different use cases:
+## Quick Reference
 
 <div className="my-6">
-
-| Format | Bits | Use Case | Typical Accuracy Loss |
-|--------|------|----------|----------------------|
-| float32 | 32 | Training, reference | None (baseline) |
-| bfloat16 | 16 | Training, TPUs | Negligible |
-| float16 | 16 | Inference, training | Negligible |
-| int8 | 8 | Inference | ~1% |
-| int4 | 4 | Edge, LLMs | 1-5% |
-| int2 | 2 | Extreme compression | 5-20% |
-
+  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="bg-slate-800/50 rounded-lg p-4 text-center border border-slate-700">
+      <div className="font-bold text-slate-300">float32</div>
+      <div className="text-xs text-slate-500 mt-1">Training baseline</div>
+      <div className="text-xs text-slate-600 mt-2">Full precision</div>
+    </div>
+    <div className="bg-gradient-to-br from-blue-900/30 to-blue-800/10 rounded-lg p-4 text-center border border-blue-700/50">
+      <div className="font-bold text-blue-400">float16</div>
+      <div className="text-xs text-slate-400 mt-1">Training + inference</div>
+      <div className="text-xs text-blue-400/70 mt-2">~0% loss</div>
+    </div>
+    <div className="bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 rounded-lg p-4 text-center border border-emerald-700/50">
+      <div className="font-bold text-emerald-400">int8</div>
+      <div className="text-xs text-slate-400 mt-1">Standard inference</div>
+      <div className="text-xs text-emerald-400/70 mt-2">~1% loss</div>
+    </div>
+    <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg p-4 text-center border border-amber-700/50">
+      <div className="font-bold text-amber-400">int4</div>
+      <div className="text-xs text-slate-400 mt-1">Edge / LLMs</div>
+      <div className="text-xs text-amber-400/70 mt-2">1-5% loss</div>
+    </div>
+  </div>
 </div>
 
-<Intuition>
+<Tip title="For RL">
 
-**Rule of thumb**:
-- **float16/bfloat16**: Use for training and when you need maximum accuracy
-- **int8**: The sweet spot for most inference workloads
-- **int4**: When you need to run on limited hardware
-
-In RL specifically:
-- Training: float16 or bfloat16 (for gradient precision)
-- Inference during rollouts: int8 for maximum throughput
-- Edge deployment: int4 or even int2 for tiny devices
-
-</Intuition>
-
-## Quantization in the RL Pipeline
-
-<Example title="Where Quantization Helps in RL">
-
-**1. Environment Simulation**
-- Quantized policy networks = more parallel environments
-- Critical for sample-efficient training
-
-**2. RLHF Training**
-- Reference model can be quantized (it's frozen anyway)
-- Reward model can be quantized for faster scoring
-- Only the policy needs full precision during training
-
-**3. Deployment**
-- Robot policies run on edge devices
-- Game AI needs real-time performance
-- Quantized models fit in embedded memory
-
-</Example>
-
-<Tip title="Start Simple">
-
-Before trying exotic quantization methods:
-1. Try float16 first—it's almost lossless
-2. Measure your baseline accuracy
-3. Try int8 and check if accuracy holds
-4. Only go to int4 if you need the extra compression
-
-Most RL applications work fine with int8.
+- **Training**: float16/bfloat16 for gradients
+- **Rollouts**: int8 for throughput
+- **Deployment**: int4 for edge devices
 
 </Tip>
 
-## Next: How Numbers Work
+## Next Up
 
 <Note>
 
-To really understand quantization, you need to understand how computers represent numbers. The next section dives into float32, int8, and everything in between.
+Now that you understand *why* quantization works, let's see *how* numbers are stored at the bit level.
 
 Continue to [Number Representations](/chapters/quantization/number-representations).
 
