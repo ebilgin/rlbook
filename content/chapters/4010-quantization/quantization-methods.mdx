@@ -342,45 +342,54 @@ quantized = quantize(scaled_weight)
 ## Quick Comparison
 
 <div className="my-6 overflow-x-auto">
-  <div className="min-w-[600px]">
-    <div className="grid grid-cols-5 gap-2 text-sm">
-      <div className="bg-slate-800/50 p-3 rounded-lg font-bold text-slate-200">Method</div>
-      <div className="bg-slate-800/50 p-3 rounded-lg font-bold text-slate-200">Speed</div>
-      <div className="bg-slate-800/50 p-3 rounded-lg font-bold text-slate-200">Bits</div>
-      <div className="bg-slate-800/50 p-3 rounded-lg font-bold text-slate-200">Accuracy</div>
-      <div className="bg-slate-800/50 p-3 rounded-lg font-bold text-slate-200">Best For</div>
-
-      <div className="bg-slate-900/30 p-3 rounded-lg text-slate-300">Dynamic PTQ</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg text-emerald-400">Fast</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg">8</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg">Good</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg text-slate-400">Quick start</div>
-
-      <div className="bg-slate-900/30 p-3 rounded-lg text-slate-300">Static PTQ</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg text-emerald-400">Fast</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg">8</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg">Good</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg text-slate-400">Production</div>
-
-      <div className="bg-slate-900/30 p-3 rounded-lg text-amber-400">GPTQ</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg text-amber-400">Medium</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg">4</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg">Great</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg text-slate-400">LLMs</div>
-
-      <div className="bg-slate-900/30 p-3 rounded-lg text-emerald-400">AWQ</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg text-amber-400">Medium</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg">4</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg">Great</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg text-slate-400">LLMs</div>
-
-      <div className="bg-slate-900/30 p-3 rounded-lg text-violet-400">QAT</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg text-red-400">Slow</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg">2-8</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg">Best</div>
-      <div className="bg-slate-900/30 p-3 rounded-lg text-slate-400">Extreme</div>
-    </div>
-  </div>
+  <table className="w-full text-sm border-collapse">
+    <thead>
+      <tr className="bg-slate-800/50">
+        <th className="p-3 text-left font-bold text-slate-200 rounded-tl-lg">Method</th>
+        <th className="p-3 text-left font-bold text-slate-200">Speed</th>
+        <th className="p-3 text-left font-bold text-slate-200">Bits</th>
+        <th className="p-3 text-left font-bold text-slate-200">Accuracy</th>
+        <th className="p-3 text-left font-bold text-slate-200 rounded-tr-lg">Best For</th>
+      </tr>
+    </thead>
+    <tbody className="bg-slate-900/30">
+      <tr className="border-t border-slate-700/50">
+        <td className="p-3 text-slate-300">Dynamic PTQ</td>
+        <td className="p-3 text-emerald-400">Fast</td>
+        <td className="p-3">8</td>
+        <td className="p-3">Good</td>
+        <td className="p-3 text-slate-400">Quick start</td>
+      </tr>
+      <tr className="border-t border-slate-700/50">
+        <td className="p-3 text-slate-300">Static PTQ</td>
+        <td className="p-3 text-emerald-400">Fast</td>
+        <td className="p-3">8</td>
+        <td className="p-3">Good</td>
+        <td className="p-3 text-slate-400">Production</td>
+      </tr>
+      <tr className="border-t border-slate-700/50">
+        <td className="p-3 text-amber-400">GPTQ</td>
+        <td className="p-3 text-amber-400">Medium</td>
+        <td className="p-3">4</td>
+        <td className="p-3">Great</td>
+        <td className="p-3 text-slate-400">LLMs</td>
+      </tr>
+      <tr className="border-t border-slate-700/50">
+        <td className="p-3 text-emerald-400">AWQ</td>
+        <td className="p-3 text-amber-400">Medium</td>
+        <td className="p-3">4</td>
+        <td className="p-3">Great</td>
+        <td className="p-3 text-slate-400">LLMs</td>
+      </tr>
+      <tr className="border-t border-slate-700/50">
+        <td className="p-3 text-violet-400 rounded-bl-lg">QAT</td>
+        <td className="p-3 text-red-400">Slow</td>
+        <td className="p-3">2-8</td>
+        <td className="p-3">Best</td>
+        <td className="p-3 text-slate-400 rounded-br-lg">Extreme</td>
+      </tr>
+    </tbody>
+  </table>
 </div>
 
 <Warning title="Always Measure">
