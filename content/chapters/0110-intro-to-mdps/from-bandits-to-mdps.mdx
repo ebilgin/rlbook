@@ -115,16 +115,42 @@ If you answer "yes" to any of these, you're dealing with a sequential decision p
 
 Here are some examples categorized by type:
 
-<div className="my-6 overflow-x-auto">
-
-| Problem | Bandit or MDP? | Why |
-|---------|----------------|-----|
-| Choosing which ad to show | Bandit | Each impression is independent |
-| Playing a video game | **MDP** | Actions change the game state |
-| A/B testing a webpage | Bandit | Users don't return (or we treat each visit independently) |
-| Training a robot arm | **MDP** | Each movement changes position |
-| Recommending a movie | It depends! | Single recommendation = bandit; session = MDP |
-
+<div className="space-y-3 my-6">
+  <div className="flex items-center gap-4 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="w-20 text-center px-2 py-1 bg-slate-600/50 text-slate-300 text-xs font-medium rounded">Bandit</div>
+    <div className="flex-1">
+      <div className="text-slate-200 font-medium">Choosing which ad to show</div>
+      <div className="text-slate-400 text-sm">Each impression is independent</div>
+    </div>
+  </div>
+  <div className="flex items-center gap-4 p-3 bg-gradient-to-r from-cyan-900/20 to-slate-800/50 rounded-lg border border-cyan-700/50">
+    <div className="w-20 text-center px-2 py-1 bg-cyan-600/50 text-cyan-200 text-xs font-bold rounded">MDP</div>
+    <div className="flex-1">
+      <div className="text-slate-200 font-medium">Playing a video game</div>
+      <div className="text-slate-400 text-sm">Actions change the game state</div>
+    </div>
+  </div>
+  <div className="flex items-center gap-4 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="w-20 text-center px-2 py-1 bg-slate-600/50 text-slate-300 text-xs font-medium rounded">Bandit</div>
+    <div className="flex-1">
+      <div className="text-slate-200 font-medium">A/B testing a webpage</div>
+      <div className="text-slate-400 text-sm">Users don't return (or we treat each visit independently)</div>
+    </div>
+  </div>
+  <div className="flex items-center gap-4 p-3 bg-gradient-to-r from-cyan-900/20 to-slate-800/50 rounded-lg border border-cyan-700/50">
+    <div className="w-20 text-center px-2 py-1 bg-cyan-600/50 text-cyan-200 text-xs font-bold rounded">MDP</div>
+    <div className="flex-1">
+      <div className="text-slate-200 font-medium">Training a robot arm</div>
+      <div className="text-slate-400 text-sm">Each movement changes position</div>
+    </div>
+  </div>
+  <div className="flex items-center gap-4 p-3 bg-gradient-to-r from-amber-900/20 to-slate-800/50 rounded-lg border border-amber-700/50">
+    <div className="w-20 text-center px-2 py-1 bg-amber-600/50 text-amber-200 text-xs font-bold rounded">Depends</div>
+    <div className="flex-1">
+      <div className="text-slate-200 font-medium">Recommending a movie</div>
+      <div className="text-slate-400 text-sm">Single recommendation = bandit; session = MDP</div>
+    </div>
+  </div>
 </div>
 
 <Mathematical>

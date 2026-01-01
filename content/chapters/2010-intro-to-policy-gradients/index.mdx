@@ -15,6 +15,7 @@ prerequisites:
 import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
 import { ChapterObjectives, KeyTakeaways, NextChapter, CrossRef } from '@/components/ui/ChapterNav';
 import { Note, Warning, Tip } from '@/components/ui/Callouts';
+import PolicyGradientDemo from '@/components/interactive/PolicyGradientDemo';
 
 # Introduction to Policy-Based Methods
 
@@ -25,6 +26,8 @@ import { Note, Warning, Tip } from '@/components/ui/Callouts';
 - Recognize the advantages and trade-offs of policy-based approaches
 - Implement a simple softmax policy with linear features
 </ChapterObjectives>
+
+<PolicyGradientDemo client:load />
 
 ## A Different Way to Think About Learning
 
@@ -355,17 +358,34 @@ The policy gradient theorem cleverly rewrites this gradient in a form that doesn
 
 Let's summarize the key differences:
 
-<Intuition>
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-xl p-5 border border-violet-700/50">
+    <div className="text-violet-400 font-bold text-xl mb-4">Value-Based (Q-Learning)</div>
+    <div className="space-y-3 text-sm">
+      <div><span className="text-slate-400">Learn:</span> <span className="text-slate-200">Q(s, a) values</span></div>
+      <div><span className="text-slate-400">Act:</span> <span className="text-slate-200 font-mono">argmax Q(s, a)</span></div>
+      <div><span className="text-slate-400">Continuous actions:</span> <span className="text-amber-300">Requires optimization</span></div>
+      <div><span className="text-slate-400">Stochastic policies:</span> <span className="text-amber-300">Forced (ε-greedy)</span></div>
+      <div><span className="text-slate-400">Sample efficiency:</span> <span className="text-emerald-300">Often better</span></div>
+      <div><span className="text-slate-400">Variance:</span> <span className="text-emerald-300">Lower (bootstrapping)</span></div>
+      <div><span className="text-slate-400">Stability:</span> <span className="text-amber-300">Can be unstable</span></div>
+    </div>
+  </div>
+  <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-xl p-5 border border-cyan-700/50">
+    <div className="text-cyan-400 font-bold text-xl mb-4">Policy-Based</div>
+    <div className="space-y-3 text-sm">
+      <div><span className="text-slate-400">Learn:</span> <span className="text-slate-200">π(a|s) directly</span></div>
+      <div><span className="text-slate-400">Act:</span> <span className="text-slate-200">Sample from π</span></div>
+      <div><span className="text-slate-400">Continuous actions:</span> <span className="text-emerald-300">Natural ✓</span></div>
+      <div><span className="text-slate-400">Stochastic policies:</span> <span className="text-emerald-300">Natural ✓</span></div>
+      <div><span className="text-slate-400">Sample efficiency:</span> <span className="text-amber-300">Often worse</span></div>
+      <div><span className="text-slate-400">Variance:</span> <span className="text-amber-300">Higher (Monte Carlo)</span></div>
+      <div><span className="text-slate-400">Stability:</span> <span className="text-emerald-300">Smoother optimization</span></div>
+    </div>
+  </div>
+</div>
 
-| Aspect | Value-Based (Q-Learning) | Policy-Based |
-|--------|--------------------------|--------------|
-| **What we learn** | $Q(s, a)$ values | $\pi_\theta(a\|s)$ directly |
-| **How we act** | $\arg\max_a Q(s, a)$ | Sample from $\pi_\theta$ |
-| **Continuous actions** | Requires optimization | Natural (sample from distribution) |
-| **Stochastic policies** | Forced (ε-greedy for exploration) | Natural |
-| **Sample efficiency** | Often better (off-policy possible) | Often worse (on-policy) |
-| **Variance** | Lower (bootstrapping) | Higher (Monte Carlo) |
-| **Stability** | Can be unstable (maximization bias) | Smoother optimization |
+<Intuition>
 
 Neither approach is strictly better—they have different trade-offs. The best modern algorithms (like PPO, SAC) combine both ideas.
 

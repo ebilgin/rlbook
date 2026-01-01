@@ -13,6 +13,7 @@ prerequisites:
 import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
 import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
 import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+import QLearningDemo from '@/components/interactive/QLearningDemo';
 
 # Q-Learning: Off-Policy TD Control
 
@@ -25,6 +26,8 @@ import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callout
 </ChapterObjectives>
 
 SARSA is safe but learns the value of being epsilon-greedy. What if we could learn the optimal policy while still exploring? Q-learning does exactly this—it learns $Q^*$ regardless of what behavior policy we follow. It's perhaps the most important algorithm in reinforcement learning.
+
+<QLearningDemo client:load />
 
 ## Why Q-Learning?
 
@@ -116,13 +119,58 @@ Both are valid choices with different trade-offs. Q-learning finds the true opti
 
 </Intuition>
 
-| Aspect | SARSA | Q-Learning |
-|--------|-------|------------|
-| **Target** | $Q(S', A')$ | $\max_a Q(S', a)$ |
-| **Learns** | $Q^\pi$ | $Q^*$ |
-| **Type** | On-policy | Off-policy |
-| **Safety** | Safer (accounts for $\varepsilon$) | Riskier during training |
-| **Optimality** | Eventually (as $\varepsilon \to 0$) | Yes |
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-xl p-5 border border-violet-700/50">
+    <div className="text-violet-400 font-bold text-xl mb-3">SARSA</div>
+    <div className="space-y-2 text-sm">
+      <div className="flex justify-between">
+        <span className="text-slate-400">Target:</span>
+        <span className="text-slate-200 font-mono">Q(S', A')</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-slate-400">Learns:</span>
+        <span className="text-slate-200 font-mono">Q^π</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-slate-400">Type:</span>
+        <span className="text-violet-300">On-policy</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-slate-400">Safety:</span>
+        <span className="text-emerald-300">Safer (accounts for ε)</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-slate-400">Optimal:</span>
+        <span className="text-amber-300">Eventually (as ε→0)</span>
+      </div>
+    </div>
+  </div>
+  <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-xl p-5 border border-cyan-700/50 ring-2 ring-cyan-500/20">
+    <div className="text-cyan-400 font-bold text-xl mb-3">Q-Learning</div>
+    <div className="space-y-2 text-sm">
+      <div className="flex justify-between">
+        <span className="text-slate-400">Target:</span>
+        <span className="text-slate-200 font-mono">max_a Q(S', a)</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-slate-400">Learns:</span>
+        <span className="text-slate-200 font-mono">Q*</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-slate-400">Type:</span>
+        <span className="text-cyan-300">Off-policy</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-slate-400">Safety:</span>
+        <span className="text-amber-300">Riskier during training</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-slate-400">Optimal:</span>
+        <span className="text-emerald-300">Yes ✓</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 ---
 

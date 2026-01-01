@@ -13,6 +13,7 @@ prerequisites:
 import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
 import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
 import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+import GridWorldIntro from '@/components/interactive/GridWorldIntro';
 
 # Introduction to Markov Decision Processes
 
@@ -26,6 +27,8 @@ import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callout
 In bandits, every pull of the lever was independent—your choice didn't change the world. But what if your actions have lasting consequences? What if where you go affects where you can go next?
 
 Welcome to **Markov Decision Processes** (MDPs), the mathematical language of sequential decision-making.
+
+<GridWorldIntro client:load />
 
 ## Why MDPs?
 

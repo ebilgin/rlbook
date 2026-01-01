@@ -15,6 +15,7 @@ prerequisites:
 import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
 import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
 import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+import TDLearningDemo from '@/components/interactive/TDLearningDemo';
 
 # Introduction to Temporal Difference Learning
 
@@ -27,6 +28,8 @@ import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callout
 </ChapterObjectives>
 
 Monte Carlo methods wait until the end of an episode to learn. Dynamic programming needs a model of the environment. What if we could learn step-by-step, from experience, without a model? That's TD learning—the heart of modern reinforcement learning.
+
+<TDLearningDemo client:load />
 
 ## Why TD Learning Matters
 
@@ -127,11 +130,50 @@ This chapter assumes you're comfortable with:
 
 TD learning represents a fundamental shift in how we think about learning from experience:
 
-| Approach | Needs Model? | Needs Complete Episodes? | Updates When? |
-|----------|--------------|-------------------------|---------------|
-| Dynamic Programming | Yes | No | After computing all states |
-| Monte Carlo | No | Yes | End of episode |
-| **TD Learning** | No | No | Every step |
+<div className="grid md:grid-cols-3 gap-4 my-6">
+  <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 rounded-xl p-4 border border-slate-600">
+    <div className="text-slate-300 font-bold text-lg mb-3">Dynamic Programming</div>
+    <div className="space-y-2 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="text-red-400">✗</span>
+        <span className="text-slate-400">Needs model</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-emerald-400">✓</span>
+        <span className="text-slate-400">No complete episodes</span>
+      </div>
+      <div className="text-slate-500 text-xs mt-2">Updates after computing all states</div>
+    </div>
+  </div>
+  <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 rounded-xl p-4 border border-slate-600">
+    <div className="text-slate-300 font-bold text-lg mb-3">Monte Carlo</div>
+    <div className="space-y-2 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="text-emerald-400">✓</span>
+        <span className="text-slate-400">Model-free</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-red-400">✗</span>
+        <span className="text-slate-400">Needs complete episodes</span>
+      </div>
+      <div className="text-slate-500 text-xs mt-2">Updates at end of episode</div>
+    </div>
+  </div>
+  <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-xl p-4 border border-cyan-700/50 ring-2 ring-cyan-500/20">
+    <div className="text-cyan-400 font-bold text-lg mb-3">TD Learning</div>
+    <div className="space-y-2 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="text-emerald-400">✓</span>
+        <span className="text-slate-300">Model-free</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-emerald-400">✓</span>
+        <span className="text-slate-300">No complete episodes needed</span>
+      </div>
+      <div className="text-cyan-300 text-xs mt-2 font-medium">Updates every step!</div>
+    </div>
+  </div>
+</div>
 
 TD's ability to learn incrementally, without a model, from incomplete episodes makes it the practical workhorse of reinforcement learning.
 

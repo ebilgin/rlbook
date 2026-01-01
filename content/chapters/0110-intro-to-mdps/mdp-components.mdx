@@ -282,12 +282,32 @@ mdp = MDP(
 
 Every MDP is defined by these five components:
 
-| Component | Symbol | Question It Answers |
-|-----------|--------|---------------------|
-| States | $\mathcal{S}$ | Where am I? |
-| Actions | $\mathcal{A}$ | What can I do? |
-| Transitions | $P$ | Where might I end up? |
-| Rewards | $R$ | How did that go? |
-| Discount | $\gamma$ | How much do I care about the future? |
+<div className="grid md:grid-cols-5 gap-3 my-6">
+  <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-xl p-4 border border-cyan-700/50 text-center">
+    <div className="text-cyan-400 font-bold text-lg mb-1">States</div>
+    <div className="text-slate-400 font-mono text-sm mb-2">$\mathcal{S}$</div>
+    <div className="text-slate-300 text-sm">Where am I?</div>
+  </div>
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-xl p-4 border border-violet-700/50 text-center">
+    <div className="text-violet-400 font-bold text-lg mb-1">Actions</div>
+    <div className="text-slate-400 font-mono text-sm mb-2">$\mathcal{A}$</div>
+    <div className="text-slate-300 text-sm">What can I do?</div>
+  </div>
+  <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-xl p-4 border border-amber-700/50 text-center">
+    <div className="text-amber-400 font-bold text-lg mb-1">Transitions</div>
+    <div className="text-slate-400 font-mono text-sm mb-2">$P$</div>
+    <div className="text-slate-300 text-sm">Where might I end up?</div>
+  </div>
+  <div className="bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 rounded-xl p-4 border border-emerald-700/50 text-center">
+    <div className="text-emerald-400 font-bold text-lg mb-1">Rewards</div>
+    <div className="text-slate-400 font-mono text-sm mb-2">$R$</div>
+    <div className="text-slate-300 text-sm">How did that go?</div>
+  </div>
+  <div className="bg-gradient-to-br from-rose-900/30 to-rose-800/10 rounded-xl p-4 border border-rose-700/50 text-center">
+    <div className="text-rose-400 font-bold text-lg mb-1">Discount</div>
+    <div className="text-slate-400 font-mono text-sm mb-2">$\gamma$</div>
+    <div className="text-slate-300 text-sm">How much do I care about the future?</div>
+  </div>
+</div>
 
 Together, they provide a complete mathematical description of a sequential decision problem. In the next section, we'll explore the crucial **Markov property** that makes this framework tractable.
