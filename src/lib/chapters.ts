@@ -842,7 +842,7 @@ export const chapters: Record<string, ChapterData> = {
     title: 'Quantization',
     section: 'ML Concepts',
     description: 'Reducing model size and speeding up inference by using lower-precision numbers',
-    status: 'draft',
+    status: 'editor_reviewed',
     subsections: [
       {
         slug: 'why-quantization',
