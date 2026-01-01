@@ -1,0 +1,477 @@
+---
+title: "Quantization Methods"
+slug: "quantization-methods"
+section: "ML Concepts"
+description: "Post-training quantization vs quantization-aware training"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Quantization Methods
+
+Now that you understand number representations, let's explore *how* to quantize a model. There are two main approaches: quantize after training (PTQ) or quantize during training (QAT). For large language models, specialized methods like GPTQ and AWQ have become essential.
+
+## Post-Training Quantization (PTQ)
+
+<Definition title="Post-Training Quantization">
+Converting a pre-trained model to lower precision without any additional training. The simplest approach—just convert the weights and go.
+</Definition>
+
+<Intuition>
+
+PTQ is like converting a document from one format to another. You take the trained model, convert its weights to lower precision, and hope it still works.
+
+For simple models or modest quantization (float16, int8), PTQ often works well. For aggressive quantization (int4), you usually need something smarter.
+
+</Intuition>
+
+### Static vs Dynamic Quantization
+
+<Intuition>
+
+**Static quantization**: Compute scale factors once using a calibration dataset, then use fixed scales during inference. Faster but requires representative data.
+
+**Dynamic quantization**: Compute scale factors on-the-fly for each input. No calibration needed but slower.
+
+For weights, static quantization is almost always used. The debate is about activations.
+
+</Intuition>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+
+# A simple model
+class SimpleNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(784, 256)
+        self.fc2 = nn.Linear(256, 10)
+
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        return self.fc2(x)
+
+model = SimpleNet()
+
+# Dynamic quantization (easiest)
+model_dynamic = torch.quantization.quantize_dynamic(
+    model,
+    {nn.Linear},  # Layers to quantize
+    dtype=torch.qint8
+)
+
+# Check size reduction
+def model_size(model):
+    param_size = sum(p.numel() * p.element_size() for p in model.parameters())
+    return param_size / 1024  # KB
+
+print(f"Original size: {model_size(model):.1f} KB")
+print(f"Quantized size: {model_size(model_dynamic):.1f} KB")
+
+# Test inference
+x = torch.randn(1, 784)
+with torch.no_grad():
+    y_original = model(x)
+    y_quantized = model_dynamic(x)
+
+print(f"Output difference: {(y_original - y_quantized).abs().max():.4f}")
+```
+
+</Implementation>
+
+### Calibration for Static Quantization
+
+<Intuition>
+
+Static quantization needs to know the range of activations to set appropriate scales. This is done with a **calibration** step: run a small dataset through the model and observe the activation ranges.
+
+Common calibration methods:
+- **Min-max**: Use observed min and max values
+- **Histogram**: Use a percentile to clip outliers
+- **Entropy (KL divergence)**: Minimize information loss
+
+</Intuition>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+
+class CalibratedModel(nn.Module):
+    """Model with calibration observers."""
+
+    def __init__(self, original_model):
+        super().__init__()
+        self.model = original_model
+        # Observers to track activation ranges
+        self.observers = {}
+
+    def calibrate(self, dataloader, num_batches=100):
+        """Run calibration on sample data."""
+        self.model.eval()
+        activation_stats = {}
+
+        def hook_fn(name):
+            def hook(module, input, output):
+                if name not in activation_stats:
+                    activation_stats[name] = {'min': float('inf'), 'max': float('-inf')}
+                activation_stats[name]['min'] = min(activation_stats[name]['min'], output.min().item())
+                activation_stats[name]['max'] = max(activation_stats[name]['max'], output.max().item())
+            return hook
+
+        # Register hooks
+        hooks = []
+        for name, module in self.model.named_modules():
+            if isinstance(module, (nn.Linear, nn.Conv2d)):
+                hooks.append(module.register_forward_hook(hook_fn(name)))
+
+        # Run calibration
+        with torch.no_grad():
+            for i, (x, _) in enumerate(dataloader):
+                if i >= num_batches:
+                    break
+                self.model(x)
+
+        # Remove hooks
+        for hook in hooks:
+            hook.remove()
+
+        return activation_stats
+
+# Example usage (pseudocode)
+# stats = calibrated_model.calibrate(train_loader, num_batches=100)
+# print("Activation ranges:", stats)
+```
+
+</Implementation>
+
+## Quantization-Aware Training (QAT)
+
+<Definition title="Quantization-Aware Training">
+Training (or fine-tuning) a model with simulated quantization, so it learns to be robust to quantization error. The model "knows" it will be quantized.
+</Definition>
+
+<Intuition>
+
+PTQ treats quantization as an afterthought. QAT makes it part of training.
+
+During QAT, we insert "fake quantization" operations that simulate the quantization error. The model learns weights that work well even after quantization.
+
+**The key trick**: During the forward pass, we quantize and dequantize (simulating the error). During the backward pass, we use the "straight-through estimator"—pretend the quantization was a pass-through.
+
+</Intuition>
+
+<Mathematical>
+
+The straight-through estimator (STE):
+
+Forward pass: $y = Q(x)$ (quantize)
+
+Backward pass: $\frac{\partial L}{\partial x} = \frac{\partial L}{\partial y}$ (ignore quantization)
+
+This is mathematically wrong but works well in practice. The gradient flows through as if quantization didn't happen.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class FakeQuantize(torch.autograd.Function):
+    """Fake quantization with straight-through estimator."""
+
+    @staticmethod
+    def forward(ctx, x, scale, zero_point, qmin, qmax):
+        # Quantize
+        q = torch.clamp(torch.round(x / scale) + zero_point, qmin, qmax)
+        # Dequantize
+        x_q = (q - zero_point) * scale
+        return x_q
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        # Straight-through: gradient passes unchanged
+        return grad_output, None, None, None, None
+
+def fake_quantize(x, bits=8):
+    """Apply fake quantization to a tensor."""
+    qmax = 2**(bits-1) - 1
+    scale = x.abs().max() / qmax
+    scale = max(scale, 1e-8)
+    return FakeQuantize.apply(x, scale, 0, -qmax, qmax)
+
+class QATLinear(nn.Module):
+    """Linear layer with fake quantization for QAT."""
+
+    def __init__(self, in_features, out_features, bits=8):
+        super().__init__()
+        self.linear = nn.Linear(in_features, out_features)
+        self.bits = bits
+
+    def forward(self, x):
+        # Fake-quantize weights during forward pass
+        w_q = fake_quantize(self.linear.weight, self.bits)
+        return F.linear(x, w_q, self.linear.bias)
+
+# Example: QAT training loop
+def train_with_qat(model, dataloader, epochs=5):
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    criterion = nn.CrossEntropyLoss()
+
+    for epoch in range(epochs):
+        for x, y in dataloader:
+            optimizer.zero_grad()
+            # Forward pass includes fake quantization
+            output = model(x)
+            loss = criterion(output, y)
+            loss.backward()
+            optimizer.step()
+
+        print(f"Epoch {epoch+1}: Loss = {loss.item():.4f}")
+
+    # After training, convert to real quantized model
+    return model
+```
+
+</Implementation>
+
+<Tip title="When to use QAT vs PTQ">
+
+**Use PTQ when:**
+- You need quick results
+- Model is large and retraining is expensive
+- int8 quantization is sufficient
+
+**Use QAT when:**
+- PTQ gives unacceptable accuracy loss
+- You need aggressive quantization (int4, int2)
+- The model is small enough to retrain
+
+</Tip>
+
+## Modern LLM Quantization: GPTQ
+
+<Definition title="GPTQ">
+A one-shot, layer-wise quantization method that optimizes quantized weights to minimize the output error of each layer. Specifically designed for large language models.
+</Definition>
+
+<Intuition>
+
+GPTQ (Generalized Post-Training Quantization) is clever: instead of just rounding weights to the nearest quantized value, it solves an optimization problem to find the best quantized weights.
+
+The key insight: **weight errors can partially cancel each other**. If one weight is rounded up, another can be rounded down to compensate. GPTQ exploits this by quantizing weights one at a time and adjusting remaining weights to minimize error.
+
+</Intuition>
+
+<Mathematical>
+
+GPTQ minimizes the layer-wise squared error:
+
+$$\min_{Q} \|WX - QX\|_F^2$$
+
+where $W$ is the original weight matrix, $Q$ is the quantized version, and $X$ is the input (from calibration data).
+
+The algorithm uses the Optimal Brain Quantization (OBQ) framework:
+1. Quantize one weight
+2. Update remaining weights to compensate: $\delta = -\frac{w_q - w}{H_{qq}^{-1}} H_q$
+3. Repeat until all weights are quantized
+
+Here $H$ is the Hessian of the loss with respect to weights.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+# GPTQ is typically used via libraries like auto-gptq
+# Here's the conceptual algorithm:
+
+import torch
+import torch.nn as nn
+
+def gptq_quantize_layer(weight, input_samples, bits=4, group_size=128):
+    """
+    Simplified GPTQ-style quantization for one layer.
+
+    This is a conceptual implementation - real GPTQ is more complex.
+    """
+    n_out, n_in = weight.shape
+    qmax = 2**(bits-1) - 1
+
+    # Compute Hessian approximation: H = X @ X.T
+    # This tells us which weights are "important"
+    X = input_samples  # [n_samples, n_in]
+    H = X.T @ X
+    H = H.float()
+
+    # Add damping for numerical stability
+    damp = 0.01 * torch.diag(H).mean()
+    H += damp * torch.eye(n_in, device=H.device)
+
+    # Cholesky decomposition for efficient inversion
+    L = torch.linalg.cholesky(H)
+
+    # Quantize column by column
+    quantized_weight = weight.clone()
+    for i in range(n_in):
+        # Get the column to quantize
+        w = quantized_weight[:, i]
+
+        # Compute scale for this column (or group)
+        scale = w.abs().max() / qmax
+        scale = max(scale.item(), 1e-8)
+
+        # Quantize
+        w_q = torch.round(w / scale).clamp(-qmax, qmax) * scale
+
+        # Error from quantizing this column
+        error = (w - w_q).unsqueeze(1)
+
+        # Update remaining columns to compensate
+        # (Simplified - real GPTQ uses more efficient updates)
+        if i < n_in - 1:
+            H_inv_row = torch.cholesky_solve(
+                torch.eye(n_in, device=H.device)[i:i+1].T,
+                L
+            ).T
+            quantized_weight[:, i+1:] += error @ H_inv_row[:, i+1:]
+
+        quantized_weight[:, i] = w_q
+
+    return quantized_weight
+
+# In practice, use auto-gptq:
+# from auto_gptq import AutoGPTQForCausalLM
+# model = AutoGPTQForCausalLM.from_pretrained(model_name)
+# model.quantize(calibration_data, bits=4)
+```
+
+</Implementation>
+
+## AWQ: Activation-Aware Quantization
+
+<Definition title="AWQ">
+A quantization method that protects "salient" weights—those that matter most for activations—by not quantizing them as aggressively.
+</Definition>
+
+<Intuition>
+
+AWQ (Activation-aware Weight Quantization) observes that not all weights are equally important. Some weights consistently produce large activations; quantizing these hurts more than quantizing small-activation weights.
+
+AWQ protects salient weights by scaling them up before quantization, then scaling the results back down. This gives important weights more precision.
+
+</Intuition>
+
+<Mathematical>
+
+AWQ scales weights by a per-channel factor $s$:
+
+$$\text{Original}: y = Wx$$
+$$\text{Scaled}: y = (Ws^{-1})(sx)$$
+
+The trick: scale $s$ is chosen to minimize quantization error for important weights.
+
+$$s = \arg\min_s \|Q(Ws^{-1}) \cdot sx - Wx\|$$
+
+where $Q$ is the quantization function.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+def compute_awq_scales(weight, activations, bits=4):
+    """
+    Compute AWQ scaling factors.
+
+    weight: [out_features, in_features]
+    activations: [n_samples, in_features]
+    """
+    qmax = 2**(bits-1) - 1
+
+    # Compute activation magnitudes per input channel
+    act_scales = activations.abs().mean(dim=0)
+
+    # Weight magnitudes per input channel
+    weight_scales = weight.abs().mean(dim=0)
+
+    # Saliency = how much this channel matters
+    saliency = act_scales * weight_scales
+
+    # AWQ scales: protect high-saliency channels
+    # Higher scale = more precision for that channel
+    scales = (saliency / saliency.max()).sqrt()
+    scales = scales.clamp(min=0.1)  # Don't scale down too much
+
+    return scales
+
+def apply_awq(weight, scales):
+    """Apply AWQ scaling to weights."""
+    # Scale up weights (they'll be scaled back in activation)
+    return weight * scales.unsqueeze(0)
+
+# Example
+weight = torch.randn(512, 256)
+activations = torch.randn(100, 256)
+
+scales = compute_awq_scales(weight, activations)
+weight_scaled = apply_awq(weight, scales)
+
+# Now quantize the scaled weights
+# The high-saliency channels have larger values, so they get more precision
+```
+
+</Implementation>
+
+## Comparing Methods
+
+<div className="my-6">
+
+| Method | Type | Bits | Speed | Accuracy | Best For |
+|--------|------|------|-------|----------|----------|
+| Dynamic PTQ | PTQ | 8 | Fast | Good | Quick deployment |
+| Static PTQ | PTQ | 8 | Fast | Good | Production inference |
+| QAT | Training | 4-8 | Slow | Best | When PTQ fails |
+| GPTQ | PTQ | 4 | Medium | Great | LLMs |
+| AWQ | PTQ | 4 | Medium | Great | LLMs |
+
+</div>
+
+<Example title="Typical Workflow for LLM Quantization">
+
+1. **Start with float16**: Most models are distributed this way
+2. **Try 8-bit quantization**: Usually works with no loss
+3. **Try GPTQ 4-bit**: For memory-constrained deployment
+4. **Try AWQ 4-bit**: If GPTQ has quality issues
+5. **Consider QAT**: Only if PTQ methods all fail
+
+Most practitioners stop at step 3—GPTQ 4-bit is good enough for most LLM applications.
+
+</Example>
+
+<Warning title="Quantization Isn't Free">
+
+Always measure accuracy after quantization:
+- Run your evaluation benchmarks
+- Check for specific failure modes
+- Test on edge cases
+
+A model that looks fine on average may fail badly on specific inputs.
+
+</Warning>
+
+<Note title="Next: Hands-On Practice">
+
+Now let's actually quantize a model. The next section walks through quantizing a real LLM and measuring the results.
+
+Continue to [Quantization in Practice](/chapters/quantization/quantization-in-practice).
+
+</Note>

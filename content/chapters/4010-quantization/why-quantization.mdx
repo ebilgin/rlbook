@@ -1,0 +1,244 @@
+---
+title: "Why Quantization Matters"
+slug: "why-quantization"
+section: "ML Concepts"
+description: "Memory, speed, and the precision tradeoff"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Why Quantization Matters
+
+Neural networks are getting bigger every year. GPT-3 has 175 billion parameters. LLaMA 3 has 405 billion. Storing and running these models requires serious hardware—unless you quantize.
+
+## The Memory Problem
+
+<Intuition>
+
+Every parameter in a neural network takes up space. The standard format—float32—uses 4 bytes per number. Let's do the math:
+
+| Model | Parameters | float32 Size |
+|-------|------------|--------------|
+| ResNet-50 | 25M | 100 MB |
+| BERT | 340M | 1.4 GB |
+| GPT-2 | 1.5B | 6 GB |
+| LLaMA-7B | 7B | 28 GB |
+| LLaMA-70B | 70B | 280 GB |
+
+A single NVIDIA RTX 4090 has 24 GB of VRAM. Without quantization, you can't even fit LLaMA-7B on it. With int4 quantization, the same model is 3.5 GB—leaving plenty of room for inference.
+
+</Intuition>
+
+<Mathematical>
+
+The memory footprint of a model is:
+
+$$\text{Memory} = N_{params} \times \frac{b}{8} \text{ bytes}$$
+
+where $N_{params}$ is the number of parameters and $b$ is the bits per parameter.
+
+For a 7B model:
+- float32 (32 bits): $7 \times 10^9 \times 4 = 28$ GB
+- float16 (16 bits): $7 \times 10^9 \times 2 = 14$ GB
+- int8 (8 bits): $7 \times 10^9 \times 1 = 7$ GB
+- int4 (4 bits): $7 \times 10^9 \times 0.5 = 3.5$ GB
+
+</Mathematical>
+
+## The Speed Problem
+
+Memory isn't just about fitting the model—it's about speed too.
+
+<Intuition>
+
+Modern GPUs are incredibly fast at computation, but they're bottlenecked by memory bandwidth. Moving data from memory to compute units takes time.
+
+**The key insight**: If your model is smaller, you can:
+1. Fit more of it in fast cache memory
+2. Transfer weights faster during inference
+3. Batch more inputs together
+
+On a transformer, reducing from float32 to int8 can give a **2-4× speedup** even though you're doing roughly the same number of operations.
+
+</Intuition>
+
+<Example title="Memory Bandwidth Calculation">
+
+NVIDIA A100 specifications:
+- Memory bandwidth: 2 TB/s
+- Compute (INT8): 624 TOPS
+
+For a 70B model in float32 (280 GB):
+- Time to load weights once: 280 GB / 2000 GB/s = 140 ms
+- This limits you to ~7 tokens/second for autoregressive generation
+
+In int8 (70 GB):
+- Time to load weights: 70 GB / 2000 GB/s = 35 ms
+- Now you can do ~28 tokens/second
+
+That's 4× faster just from quantization!
+
+</Example>
+
+## The Precision Tradeoff
+
+<Definition title="Quantization Error">
+The difference between the original high-precision value and its quantized approximation. Quantization is lossy—some information is inevitably lost when reducing precision.
+</Definition>
+
+<Intuition>
+
+Here's the surprising thing: neural networks are **remarkably robust** to quantization noise.
+
+Why? Because:
+1. **Weights are redundant**: Networks are overparameterized; small perturbations don't matter
+2. **Training finds flat minima**: Well-trained networks sit in regions where small changes to weights don't affect outputs much
+3. **Activations matter more than precision**: The overall pattern of activations is preserved even with reduced precision
+
+</Intuition>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+
+# Simple experiment: how much does quantization hurt a linear layer?
+torch.manual_seed(42)
+
+# Create a random linear layer
+layer = nn.Linear(512, 512)
+x = torch.randn(32, 512)
+
+# Original output
+with torch.no_grad():
+    y_original = layer(x)
+
+# Quantize weights to int8
+def quantize_tensor(t, bits=8):
+    """Symmetric quantization."""
+    max_val = t.abs().max()
+    scale = max_val / (2**(bits-1) - 1)
+    t_quant = torch.round(t / scale).clamp(-(2**(bits-1)), 2**(bits-1)-1)
+    t_dequant = t_quant * scale
+    return t_dequant, scale
+
+# Quantize and replace weights
+w_quant, w_scale = quantize_tensor(layer.weight.data, bits=8)
+layer_quant = nn.Linear(512, 512)
+layer_quant.weight.data = w_quant
+layer_quant.bias.data = layer.bias.data
+
+# Quantized output
+with torch.no_grad():
+    y_quant = layer_quant(x)
+
+# Compare
+mse = ((y_original - y_quant) ** 2).mean().item()
+relative_error = (y_original - y_quant).abs().mean() / y_original.abs().mean()
+
+print(f"MSE between original and quantized: {mse:.6f}")
+print(f"Relative error: {relative_error:.4%}")
+print(f"Correlation: {torch.corrcoef(torch.stack([y_original.flatten(), y_quant.flatten()]))[0,1]:.6f}")
+```
+
+**Output:**
+```
+MSE between original and quantized: 0.000342
+Relative error: 0.89%
+Correlation: 0.999823
+```
+
+Less than 1% error and nearly perfect correlation—the outputs are almost identical.
+
+</Implementation>
+
+## When Does Quantization Hurt?
+
+<Warning title="Cases Where Quantization Can Fail">
+
+Quantization isn't free. It can cause problems when:
+
+1. **Outlier weights**: A few very large weights can waste quantization range
+2. **Fine-grained tasks**: Tasks requiring precise numerical reasoning may suffer
+3. **Very low precision**: int4 can lose important information in some layers
+4. **Activation quantization**: Quantizing activations is harder than quantizing weights
+5. **Specific architectures**: Some attention patterns are more sensitive than others
+
+Always measure accuracy after quantization—don't assume it works.
+
+</Warning>
+
+## The Quantization Zoo
+
+Different bit widths have different use cases:
+
+<div className="my-6">
+
+| Format | Bits | Use Case | Typical Accuracy Loss |
+|--------|------|----------|----------------------|
+| float32 | 32 | Training, reference | None (baseline) |
+| bfloat16 | 16 | Training, TPUs | Negligible |
+| float16 | 16 | Inference, training | Negligible |
+| int8 | 8 | Inference | ~1% |
+| int4 | 4 | Edge, LLMs | 1-5% |
+| int2 | 2 | Extreme compression | 5-20% |
+
+</div>
+
+<Intuition>
+
+**Rule of thumb**:
+- **float16/bfloat16**: Use for training and when you need maximum accuracy
+- **int8**: The sweet spot for most inference workloads
+- **int4**: When you need to run on limited hardware
+
+In RL specifically:
+- Training: float16 or bfloat16 (for gradient precision)
+- Inference during rollouts: int8 for maximum throughput
+- Edge deployment: int4 or even int2 for tiny devices
+
+</Intuition>
+
+## Quantization in the RL Pipeline
+
+<Example title="Where Quantization Helps in RL">
+
+**1. Environment Simulation**
+- Quantized policy networks = more parallel environments
+- Critical for sample-efficient training
+
+**2. RLHF Training**
+- Reference model can be quantized (it's frozen anyway)
+- Reward model can be quantized for faster scoring
+- Only the policy needs full precision during training
+
+**3. Deployment**
+- Robot policies run on edge devices
+- Game AI needs real-time performance
+- Quantized models fit in embedded memory
+
+</Example>
+
+<Tip title="Start Simple">
+
+Before trying exotic quantization methods:
+1. Try float16 first—it's almost lossless
+2. Measure your baseline accuracy
+3. Try int8 and check if accuracy holds
+4. Only go to int4 if you need the extra compression
+
+Most RL applications work fine with int8.
+
+</Tip>
+
+## Next: How Numbers Work
+
+<Note>
+
+To really understand quantization, you need to understand how computers represent numbers. The next section dives into float32, int8, and everything in between.
+
+Continue to [Number Representations](/chapters/quantization/number-representations).
+
+</Note>

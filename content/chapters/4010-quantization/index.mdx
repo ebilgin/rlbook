@@ -1,0 +1,207 @@
+---
+title: "Quantization"
+slug: "quantization"
+section: "ML Concepts"
+description: "Reducing model size and speeding up inference by using lower-precision numbers"
+status: "draft"
+lastReviewed: null
+prerequisites:
+  - slug: "function-approximation"
+    title: "Function Approximation"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { ChapterObjectives, KeyTakeaways, NextChapter } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Quantization
+
+<ChapterObjectives>
+- Understand why quantization is essential for deploying large models
+- Learn how different number formats (float32, float16, int8, int4) work
+- Compare post-training quantization vs quantization-aware training
+- Quantize a real LLM and measure the tradeoffs
+- Apply quantization to RL policies for faster inference
+</ChapterObjectives>
+
+Modern neural networks are memory hogs. A 7-billion parameter model in float32 needs **28 GB** just to store its weights. That's more than most GPUs have. Quantization is how we squeeze these models into smaller spaces—and often make them faster too.
+
+<Intuition>
+
+Think about music. A vinyl record captures sound as a continuous analog wave—infinite precision. A CD samples that wave 44,100 times per second and stores each sample as a 16-bit integer. An MP3 compresses further, throwing away information humans can't hear.
+
+Quantization does the same for neural networks. Instead of storing weights as 32-bit floating point numbers, we use 16-bit, 8-bit, or even 4-bit integers. Most of the time, the model barely notices the difference.
+
+</Intuition>
+
+## Why This Matters for RL
+
+In reinforcement learning, fast inference is critical:
+
+- **Real-time control**: A robot needs to decide in milliseconds
+- **Simulation speed**: Training requires billions of environment steps
+- **Edge deployment**: Drones and cars can't carry a data center
+- **LLM inference**: RLHF-trained models need to respond quickly
+
+Quantization addresses all of these by making models smaller and faster.
+
+## Chapter Overview
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <a href="/chapters/quantization/why-quantization" className="block p-4 bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-lg border border-cyan-700/50 hover:border-cyan-500/50 transition-colors">
+    <h3 className="font-semibold text-cyan-400">Why Quantization Matters</h3>
+    <p className="text-slate-400 text-sm mt-1">Memory constraints, inference speed, and the precision-accuracy tradeoff</p>
+  </a>
+  <a href="/chapters/quantization/number-representations" className="block p-4 bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-lg border border-violet-700/50 hover:border-violet-500/50 transition-colors">
+    <h3 className="font-semibold text-violet-400">Number Representations</h3>
+    <p className="text-slate-400 text-sm mt-1">From float32 to int4: how computers store numbers</p>
+  </a>
+  <a href="/chapters/quantization/quantization-methods" className="block p-4 bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg border border-amber-700/50 hover:border-amber-500/50 transition-colors">
+    <h3 className="font-semibold text-amber-400">Quantization Methods</h3>
+    <p className="text-slate-400 text-sm mt-1">PTQ, QAT, and modern techniques like GPTQ and AWQ</p>
+  </a>
+  <a href="/chapters/quantization/quantization-in-practice" className="block p-4 bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 rounded-lg border border-emerald-700/50 hover:border-emerald-500/50 transition-colors">
+    <h3 className="font-semibold text-emerald-400">Quantization in Practice</h3>
+    <p className="text-slate-400 text-sm mt-1">Hands-on: quantize an LLM and measure the results</p>
+  </a>
+</div>
+
+## The Core Tradeoff
+
+<Definition title="Quantization">
+The process of mapping continuous or high-precision values to a smaller set of discrete values. In neural networks, this typically means converting 32-bit floating point weights and activations to lower-precision formats like 16-bit, 8-bit, or 4-bit integers.
+</Definition>
+
+<div className="my-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+  <div className="grid grid-cols-4 gap-4 text-center">
+    <div>
+      <div className="text-2xl font-bold text-slate-200">float32</div>
+      <div className="text-slate-400 text-sm">32 bits/param</div>
+      <div className="text-slate-500 text-xs mt-1">Baseline</div>
+    </div>
+    <div>
+      <div className="text-2xl font-bold text-blue-400">float16</div>
+      <div className="text-slate-400 text-sm">16 bits/param</div>
+      <div className="text-blue-400 text-xs mt-1">2× smaller</div>
+    </div>
+    <div>
+      <div className="text-2xl font-bold text-emerald-400">int8</div>
+      <div className="text-slate-400 text-sm">8 bits/param</div>
+      <div className="text-emerald-400 text-xs mt-1">4× smaller</div>
+    </div>
+    <div>
+      <div className="text-2xl font-bold text-amber-400">int4</div>
+      <div className="text-slate-400 text-sm">4 bits/param</div>
+      <div className="text-amber-400 text-xs mt-1">8× smaller</div>
+    </div>
+  </div>
+</div>
+
+<Example title="Model Size Comparison">
+
+A 7B parameter model:
+
+| Format | Bits | Size | Fits on |
+|--------|------|------|---------|
+| float32 | 32 | 28 GB | A100 80GB |
+| float16 | 16 | 14 GB | RTX 4090 |
+| int8 | 8 | 7 GB | RTX 3080 |
+| int4 | 4 | 3.5 GB | RTX 3060 |
+
+Quantization can make the difference between "requires a data center" and "runs on a laptop."
+
+</Example>
+
+## Quick Demo: See Quantization in Action
+
+<Intuition>
+
+Before diving into theory, let's see what quantization does to a simple neural network weight matrix.
+
+</Intuition>
+
+<Implementation>
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+# A typical weight distribution (normally distributed)
+np.random.seed(42)
+weights = np.random.randn(1000) * 0.1  # Small weights, as in real networks
+
+# Quantize to 8-bit integer
+def quantize_to_int8(x):
+    """Symmetric quantization to int8 (-128 to 127)."""
+    scale = np.max(np.abs(x)) / 127
+    quantized = np.round(x / scale).astype(np.int8)
+    dequantized = quantized.astype(np.float32) * scale
+    return quantized, dequantized, scale
+
+q_weights, dq_weights, scale = quantize_to_int8(weights)
+
+# Compute error
+error = np.abs(weights - dq_weights)
+print(f"Original dtype: float32 (32 bits)")
+print(f"Quantized dtype: int8 (8 bits)")
+print(f"Compression: 4x")
+print(f"Scale factor: {scale:.6f}")
+print(f"Mean absolute error: {np.mean(error):.6f}")
+print(f"Max absolute error: {np.max(error):.6f}")
+print(f"Relative error: {np.mean(error) / np.mean(np.abs(weights)):.2%}")
+```
+
+**Output:**
+```
+Original dtype: float32 (32 bits)
+Quantized dtype: int8 (8 bits)
+Compression: 4x
+Scale factor: 0.002953
+Mean absolute error: 0.000855
+Max absolute error: 0.001477
+Relative error: 1.07%
+```
+
+Just 1% error for 4× compression—that's the magic of quantization.
+
+</Implementation>
+
+## When to Use Quantization
+
+<Tip title="Quantization is almost always worth trying">
+
+For inference (not training), quantization is nearly free performance:
+- **int8**: Usually less than 1% accuracy loss, 2-4× speedup
+- **int4**: 1-3% accuracy loss, 4-8× speedup
+- **float16**: Negligible loss, 2× memory savings
+
+The only time to skip quantization is when you have unlimited compute and need maximum precision.
+
+</Tip>
+
+## Connection to RL
+
+Quantization is particularly valuable in RL:
+
+1. **Policy networks**: Q-networks and policy networks benefit from fast inference during rollouts
+2. **RLHF models**: Quantized LLMs can generate responses faster during PPO training
+3. **Edge deployment**: Quantized policies run on drones, robots, and embedded devices
+4. **Batched simulation**: Smaller models = larger batch sizes = more parallel environments
+
+<Note title="In This Chapter">
+
+We'll cover quantization from first principles to hands-on practice. By the end, you'll quantize a real LLM and measure the accuracy-speed tradeoff yourself.
+
+Start with [Why Quantization Matters](/chapters/quantization/why-quantization) to understand the fundamentals.
+
+</Note>
+
+---
+
+<KeyTakeaways>
+- Quantization reduces model size by using fewer bits per parameter
+- The precision-accuracy tradeoff is surprisingly favorable: 4× smaller with under 1% loss
+- Modern methods like GPTQ and AWQ make 4-bit quantization practical
+- Quantization is essential for deploying RL policies in real-time and on edge devices
+- Both weights and activations can be quantized for maximum benefit
+</KeyTakeaways>

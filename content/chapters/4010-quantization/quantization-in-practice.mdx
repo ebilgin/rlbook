@@ -1,0 +1,585 @@
+---
+title: "Quantization in Practice"
+slug: "quantization-in-practice"
+section: "ML Concepts"
+description: "Tools, techniques, and hands-on examples"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Quantization in Practice
+
+Time to get your hands dirty. This section walks through quantizing a real language model, measuring the quality tradeoffs, and deploying the result. We'll use tools that work in practice: bitsandbytes for quick quantization, and GPTQ for maximum compression.
+
+## Setup: What You'll Need
+
+<Implementation>
+
+```python
+# Install quantization libraries
+!pip install -q transformers accelerate bitsandbytes
+!pip install -q auto-gptq optimum
+!pip install -q datasets  # For evaluation
+
+# Verify GPU is available
+import torch
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"GPU: {torch.cuda.get_device_name(0)}")
+    print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+```
+
+</Implementation>
+
+## Quick Quantization with bitsandbytes
+
+<Intuition>
+
+bitsandbytes provides the fastest path to quantization. With just a few flags, you can load a model in 8-bit or 4-bit precision directly from HuggingFace.
+
+This is "load-time quantization"—the model is quantized as it's loaded into memory. No calibration data needed.
+
+</Intuition>
+
+<Implementation>
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+import torch
+
+MODEL_NAME = "Qwen/Qwen2.5-0.5B"  # Small model for demonstration
+
+# Load tokenizer
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+
+# Load in float16 (baseline)
+print("Loading float16 model...")
+model_fp16 = AutoModelForCausalLM.from_pretrained(
+    MODEL_NAME,
+    torch_dtype=torch.float16,
+    device_map="auto"
+)
+
+# Load in 8-bit
+print("Loading 8-bit model...")
+model_8bit = AutoModelForCausalLM.from_pretrained(
+    MODEL_NAME,
+    load_in_8bit=True,
+    device_map="auto"
+)
+
+# Load in 4-bit (NF4 quantization)
+print("Loading 4-bit model...")
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",  # Normal Float 4-bit
+    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_use_double_quant=True,  # Quantize the quantization constants too
+)
+model_4bit = AutoModelForCausalLM.from_pretrained(
+    MODEL_NAME,
+    quantization_config=bnb_config,
+    device_map="auto"
+)
+
+print("All models loaded!")
+```
+
+</Implementation>
+
+### Measuring Memory Usage
+
+<Implementation>
+
+```python
+def get_model_memory(model):
+    """Get memory used by model in GB."""
+    mem = sum(p.numel() * p.element_size() for p in model.parameters())
+    return mem / 1e9
+
+def get_gpu_memory_used():
+    """Get current GPU memory usage in GB."""
+    if torch.cuda.is_available():
+        return torch.cuda.memory_allocated() / 1e9
+    return 0
+
+# Compare memory footprints
+print("Memory Comparison:")
+print("-" * 40)
+print(f"float16: {get_model_memory(model_fp16):.2f} GB")
+print(f"8-bit:   ~{get_model_memory(model_fp16) / 2:.2f} GB (estimated)")
+print(f"4-bit:   ~{get_model_memory(model_fp16) / 4:.2f} GB (estimated)")
+
+# Actual GPU memory is harder to measure due to overhead
+# but should be roughly proportional
+```
+
+</Implementation>
+
+### Comparing Quality
+
+<Implementation>
+
+```python
+def generate_response(model, tokenizer, prompt, max_tokens=100):
+    """Generate a response and measure time."""
+    import time
+
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+    start = time.time()
+    with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=max_tokens,
+            do_sample=True,
+            temperature=0.7,
+            pad_token_id=tokenizer.pad_token_id
+        )
+    elapsed = time.time() - start
+
+    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return response, elapsed
+
+# Test prompts
+prompts = [
+    "Explain reinforcement learning in one paragraph:",
+    "What is the capital of France?",
+    "Write a Python function to compute factorial:",
+]
+
+print("Quality Comparison")
+print("=" * 60)
+
+for prompt in prompts:
+    print(f"\nPrompt: {prompt}\n")
+
+    for name, model in [("FP16", model_fp16), ("8-bit", model_8bit), ("4-bit", model_4bit)]:
+        response, time_taken = generate_response(model, tokenizer, prompt, max_tokens=50)
+        # Extract just the generated part
+        generated = response[len(prompt):].strip()[:100]
+        print(f"{name} ({time_taken:.2f}s): {generated}...")
+
+    print("-" * 60)
+```
+
+</Implementation>
+
+## GPTQ Quantization for Maximum Compression
+
+<Intuition>
+
+bitsandbytes is easy but not optimal. For production deployment, GPTQ gives better quality at the same bit width. The tradeoff: you need a calibration dataset and the quantization takes longer.
+
+</Intuition>
+
+<Implementation>
+
+```python
+from transformers import AutoTokenizer
+from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
+import torch
+
+MODEL_NAME = "Qwen/Qwen2.5-0.5B"
+
+# Load tokenizer
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+
+# Create calibration data
+def get_calibration_data(tokenizer, n_samples=128, seq_len=512):
+    """Create calibration data for GPTQ."""
+    # In practice, use representative data from your domain
+    # Here we use random text as a simple example
+
+    calibration_prompts = [
+        "The quick brown fox jumps over the lazy dog.",
+        "Reinforcement learning is a type of machine learning.",
+        "In the beginning, there was nothing but potential.",
+        "Python is a versatile programming language.",
+        "The weather today is sunny with a chance of rain.",
+        # Add more diverse examples...
+    ] * (n_samples // 5)
+
+    data = []
+    for prompt in calibration_prompts[:n_samples]:
+        tokens = tokenizer(prompt, return_tensors="pt", padding="max_length",
+                          max_length=seq_len, truncation=True)
+        data.append(tokens.input_ids)
+
+    return data
+
+# Quantization configuration
+quantize_config = BaseQuantizeConfig(
+    bits=4,                 # 4-bit quantization
+    group_size=128,         # Quantize in groups of 128 weights
+    desc_act=True,          # Order columns by activation magnitude
+    damp_percent=0.1,       # Dampening for numerical stability
+)
+
+# Load model for quantization
+print("Loading model for GPTQ quantization...")
+model = AutoGPTQForCausalLM.from_pretrained(
+    MODEL_NAME,
+    quantize_config=quantize_config,
+    torch_dtype=torch.float16
+)
+
+# Get calibration data
+print("Creating calibration data...")
+calibration_data = get_calibration_data(tokenizer, n_samples=128)
+
+# Quantize
+print("Running GPTQ quantization (this may take a few minutes)...")
+model.quantize(calibration_data)
+
+# Save the quantized model
+print("Saving quantized model...")
+model.save_quantized("./qwen-0.5b-gptq-4bit")
+tokenizer.save_pretrained("./qwen-0.5b-gptq-4bit")
+
+print("Done! Model saved to ./qwen-0.5b-gptq-4bit")
+```
+
+</Implementation>
+
+### Loading and Using GPTQ Models
+
+<Implementation>
+
+```python
+from auto_gptq import AutoGPTQForCausalLM
+from transformers import AutoTokenizer
+
+# Load the quantized model
+model = AutoGPTQForCausalLM.from_quantized(
+    "./qwen-0.5b-gptq-4bit",
+    device="cuda:0",
+    use_safetensors=True,
+)
+tokenizer = AutoTokenizer.from_pretrained("./qwen-0.5b-gptq-4bit")
+
+# Use it like any other model
+prompt = "Explain the policy gradient theorem:"
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+with torch.no_grad():
+    outputs = model.generate(**inputs, max_new_tokens=100, do_sample=True)
+
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+</Implementation>
+
+## Evaluating Quantized Models
+
+<Intuition>
+
+Never deploy a quantized model without evaluation. Here's how to systematically measure quality loss.
+
+</Intuition>
+
+<Implementation>
+
+```python
+from datasets import load_dataset
+import numpy as np
+from tqdm import tqdm
+
+def evaluate_perplexity(model, tokenizer, dataset, max_samples=100):
+    """
+    Compute perplexity on a dataset.
+
+    Lower perplexity = better model.
+    """
+    model.eval()
+    total_loss = 0
+    total_tokens = 0
+
+    for i, sample in enumerate(tqdm(dataset, total=max_samples)):
+        if i >= max_samples:
+            break
+
+        text = sample['text'][:512]  # Truncate for speed
+        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+        inputs = {k: v.to(model.device) for k, v in inputs.items()}
+
+        with torch.no_grad():
+            outputs = model(**inputs, labels=inputs["input_ids"])
+            loss = outputs.loss
+
+        total_loss += loss.item() * inputs["input_ids"].shape[1]
+        total_tokens += inputs["input_ids"].shape[1]
+
+    avg_loss = total_loss / total_tokens
+    perplexity = np.exp(avg_loss)
+
+    return perplexity
+
+# Load a test dataset
+dataset = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+
+# Evaluate each model
+print("Perplexity Evaluation")
+print("-" * 40)
+
+for name, model in [("FP16", model_fp16), ("8-bit", model_8bit), ("4-bit", model_4bit)]:
+    ppl = evaluate_perplexity(model, tokenizer, dataset, max_samples=100)
+    print(f"{name}: {ppl:.2f}")
+```
+
+</Implementation>
+
+### Task-Specific Evaluation
+
+<Implementation>
+
+```python
+def evaluate_qa(model, tokenizer, questions):
+    """
+    Evaluate on simple Q&A pairs.
+
+    Check if the model gives correct answers.
+    """
+    correct = 0
+    total = len(questions)
+
+    for q, expected in questions:
+        inputs = tokenizer(q, return_tensors="pt").to(model.device)
+
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=20,
+                temperature=0.1,  # Low temperature for deterministic output
+                do_sample=False
+            )
+
+        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        answer = response[len(q):].strip().lower()
+
+        if expected.lower() in answer:
+            correct += 1
+            status = "✓"
+        else:
+            status = "✗"
+
+        print(f"{status} Q: {q[:50]}...")
+        print(f"   Expected: {expected}, Got: {answer[:30]}")
+
+    accuracy = correct / total
+    return accuracy
+
+# Simple factual questions
+qa_pairs = [
+    ("The capital of France is", "Paris"),
+    ("The largest planet in our solar system is", "Jupiter"),
+    ("2 + 2 =", "4"),
+    ("The chemical symbol for water is", "H2O"),
+    ("Python was created by", "Guido"),
+]
+
+print("\nQ&A Accuracy")
+print("-" * 40)
+for name, model in [("FP16", model_fp16), ("4-bit", model_4bit)]:
+    acc = evaluate_qa(model, tokenizer, qa_pairs)
+    print(f"{name}: {acc:.0%}")
+```
+
+</Implementation>
+
+## Inference Speed Benchmarks
+
+<Implementation>
+
+```python
+import time
+import torch
+
+def benchmark_inference(model, tokenizer, prompt, n_tokens=100, n_runs=5):
+    """
+    Benchmark inference speed.
+
+    Returns tokens per second.
+    """
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+    # Warmup
+    with torch.no_grad():
+        _ = model.generate(**inputs, max_new_tokens=10)
+
+    # Benchmark
+    times = []
+    for _ in range(n_runs):
+        torch.cuda.synchronize()
+        start = time.time()
+
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=n_tokens,
+                do_sample=False
+            )
+
+        torch.cuda.synchronize()
+        elapsed = time.time() - start
+        times.append(elapsed)
+
+    avg_time = np.mean(times)
+    tokens_per_sec = n_tokens / avg_time
+
+    return tokens_per_sec, avg_time
+
+prompt = "Explain the difference between SARSA and Q-learning:"
+
+print("Inference Speed Benchmark")
+print("-" * 40)
+for name, model in [("FP16", model_fp16), ("8-bit", model_8bit), ("4-bit", model_4bit)]:
+    tps, time_taken = benchmark_inference(model, tokenizer, prompt)
+    print(f"{name}: {tps:.1f} tokens/sec ({time_taken:.2f}s for 100 tokens)")
+```
+
+</Implementation>
+
+## Complete Workflow: From Model to Deployment
+
+<Example title="Production Quantization Workflow">
+
+```python
+# Step 1: Start with your trained model
+model_name = "your-org/your-model"
+
+# Step 2: Evaluate baseline
+baseline_ppl = evaluate_perplexity(model_fp16, tokenizer, test_data)
+print(f"Baseline perplexity: {baseline_ppl:.2f}")
+
+# Step 3: Try 8-bit quantization
+model_8bit = AutoModelForCausalLM.from_pretrained(
+    model_name, load_in_8bit=True, device_map="auto"
+)
+ppl_8bit = evaluate_perplexity(model_8bit, tokenizer, test_data)
+quality_loss_8bit = (ppl_8bit - baseline_ppl) / baseline_ppl * 100
+print(f"8-bit perplexity: {ppl_8bit:.2f} ({quality_loss_8bit:+.1f}%)")
+
+# Step 4: If 8-bit is acceptable, you're done!
+if quality_loss_8bit < 5:  # Less than 5% degradation
+    print("8-bit quantization acceptable. Done!")
+    model_8bit.save_pretrained("./model-8bit")
+else:
+    # Step 5: Try GPTQ 4-bit
+    print("8-bit not good enough, trying GPTQ...")
+    # [GPTQ quantization code here]
+
+# Step 6: Final benchmarks
+print("\nFinal deployment metrics:")
+print(f"  Memory: {get_model_memory(model_8bit):.2f} GB")
+print(f"  Speed: {benchmark_inference(model_8bit, tokenizer, prompt)[0]:.1f} tokens/sec")
+print(f"  Quality: {quality_loss_8bit:+.1f}% perplexity change")
+```
+
+</Example>
+
+## Quantization for RL Policies
+
+<Intuition>
+
+RL policies have special considerations:
+1. **Determinism**: Quantization can affect action selection
+2. **Value accuracy**: Value estimates must remain reliable
+3. **Speed**: Rollouts need many fast inferences
+
+</Intuition>
+
+<Implementation>
+
+```python
+import torch.nn as nn
+
+class QuantizedPolicy(nn.Module):
+    """
+    A quantized RL policy with special handling for value head.
+    """
+
+    def __init__(self, policy_net, value_net, bits=8):
+        super().__init__()
+
+        # Quantize the policy network (speed matters most)
+        self.policy_net = torch.quantization.quantize_dynamic(
+            policy_net,
+            {nn.Linear},
+            dtype=torch.qint8
+        )
+
+        # Keep value network in higher precision (accuracy matters)
+        self.value_net = value_net.half()
+
+    def forward(self, state):
+        # Policy: fast, quantized
+        action_logits = self.policy_net(state)
+
+        # Value: accurate, higher precision
+        state_half = state.half()
+        value = self.value_net(state_half)
+
+        return action_logits, value
+
+    def get_action(self, state):
+        with torch.no_grad():
+            logits, value = self.forward(state)
+            # Sample action from distribution
+            probs = torch.softmax(logits, dim=-1)
+            action = torch.multinomial(probs, 1)
+        return action, value
+
+# Example usage
+# quantized_policy = QuantizedPolicy(actor_net, critic_net)
+# action, value = quantized_policy.get_action(state)
+```
+
+</Implementation>
+
+## Common Pitfalls and Solutions
+
+<Warning title="Watch Out For">
+
+1. **Batch normalization**: Quantize after fusing with conv/linear layers
+2. **Skip connections**: Can accumulate quantization error
+3. **Softmax**: Keep in higher precision for probability calculations
+4. **Very small models**: Quantization may hurt more than help
+5. **Fine-tuning after quantization**: Use QAT, not PTQ
+
+</Warning>
+
+<Tip title="Best Practices">
+
+1. **Always benchmark**: Memory, speed, AND quality
+2. **Start conservative**: float16 → int8 → int4
+3. **Use calibration data**: Representative of real usage
+4. **Test edge cases**: Unusual inputs may reveal problems
+5. **Monitor in production**: Track quality metrics after deployment
+
+</Tip>
+
+## Hands-On Notebook
+
+For a complete, runnable example that you can execute step-by-step:
+
+<a href="/notebooks/quantize-llm.ipynb" className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors">
+  Download Quantization Notebook
+</a>
+
+The notebook covers:
+- Loading and comparing quantization methods
+- Measuring memory and speed
+- Evaluating quality with perplexity
+- Saving and deploying quantized models
+
+<Note title="Key Takeaways">
+
+1. **bitsandbytes**: Fastest path to quantization, good for experimentation
+2. **GPTQ/AWQ**: Better quality, use for production
+3. **Always measure**: Perplexity, task accuracy, and speed
+4. **Start with int8**: Only go to int4 if you need the memory
+5. **Special care for RL**: Balance speed (policy) vs accuracy (value)
+
+</Note>

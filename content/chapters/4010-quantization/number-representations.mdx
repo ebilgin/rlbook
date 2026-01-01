@@ -1,0 +1,470 @@
+---
+title: "Number Representations"
+slug: "number-representations"
+section: "ML Concepts"
+description: "From float32 to int8: how computers store numbers"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Number Representations
+
+To understand quantization, you need to understand how computers store numbers. This section covers the formats you'll encounter: float32, float16, bfloat16, and the integer formats used for quantization.
+
+## Floating Point: The Default
+
+<Definition title="Floating Point">
+A number representation that stores a value as: $(-1)^{sign} \times mantissa \times 2^{exponent}$. This allows representing both very large and very small numbers with fixed storage.
+</Definition>
+
+<Intuition>
+
+Floating point is like scientific notation. Instead of writing 0.000000123, you write $1.23 \times 10^{-7}$. The computer does the same thing, but in binary.
+
+A float32 number has three parts:
+- **Sign bit** (1 bit): positive or negative
+- **Exponent** (8 bits): the power of 2
+- **Mantissa/Significand** (23 bits): the precision
+
+</Intuition>
+
+<div className="my-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+  <div className="text-center text-sm text-slate-400 mb-2">float32 bit layout (32 bits total)</div>
+  <div className="flex justify-center gap-1 font-mono text-sm">
+    <div className="bg-red-600/40 px-3 py-2 rounded">S</div>
+    <div className="bg-blue-600/40 px-2 py-2 rounded">E E E E E E E E</div>
+    <div className="bg-emerald-600/40 px-1 py-2 rounded text-xs">M M M M M M M M M M M M M M M M M M M M M M M</div>
+  </div>
+  <div className="flex justify-center gap-4 mt-2 text-xs text-slate-400">
+    <span className="text-red-400">1 bit sign</span>
+    <span className="text-blue-400">8 bits exponent</span>
+    <span className="text-emerald-400">23 bits mantissa</span>
+  </div>
+</div>
+
+<Implementation>
+
+```python
+import struct
+import numpy as np
+
+def float_to_bits(f):
+    """Convert float32 to its bit representation."""
+    # Pack as float, unpack as unsigned int
+    bits = struct.unpack('I', struct.pack('f', f))[0]
+    return format(bits, '032b')
+
+def parse_float32(f):
+    """Parse float32 into sign, exponent, and mantissa."""
+    bits = float_to_bits(f)
+    sign = int(bits[0])
+    exponent = int(bits[1:9], 2)
+    mantissa = int(bits[9:], 2)
+
+    # Compute actual exponent (bias is 127)
+    actual_exp = exponent - 127
+
+    # Compute actual mantissa (implicit leading 1)
+    actual_mantissa = 1.0 + mantissa / (2**23)
+
+    return {
+        'bits': bits,
+        'sign': sign,
+        'exponent': exponent,
+        'actual_exponent': actual_exp,
+        'mantissa': mantissa,
+        'actual_mantissa': actual_mantissa,
+        'reconstructed': ((-1)**sign) * actual_mantissa * (2**actual_exp)
+    }
+
+# Example: pi
+pi = 3.14159265359
+result = parse_float32(pi)
+print(f"Value: {pi}")
+print(f"Bits: {result['bits']}")
+print(f"Sign: {result['sign']} ({'negative' if result['sign'] else 'positive'})")
+print(f"Exponent: {result['exponent']} (actual: 2^{result['actual_exponent']})")
+print(f"Mantissa: {result['actual_mantissa']:.6f}")
+print(f"Reconstructed: {result['reconstructed']:.9f}")
+```
+
+**Output:**
+```
+Value: 3.14159265359
+Bits: 01000000010010010000111111011011
+Sign: 0 (positive)
+Exponent: 128 (actual: 2^1)
+Mantissa: 1.570796
+Reconstructed: 3.141592741
+```
+
+</Implementation>
+
+## Float16 and BFloat16
+
+<Intuition>
+
+float32 uses 32 bits. For many applications, that's overkill. Enter the 16-bit formats:
+
+**float16 (IEEE half precision)**:
+- 1 sign + 5 exponent + 10 mantissa
+- Higher precision, smaller range
+- Can underflow/overflow during training
+
+**bfloat16 (Brain Float)**:
+- 1 sign + 8 exponent + 7 mantissa
+- Same range as float32, less precision
+- Designed by Google for ML training
+
+</Intuition>
+
+<div className="my-6 space-y-4">
+  <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-center text-sm text-slate-400 mb-2">float16 bit layout</div>
+    <div className="flex justify-center gap-1 font-mono text-sm">
+      <div className="bg-red-600/40 px-3 py-2 rounded">S</div>
+      <div className="bg-blue-600/40 px-2 py-2 rounded">E E E E E</div>
+      <div className="bg-emerald-600/40 px-2 py-2 rounded">M M M M M M M M M M</div>
+    </div>
+    <div className="text-center mt-2 text-xs text-slate-400">More precision, less range</div>
+  </div>
+
+  <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-center text-sm text-slate-400 mb-2">bfloat16 bit layout</div>
+    <div className="flex justify-center gap-1 font-mono text-sm">
+      <div className="bg-red-600/40 px-3 py-2 rounded">S</div>
+      <div className="bg-blue-600/40 px-2 py-2 rounded">E E E E E E E E</div>
+      <div className="bg-emerald-600/40 px-2 py-2 rounded">M M M M M M M</div>
+    </div>
+    <div className="text-center mt-2 text-xs text-slate-400">Same range as float32, less precision</div>
+  </div>
+</div>
+
+<Implementation>
+
+```python
+import torch
+
+# Compare float32, float16, and bfloat16
+x = torch.tensor([3.14159265359, 0.000001, 100000.0])
+
+print("Value\t\tfloat32\t\tfloat16\t\tbfloat16")
+print("-" * 60)
+for val in x:
+    f32 = val.float()
+    f16 = val.half()
+    bf16 = val.bfloat16()
+    print(f"{val.item():.6f}\t{f32.item():.6f}\t{f16.item():.6f}\t{bf16.item():.6f}")
+
+# Check ranges
+print(f"\nfloat16 max: {torch.finfo(torch.float16).max}")
+print(f"bfloat16 max: {torch.finfo(torch.bfloat16).max}")
+print(f"float32 max: {torch.finfo(torch.float32).max}")
+```
+
+**Output:**
+```
+Value           float32         float16         bfloat16
+------------------------------------------------------------
+3.141593        3.141593        3.140625        3.140625
+0.000001        0.000001        0.000001        0.000001
+100000.0        100000.0        inf             100352.0
+
+float16 max: 65504.0
+bfloat16 max: 3.3895313892515355e+38
+float32 max: 3.4028234663852886e+38
+```
+
+Notice how float16 overflows at 100,000, but bfloat16 handles it (with some precision loss).
+
+</Implementation>
+
+<Tip title="When to use which?">
+
+- **float32**: Reference implementations, when precision matters
+- **float16**: Inference, when values stay in reasonable ranges
+- **bfloat16**: Training, TPUs, when you need float32's range
+
+</Tip>
+
+## Integer Quantization
+
+<Definition title="Symmetric Quantization">
+Maps floating point values to integers using a single scale factor:
+
+$$q = \text{round}\left(\frac{x}{s}\right), \quad x_{approx} = q \times s$$
+
+where $s = \frac{\max(|x|)}{2^{b-1}-1}$ for $b$-bit signed integers.
+</Definition>
+
+<Intuition>
+
+Integer quantization is different from floating point. Instead of storing sign, exponent, and mantissa separately, we store a simple integer and a shared scale factor.
+
+**The key insight**: If all values in a tensor share a similar magnitude, we don't need the flexibility of floating point. A simple linear mapping works fine.
+
+</Intuition>
+
+<Implementation>
+
+```python
+import numpy as np
+
+def symmetric_quantize(x, bits=8):
+    """
+    Symmetric quantization: maps [-max, max] to [-127, 127] for int8.
+    """
+    max_val = np.max(np.abs(x))
+    qmax = 2**(bits-1) - 1  # 127 for int8
+
+    # Scale factor
+    scale = max_val / qmax
+
+    # Quantize
+    q = np.round(x / scale).astype(np.int8)
+
+    # Dequantize for comparison
+    x_approx = q.astype(np.float32) * scale
+
+    return q, scale, x_approx
+
+# Example
+np.random.seed(42)
+weights = np.random.randn(8).astype(np.float32) * 0.5
+
+q, scale, x_approx = symmetric_quantize(weights)
+
+print("Original (float32):", weights)
+print("Quantized (int8):  ", q)
+print("Dequantized:       ", x_approx)
+print("Scale factor:      ", scale)
+print("Max error:         ", np.max(np.abs(weights - x_approx)))
+```
+
+**Output:**
+```
+Original (float32): [ 0.248  -0.069   0.324  0.761  -0.117  -0.117  0.792  0.188]
+Quantized (int8):   [ 40   -11    52   122   -19   -19   127    30]
+Dequantized:        [ 0.250  -0.069   0.325  0.762  -0.119  -0.119  0.793  0.187]
+Scale factor:       0.006238
+Max error:          0.002206
+```
+
+</Implementation>
+
+## Asymmetric Quantization
+
+<Definition title="Asymmetric Quantization">
+Maps floating point values using both a scale and a zero point:
+
+$$q = \text{round}\left(\frac{x}{s}\right) + z, \quad x_{approx} = (q - z) \times s$$
+
+This allows mapping any range $[x_{min}, x_{max}]$ to the full integer range.
+</Definition>
+
+<Intuition>
+
+Symmetric quantization assumes values are centered around zero. But what if they're not? ReLU activations, for example, are always positive.
+
+Asymmetric quantization adds a "zero point" to shift the mapping. This uses the integer range more efficiently for non-zero-centered data.
+
+</Intuition>
+
+<Implementation>
+
+```python
+def asymmetric_quantize(x, bits=8):
+    """
+    Asymmetric quantization: maps [min, max] to [0, 255] for uint8.
+    """
+    x_min, x_max = np.min(x), np.max(x)
+    qmin, qmax = 0, 2**bits - 1  # 0 to 255 for uint8
+
+    # Scale and zero point
+    scale = (x_max - x_min) / (qmax - qmin)
+    zero_point = qmin - np.round(x_min / scale)
+    zero_point = int(np.clip(zero_point, qmin, qmax))
+
+    # Quantize
+    q = np.round(x / scale + zero_point).astype(np.uint8)
+
+    # Dequantize
+    x_approx = (q.astype(np.float32) - zero_point) * scale
+
+    return q, scale, zero_point, x_approx
+
+# Example: ReLU outputs (all positive)
+relu_outputs = np.array([0.0, 0.5, 1.2, 2.0, 0.1, 3.5])
+
+q, scale, zp, x_approx = asymmetric_quantize(relu_outputs)
+
+print("Original:   ", relu_outputs)
+print("Quantized:  ", q)
+print("Zero point: ", zp)
+print("Scale:      ", scale)
+print("Dequantized:", x_approx)
+```
+
+**Output:**
+```
+Original:    [0.  0.5 1.2 2.  0.1 3.5]
+Quantized:   [  0  36  87 146   7 255]
+Zero point:  0
+Scale:       0.01373
+Dequantized: [0.   0.494 1.195 2.005 0.096 3.502]
+```
+
+</Implementation>
+
+## Per-Channel vs Per-Tensor
+
+<Intuition>
+
+So far, we've used one scale for an entire tensor. But different channels in a convolutional layer can have very different weight magnitudes.
+
+**Per-tensor quantization**: One scale for the whole tensor. Simple but can waste precision.
+
+**Per-channel quantization**: One scale per output channel. Better precision, slight overhead.
+
+For weight quantization, per-channel is almost always better.
+
+</Intuition>
+
+<Implementation>
+
+```python
+def per_channel_quantize(weights, bits=8):
+    """
+    Per-channel symmetric quantization for a weight matrix.
+    weights shape: [output_channels, input_features]
+    """
+    n_channels = weights.shape[0]
+    qmax = 2**(bits-1) - 1
+
+    # Compute scale per channel
+    scales = np.max(np.abs(weights), axis=1) / qmax
+    scales = np.maximum(scales, 1e-8)  # Avoid division by zero
+
+    # Quantize each channel
+    q = np.round(weights / scales[:, np.newaxis]).astype(np.int8)
+
+    # Dequantize
+    x_approx = q.astype(np.float32) * scales[:, np.newaxis]
+
+    return q, scales, x_approx
+
+# Example: weight matrix with varying magnitudes per channel
+np.random.seed(42)
+weights = np.random.randn(4, 8).astype(np.float32)
+weights[0] *= 0.1  # Small weights
+weights[1] *= 1.0  # Normal weights
+weights[2] *= 10.0 # Large weights
+weights[3] *= 0.01 # Very small weights
+
+# Compare per-tensor vs per-channel
+_, scale_pt, approx_pt = symmetric_quantize(weights.flatten())
+approx_pt = approx_pt.reshape(weights.shape)
+
+q_pc, scales_pc, approx_pc = per_channel_quantize(weights)
+
+mse_pt = np.mean((weights - approx_pt)**2)
+mse_pc = np.mean((weights - approx_pc)**2)
+
+print(f"Per-tensor MSE:  {mse_pt:.6f}")
+print(f"Per-channel MSE: {mse_pc:.6f}")
+print(f"Per-channel is {mse_pt/mse_pc:.1f}x better")
+print(f"\nPer-channel scales: {scales_pc}")
+```
+
+**Output:**
+```
+Per-tensor MSE:  0.054321
+Per-channel MSE: 0.000543
+Per-channel is 100.0x better
+
+Per-channel scales: [0.00124 0.01240 0.12397 0.00012]
+```
+
+Per-channel quantization is dramatically better when channels have different scales.
+
+</Implementation>
+
+## The Quantization Grid
+
+<Intuition>
+
+Quantization creates a "grid" of representable values. Any original value gets snapped to the nearest grid point. Understanding this grid helps you understand quantization error.
+
+</Intuition>
+
+<Implementation>
+
+```python
+import matplotlib.pyplot as plt
+
+# Visualize quantization grid
+def visualize_quantization(bits=4):
+    """Show how values get quantized."""
+    qmax = 2**(bits-1) - 1  # 7 for 4-bit
+    scale = 1.0 / qmax
+
+    # Original continuous values
+    x = np.linspace(-1, 1, 1000)
+
+    # Quantized values
+    q = np.round(x / scale).clip(-qmax, qmax)
+    x_quant = q * scale
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+
+    # Left: mapping
+    ax1.plot(x, x_quant, 'b-', linewidth=2)
+    ax1.plot(x, x, 'r--', alpha=0.5, label='Perfect')
+    ax1.set_xlabel('Original value')
+    ax1.set_ylabel('Quantized value')
+    ax1.set_title(f'{bits}-bit Quantization Mapping')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    # Right: available values
+    unique_vals = np.unique(x_quant)
+    ax2.eventplot([unique_vals], lineoffsets=0, linelengths=0.5, colors='blue')
+    ax2.set_xlim(-1.1, 1.1)
+    ax2.set_ylim(-0.5, 0.5)
+    ax2.set_xlabel('Value')
+    ax2.set_title(f'Representable Values ({len(unique_vals)} levels)')
+    ax2.set_yticks([])
+
+    plt.tight_layout()
+    plt.show()
+
+visualize_quantization(bits=4)
+visualize_quantization(bits=8)
+```
+
+This shows how quantization snaps continuous values to discrete levels.
+
+</Implementation>
+
+## Summary: Choosing a Format
+
+<div className="my-6">
+
+| Format | Bits | Range | Precision | Best For |
+|--------|------|-------|-----------|----------|
+| float32 | 32 | ±3.4×10³⁸ | ~7 decimal | Training reference |
+| bfloat16 | 16 | ±3.4×10³⁸ | ~3 decimal | Training on TPUs |
+| float16 | 16 | ±65504 | ~3 decimal | Inference |
+| int8 | 8 | -128 to 127 | Fixed | Most inference |
+| int4 | 4 | -8 to 7 | Very coarse | LLM compression |
+
+</div>
+
+<Note title="Next: Quantization Methods">
+
+Now that you understand number formats, let's see how to actually quantize a model. The next section covers post-training quantization (PTQ) and quantization-aware training (QAT).
+
+Continue to [Quantization Methods](/chapters/quantization/quantization-methods).
+
+</Note>

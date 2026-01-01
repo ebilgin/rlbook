@@ -17,6 +17,7 @@
  * - 12XX: Deep Reinforcement Learning
  * - 20XX: Policy Gradient Methods
  * - 30XX: Advanced Topics
+ * - 40XX: ML Concepts (reference material for ML fundamentals used in RL)
  */
 
 export type ChapterStatus = 'draft' | 'editor_reviewed' | 'community_reviewed' | 'verified';
@@ -826,6 +827,45 @@ export const chapters: Record<string, ChapterData> = {
         slug: 'frontiers',
         title: 'Current Frontiers',
         description: 'DPO, constitutional AI, and what\'s next',
+        order: 40,
+      },
+    ],
+  },
+
+  // ============================================================================
+  // ML CONCEPTS (Reference Material for ML Fundamentals)
+  // ============================================================================
+
+  'quantization': {
+    slug: 'quantization',
+    dirName: '4010-quantization',
+    title: 'Quantization',
+    section: 'ML Concepts',
+    description: 'Reducing model size and speeding up inference by using lower-precision numbers',
+    status: 'draft',
+    subsections: [
+      {
+        slug: 'why-quantization',
+        title: 'Why Quantization Matters',
+        description: 'Memory, speed, and the precision tradeoff',
+        order: 10,
+      },
+      {
+        slug: 'number-representations',
+        title: 'Number Representations',
+        description: 'From float32 to int8: how computers store numbers',
+        order: 20,
+      },
+      {
+        slug: 'quantization-methods',
+        title: 'Quantization Methods',
+        description: 'Post-training quantization vs quantization-aware training',
+        order: 30,
+      },
+      {
+        slug: 'quantization-in-practice',
+        title: 'Quantization in Practice',
+        description: 'Tools, techniques, and hands-on examples',
         order: 40,
       },
     ],
