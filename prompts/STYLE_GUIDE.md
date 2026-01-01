@@ -36,6 +36,30 @@ When guiding the reader through exercises or demos:
 
 ## Structure
 
+### Visual-First Principle
+
+**Interactive demos and visuals should appear "above the fold"** — before dense text explanations. Let readers explore the concept before reading about it.
+
+```
+1. Interactive Demo (first thing readers see)
+   - Hands-on exploration of the core concept
+   - Sliders, toggles, or animations
+   - Dynamic feedback based on user input
+
+2. Brief Context (1-2 paragraphs max)
+   - What they just experienced
+   - Why it matters
+
+3. Visual Explanations
+   - Comparison cards, not tables
+   - Flowcharts for processes
+   - Progress bars for metrics
+
+4. Text Sections (kept short)
+   - Max 3-4 paragraphs before another visual
+   - Use progressive disclosure layers
+```
+
 ### Chapter Structure
 
 ```
@@ -44,31 +68,35 @@ When guiding the reader through exercises or demos:
    - Why this matters
    - What you'll learn
 
-2. Intuition Section
+2. Interactive Demo (immediately after hook)
+   - Let readers explore before explaining
+   - Use client:load for React components
+
+3. Intuition Section
    - Core concept in plain terms
-   - Interactive demo or animation
+   - Visual comparisons and diagrams
    - Real-world analogies
 
-3. Formal Treatment (expandable)
+4. Formal Treatment (expandable)
    - Definitions
    - Key equations
    - Derivations if illuminating
 
-4. Implementation (expandable)
+5. Implementation (expandable)
    - Code walkthrough
    - Practical considerations
    - Common pitfalls
 
-5. Deeper Understanding
+6. Deeper Understanding
    - Edge cases
    - Connections to other concepts
    - Historical context or alternatives
 
-6. Summary
+7. Summary
    - Key takeaways (3-5 bullets)
    - What's next
 
-7. Exercises
+8. Exercises
    - Conceptual questions
    - Coding challenges
    - Open-ended exploration
@@ -79,6 +107,7 @@ When guiding the reader through exercises or demos:
 - **Paragraphs**: 3-5 sentences max. White space aids comprehension.
 - **Sections**: Aim for 500-1000 words before a new heading.
 - **Chapters**: 2000-4000 words total (excluding code and expanded sections).
+- **Visual breaks**: Insert a visual element every 3-4 paragraphs maximum.
 
 ### Headings
 
@@ -89,6 +118,93 @@ Use descriptive headings that convey meaning, not just topics.
 
 **Do:** "The Deadly Triad: When Function Approximation Goes Wrong"
 **Don't:** "Function Approximation Challenges"
+
+## Visual Patterns
+
+### Comparison Cards (Instead of Tables)
+
+Replace markdown tables with visual card grids for concept comparisons:
+
+```jsx
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-xl p-5 border border-cyan-700/50">
+    <div className="text-cyan-400 font-bold text-lg mb-2">Option A</div>
+    <div className="text-slate-300 text-sm">Description here</div>
+  </div>
+  <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-xl p-5 border border-amber-700/50">
+    <div className="text-amber-400 font-bold text-lg mb-2">Option B</div>
+    <div className="text-slate-300 text-sm">Description here</div>
+  </div>
+</div>
+```
+
+**Color palette for cards:**
+- Cyan: Primary concept, recommended option
+- Amber: Alternative, warning-adjacent
+- Emerald: Success, good outcome
+- Violet: Advanced, optional
+- Red: Danger, avoid
+
+### Flowcharts and Process Diagrams
+
+Use horizontal layouts with arrow separators:
+
+```jsx
+<div className="flex items-center justify-center gap-3 flex-wrap">
+  <div className="text-center px-4 py-3 bg-cyan-900/30 rounded-lg border border-cyan-700/30">
+    <div className="text-2xl mb-1">1️⃣</div>
+    <div className="text-cyan-300">Step One</div>
+  </div>
+  <div className="text-slate-500 text-xl">→</div>
+  <div className="text-center px-4 py-3 bg-violet-900/30 rounded-lg border border-violet-700/30">
+    <div className="text-2xl mb-1">2️⃣</div>
+    <div className="text-violet-300">Step Two</div>
+  </div>
+  <div className="text-slate-500 text-xl">→</div>
+  <!-- More steps -->
+</div>
+```
+
+### Key Metrics Display
+
+For important numbers, use centered grids with large text:
+
+```jsx
+<div className="grid grid-cols-3 gap-4 my-6">
+  <div className="bg-slate-900/50 rounded-lg p-4 text-center">
+    <div className="text-3xl font-bold text-emerald-400">4×</div>
+    <div className="text-xs text-slate-500 mt-1">Compression</div>
+  </div>
+  <!-- More metrics -->
+</div>
+```
+
+### Progress Bars for Comparisons
+
+```jsx
+<div className="flex items-center gap-3">
+  <span className="text-xs text-slate-500 w-16">Label</span>
+  <div className="flex-1 h-4 bg-slate-700 rounded relative">
+    <div className="absolute left-0 top-0 h-full w-[75%] bg-cyan-400 rounded"></div>
+  </div>
+  <span className="text-xs text-cyan-400">1.5×</span>
+</div>
+```
+
+### Interactive Component Integration
+
+Always use `client:load` for React components in MDX:
+
+```mdx
+import MyDemo from '@/components/interactive/MyDemo';
+
+<MyDemo client:load />
+```
+
+Place interactive components:
+1. **Immediately after the opening hook** - let readers explore first
+2. **Before detailed explanations** - build intuition through interaction
+3. **Early in subsections** - above the fold, not buried in text
 
 ## Formatting
 
