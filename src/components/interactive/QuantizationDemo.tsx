@@ -168,7 +168,7 @@ function MiniHistogram({ values, color, height = 50 }: { values: number[]; color
 }
 
 export function QuantizationDemo() {
-  const [bits, setBits] = useState(8);
+  const [bits, setBits] = useState(32);
   const [seed, setSeed] = useState(42);
   const [showDetails, setShowDetails] = useState(false);
 
@@ -190,12 +190,26 @@ export function QuantizationDemo() {
 
   // Dynamic insight message
   const insight = useMemo(() => {
-    if (bits >= 8) {
+    if (bits >= 32) {
+      return {
+        color: 'slate',
+        icon: '📦',
+        title: 'Full precision (baseline)',
+        text: `32-bit float is the standard training format. No compression, no error—but uses the most memory.`,
+      };
+    } else if (bits >= 16) {
+      return {
+        color: 'emerald',
+        icon: '✓',
+        title: 'High precision',
+        text: `${bits}-bit gives ${result.compressionRatio.toFixed(0)}× compression with negligible quality loss. Great for training and inference.`,
+      };
+    } else if (bits >= 8) {
       return {
         color: 'emerald',
         icon: '✓',
         title: 'Excellent precision',
-        text: `${bits}-bit quantization preserves nearly all information. This is the standard for production inference.`,
+        text: `${bits}-bit quantization offers ${result.compressionRatio.toFixed(0)}× compression. This is the standard for production inference.`,
       };
     } else if (bits >= 4) {
       return {
@@ -215,6 +229,7 @@ export function QuantizationDemo() {
   }, [bits, result.compressionRatio]);
 
   const insightColors: Record<string, string> = {
+    slate: 'from-slate-800/40 to-slate-800/10 border-slate-600/50 text-slate-300',
     emerald: 'from-emerald-900/40 to-emerald-900/10 border-emerald-700/50 text-emerald-400',
     amber: 'from-amber-900/40 to-amber-900/10 border-amber-700/50 text-amber-400',
     red: 'from-red-900/40 to-red-900/10 border-red-700/50 text-red-400',
@@ -248,15 +263,15 @@ export function QuantizationDemo() {
           <input
             type="range"
             min="2"
-            max="16"
+            max="32"
             value={bits}
             onChange={(e) => setBits(parseInt(e.target.value))}
             className="w-full h-3 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400"
           />
           <div className="flex justify-between text-xs text-slate-500 mt-2">
             <span>2-bit (extreme)</span>
-            <span>8-bit (standard)</span>
-            <span>16-bit (high)</span>
+            <span>16-bit</span>
+            <span>32-bit (baseline)</span>
           </div>
         </div>
 

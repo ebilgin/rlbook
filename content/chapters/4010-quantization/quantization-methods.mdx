@@ -146,7 +146,7 @@ This is mathematically "wrong" but works remarkably well in practice.
 <Tip title="When to Use QAT">
 
 - PTQ gives unacceptable accuracy loss
-- You need aggressive quantization (int4, int2)
+- You need aggressive quantization (`int4`, `int2`)
 - You have compute budget for training/fine-tuning
 
 </Tip>
@@ -308,7 +308,7 @@ quantized = quantize(scaled_weight)
     <div className="flex items-center gap-3 p-3 bg-slate-700/30 rounded-lg">
       <span className="text-2xl">🎯</span>
       <div>
-        <div className="text-slate-200 font-medium">Need int8?</div>
+        <div className="text-slate-200 font-medium">Need `int8`?</div>
         <div className="text-slate-400 text-sm">→ Dynamic PTQ (one line of code)</div>
       </div>
     </div>
@@ -316,7 +316,7 @@ quantized = quantize(scaled_weight)
     <div className="flex items-center gap-3 p-3 bg-slate-700/30 rounded-lg">
       <span className="text-2xl">🤖</span>
       <div>
-        <div className="text-slate-200 font-medium">Quantizing an LLM to int4?</div>
+        <div className="text-slate-200 font-medium">Quantizing an LLM to `int4`?</div>
         <div className="text-slate-400 text-sm">→ GPTQ or AWQ (most common)</div>
       </div>
     </div>

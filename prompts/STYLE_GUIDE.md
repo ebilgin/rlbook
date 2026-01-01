@@ -212,8 +212,20 @@ Place interactive components:
 
 - **Bold** for key terms on first introduction
 - *Italics* for emphasis within sentences
-- `code` for variables, function names, file names
+- `code` for variables, function names, file names, **and data types** (e.g., `float32`, `int8`, `bfloat16`)
 - Never ALL CAPS for emphasis
+
+### Technical Terms in Prose
+
+Data types and precision formats should always use code formatting to distinguish them from regular text:
+
+**Do:** `float32` uses 4 bytes per number
+**Don't:** float32 uses 4 bytes per number
+
+**Do:** Quantize to `int4` for maximum compression
+**Don't:** Quantize to int4 for maximum compression
+
+This applies to: `float32`, `float16`, `bfloat16`, `int8`, `int4`, `int2`, and similar numeric types.
 
 ### Lists
 

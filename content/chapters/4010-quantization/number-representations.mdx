@@ -25,7 +25,7 @@ To understand quantization, you need to understand how computers store numbers. 
 
 Floating point is like scientific notation. Instead of writing 0.000000123, you write 1.23 × 10⁻⁷.
 
-A float32 has three parts:
+A `float32` has three parts:
 - **Sign** (1 bit): positive or negative
 - **Exponent** (8 bits): the power of 2
 - **Mantissa** (23 bits): the precision digits
@@ -52,7 +52,7 @@ A floating point number represents:
 
 $$(-1)^{sign} \times (1 + mantissa) \times 2^{exponent - bias}$$
 
-For float32, the bias is 127. So exponent bits of 10000001 (129) means 2^(129-127) = 2² = 4.
+For `float32`, the bias is 127. So exponent bits of 10000001 (129) means 2^(129-127) = 2² = 4.
 
 </Mathematical>
 
@@ -83,7 +83,7 @@ The two 16-bit formats make different tradeoffs:
       <div className="bg-blue-600/40 px-1 py-1 rounded">M M M M M M M</div>
     </div>
     <div className="text-slate-400 text-sm space-y-1">
-      <div>• <strong className="text-slate-200">8 exponent bits</strong> → same range as float32</div>
+      <div>• <strong className="text-slate-200">8 exponent bits</strong> → same range as `float32`</div>
       <div>• <strong className="text-slate-200">7 mantissa bits</strong> → less precision</div>
       <div>• Max: ~3.4×10³⁸</div>
       <div>• Best for: Training on TPUs</div>
@@ -103,7 +103,7 @@ x.half()  # → inf
 x.bfloat16()  # → 100352.0
 ```
 
-Training involves large intermediate values. bfloat16's range prevents overflow.
+Training involves large intermediate values. `bfloat16`'s range prevents overflow.
 
 </Example>
 
@@ -113,7 +113,7 @@ Training involves large intermediate values. bfloat16's range prevents overflow.
 
 Integer quantization is simpler: we pick a **scale factor** and divide all values by it. The result is an integer.
 
-For int8: we map the range [-max, +max] to [-127, +127].
+For `int8`: we map the range [-max, +max] to [-127, +127].
 
 </Intuition>
 

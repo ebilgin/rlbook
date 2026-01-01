@@ -24,11 +24,26 @@ import MemoryCalculator from '@/components/interactive/MemoryCalculator';
 - Learn the memory-accuracy tradeoff through interactive exploration
 </ChapterObjectives>
 
-A 7-billion parameter model needs **28 GB** just to store its weights. That's more than most GPUs have. Quantization is how we squeeze these models into smaller spaces.
+A 7-billion parameter model needs **28 GB** just to store its weights:
+
+<div className="my-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700 font-mono text-sm">
+  <div className="flex flex-wrap items-center gap-2">
+    <span className="text-slate-300">7B params</span>
+    <span className="text-slate-500">×</span>
+    <span className="text-cyan-400">32 bits</span>
+    <span className="text-slate-500">÷</span>
+    <span className="text-slate-300">8 bits/byte</span>
+    <span className="text-slate-500">=</span>
+    <span className="text-amber-400 font-bold">28 GB</span>
+  </div>
+  <div className="text-xs text-slate-500 mt-2">float32 = 32 bits = 4 bytes per number</div>
+</div>
+
+Most GPUs have 8-24 GB. Quantization shrinks models by storing each parameter in fewer bits.
 
 ## Try It First
 
-Before diving into theory, drag the slider below and watch what happens to the values:
+What if we used fewer bits? Drag the slider to see how precision affects the values:
 
 <QuantizationDemo client:load />
 
@@ -51,17 +66,17 @@ The magic? With 256 levels (8-bit), the error is tiny. Most models barely notice
   <div className="bg-gradient-to-br from-blue-900/30 to-blue-800/10 rounded-lg p-4 text-center border border-blue-700/50">
     <div className="text-2xl font-bold text-blue-400">float16</div>
     <div className="text-slate-400 text-sm">16 bits</div>
-    <div className="text-blue-400 text-xs mt-2">2× smaller</div>
+    <div className="text-blue-300 text-xs mt-2">2× smaller</div>
   </div>
   <div className="bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 rounded-lg p-4 text-center border border-emerald-700/50">
     <div className="text-2xl font-bold text-emerald-400">int8</div>
     <div className="text-slate-400 text-sm">8 bits</div>
-    <div className="text-emerald-400 text-xs mt-2">4× smaller</div>
+    <div className="text-emerald-300 text-xs mt-2">4× smaller</div>
   </div>
   <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-lg p-4 text-center border border-amber-700/50">
     <div className="text-2xl font-bold text-amber-400">int4</div>
     <div className="text-slate-400 text-sm">4 bits</div>
-    <div className="text-amber-400 text-xs mt-2">8× smaller</div>
+    <div className="text-amber-300 text-xs mt-2">8× smaller</div>
   </div>
 </div>
 

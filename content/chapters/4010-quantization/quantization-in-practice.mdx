@@ -51,12 +51,12 @@ The fastest path to quantization. One flag, and your model loads in lower precis
   <div className="bg-gradient-to-br from-emerald-900/20 to-emerald-800/5 rounded-lg p-4 border border-emerald-700/40">
     <div className="font-mono text-emerald-400 text-sm mb-2">8-bit</div>
     <div className="text-xs text-slate-400">load_in_8bit=True</div>
-    <div className="text-xs text-emerald-400/70 mt-2">2× smaller</div>
+    <div className="text-xs text-emerald-300 mt-2">2× smaller</div>
   </div>
   <div className="bg-gradient-to-br from-amber-900/20 to-amber-800/5 rounded-lg p-4 border border-amber-700/40">
     <div className="font-mono text-amber-400 text-sm mb-2">4-bit</div>
     <div className="text-xs text-slate-400">load_in_4bit=True</div>
-    <div className="text-xs text-amber-400/70 mt-2">4× smaller</div>
+    <div className="text-xs text-amber-300 mt-2">4× smaller</div>
   </div>
 </div>
 
@@ -349,9 +349,9 @@ The notebook includes:
 
 <Tip title="Best Practices">
 
-1. **Start with float16** → nearly lossless baseline
-2. **Try int8 first** → usually good enough
-3. **Use GPTQ/AWQ for int4** → better than bitsandbytes
+1. **Start with `float16`** → nearly lossless baseline
+2. **Try `int8` first** → usually good enough
+3. **Use GPTQ/AWQ for `int4`** → better than bitsandbytes
 4. **Always measure** → perplexity, task accuracy, speed
 5. **Test edge cases** → unusual inputs reveal problems
 
@@ -374,7 +374,7 @@ The notebook includes:
     </div>
     <div className="flex items-start gap-2">
       <span className="text-slate-500">•</span>
-      <div><span className="text-slate-300">RL policy?</span> <span className="text-emerald-400">→ int8 policy, fp16 value</span></div>
+      <div><span className="text-slate-300">RL policy?</span> <span className="text-emerald-400">→ `int8` policy, `fp16` value</span></div>
     </div>
   </div>
 </div>

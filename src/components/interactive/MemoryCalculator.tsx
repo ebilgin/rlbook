@@ -96,18 +96,18 @@ function MemoryBar({
 
         {/* Compression badge */}
         {precision.bits < 32 && (
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-900">
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
             {(32 / precision.bits).toFixed(0)}× smaller
           </div>
         )}
       </div>
 
       {/* Fits indicator */}
-      <div className="mt-1 text-xs text-slate-500">
+      <div className="mt-1 text-xs">
         {fitsGpu ? (
-          <span className="text-emerald-400">✓ Fits on {fitsGpu.name}</span>
+          <span className="text-emerald-300 font-medium">✓ Fits on {fitsGpu.name}</span>
         ) : (
-          <span className="text-red-400">✗ Needs multi-GPU or larger</span>
+          <span className="text-red-300 font-medium">✗ Needs multi-GPU or larger</span>
         )}
       </div>
     </div>
