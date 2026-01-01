@@ -46,38 +46,44 @@ where $N_{\text{params}}$ is the parameter count and $b$ is bits per parameter.
 Memory size isn't just about fitting—it's about **speed**.
 
 <div className="my-8 p-6 bg-slate-800/30 rounded-xl border border-slate-700">
-  <div className="text-center mb-4">
-    <div className="text-slate-400 text-sm mb-2">The GPU Bottleneck</div>
-  </div>
+  <div className="text-slate-300 font-medium text-center mb-6">The GPU Bottleneck</div>
 
-  <div className="flex items-center justify-center gap-4 mb-6">
+  <div className="flex items-center justify-center gap-6 py-4">
     <div className="text-center">
       <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center mb-2">
         <span className="text-2xl">📦</span>
       </div>
-      <div className="text-xs text-slate-500">Memory</div>
+      <div className="text-sm text-slate-400">Memory</div>
+      <div className="text-xs text-slate-500">28 GB weights</div>
     </div>
-    <div className="flex-1 max-w-[200px]">
-      <div className="h-4 bg-gradient-to-r from-red-500/50 via-amber-500/50 to-emerald-500/50 rounded-full relative">
-        <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
-          Bandwidth
-        </div>
+
+    <div className="flex flex-col items-center">
+      <div className="text-amber-400 text-2xl mb-1">→→→</div>
+      <div className="px-3 py-1 bg-red-900/50 border border-red-500/50 rounded text-xs text-red-300">
+        Bandwidth Limited
       </div>
-      <div className="text-center text-xs text-slate-500 mt-1">This is the bottleneck</div>
     </div>
+
     <div className="text-center">
-      <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center mb-2">
+      <div className="w-16 h-16 rounded-lg bg-emerald-900/40 border border-emerald-600/50 flex items-center justify-center mb-2">
         <span className="text-2xl">⚡</span>
       </div>
-      <div className="text-xs text-slate-500">Compute</div>
+      <div className="text-sm text-slate-400">Compute</div>
+      <div className="text-xs text-emerald-400">Fast!</div>
     </div>
   </div>
 
-  <div className="text-sm text-slate-400 text-center">
-    Modern GPUs compute faster than they can load data.<br/>
-    <strong className="text-slate-200">Smaller weights = faster loading = faster inference.</strong>
+  <div className="text-sm text-slate-400 text-center mt-4">
+    For each token, the GPU loads <em>all</em> weights from memory.<br/>
+    <strong className="text-slate-200">Smaller weights = faster loading = more tokens/sec.</strong>
   </div>
 </div>
+
+<Tip title="Why load weights every time?">
+
+GPU compute cores have tiny caches (a few MB). A 7B model is 28GB in `float32`—the weights simply don't fit. They must be streamed from memory for every forward pass. This is called being **memory-bound**: the GPU spends most of its time waiting for data, not computing.
+
+</Tip>
 
 <Example title="Real Numbers: A100 Token Generation">
 
