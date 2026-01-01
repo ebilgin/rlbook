@@ -60,10 +60,10 @@ function quantize(weights: number[], bits: number) {
 }
 
 // Animated dot that shows snapping
-function SnappingDot({ original, quantized, animate }: { original: number; quantized: number; animate: boolean }) {
-  const range = 0.4; // Display range
-  const origPos = ((original + range) / (2 * range)) * 100;
-  const quantPos = ((quantized + range) / (2 * range)) * 100;
+function SnappingDot({ original, quantized, maxRange, animate }: { original: number; quantized: number; maxRange: number; animate: boolean }) {
+  // Use the actual quantization range for positioning
+  const origPos = ((original + maxRange) / (2 * maxRange)) * 100;
+  const quantPos = ((quantized + maxRange) / (2 * maxRange)) * 100;
 
   return (
     <div className="relative h-3">
@@ -92,7 +92,7 @@ function SnappingDot({ original, quantized, animate }: { original: number; quant
 }
 
 // Visual quantization grid
-function QuantizationGridVisual({ bits, scale }: { bits: number; scale: number }) {
+function QuantizationGridVisual({ bits, scale, maxRange }: { bits: number; scale: number; maxRange: number }) {
   const qmax = Math.pow(2, bits - 1) - 1;
   const numLevels = Math.pow(2, bits);
 
@@ -107,15 +107,16 @@ function QuantizationGridVisual({ bits, scale }: { bits: number; scale: number }
 
   return (
     <div className="relative h-12 bg-slate-800/50 rounded-lg overflow-hidden">
-      {/* Grid lines */}
+      {/* Grid lines - positioned using actual values in the display range */}
       <div className="absolute inset-0 flex">
         {levels.map((level, i) => {
-          const pos = ((level + qmax) / (2 * qmax)) * 100;
+          const actualValue = level * scale;
+          const pos = ((actualValue + maxRange) / (2 * maxRange)) * 100;
           return (
             <div
               key={i}
               className="absolute top-0 bottom-0 w-px bg-cyan-500/30"
-              style={{ left: `${pos}%` }}
+              style={{ left: `${Math.max(0, Math.min(100, pos))}%` }}
             />
           );
         })}
@@ -124,21 +125,21 @@ function QuantizationGridVisual({ bits, scale }: { bits: number; scale: number }
       {/* Center line (zero) */}
       <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-slate-400" />
 
-      {/* Labels */}
+      {/* Labels - show the display range */}
       <div className="absolute bottom-0 left-0 right-0 flex justify-between px-2 text-xs text-slate-500">
-        <span>-{(qmax * scale).toFixed(2)}</span>
+        <span>-{maxRange.toFixed(2)}</span>
         <span>0</span>
-        <span>+{(qmax * scale).toFixed(2)}</span>
+        <span>+{maxRange.toFixed(2)}</span>
       </div>
     </div>
   );
 }
 
 // Mini histogram
-function MiniHistogram({ values, color, height = 50 }: { values: number[]; color: 'cyan' | 'amber'; height?: number }) {
+function MiniHistogram({ values, color, maxRange, height = 50 }: { values: number[]; color: 'cyan' | 'amber'; maxRange: number; height?: number }) {
   const bins = 25;
-  const min = -0.4;
-  const max = 0.4;
+  const min = -maxRange;
+  const max = maxRange;
   const range = max - min;
   const binWidth = range / bins;
 
@@ -150,7 +151,7 @@ function MiniHistogram({ values, color, height = 50 }: { values: number[]; color
     });
     const maxCount = Math.max(...c);
     return c.map(x => x / maxCount);
-  }, [values]);
+  }, [values, min, binWidth]);
 
   const barColor = color === 'cyan' ? 'bg-cyan-400' : 'bg-amber-400';
 
@@ -187,6 +188,13 @@ export function QuantizationDemo() {
   }, []);
 
   const regenerate = useCallback(() => setSeed(s => s + 1), []);
+
+  // Calculate consistent display range based on the max weight value
+  // Add a small buffer so dots don't clip at the edges
+  const maxRange = useMemo(() => {
+    const maxWeight = Math.max(...weights.map(Math.abs));
+    return maxWeight * 1.1; // 10% buffer
+  }, [weights]);
 
   // Dynamic insight message
   const insight = useMemo(() => {
@@ -279,13 +287,14 @@ export function QuantizationDemo() {
         <div className="mb-8">
           <div className="text-sm text-slate-400 mb-3">Watch values snap to the quantization grid:</div>
           <div className="bg-slate-900/50 rounded-lg p-4">
-            <QuantizationGridVisual bits={bits} scale={result.scale} />
+            <QuantizationGridVisual bits={bits} scale={result.scale} maxRange={maxRange} />
             <div className="mt-4 space-y-1">
               {sampleIndices.map((idx, i) => (
                 <SnappingDot
                   key={i}
                   original={result.original[idx]}
                   quantized={result.dequantized[idx]}
+                  maxRange={maxRange}
                   animate={true}
                 />
               ))}
@@ -307,11 +316,11 @@ export function QuantizationDemo() {
         <div className="grid md:grid-cols-2 gap-4 mb-8">
           <div className="bg-slate-900/50 rounded-lg p-4">
             <div className="text-sm text-slate-400 mb-2">Original Distribution (float32)</div>
-            <MiniHistogram values={result.original} color="cyan" />
+            <MiniHistogram values={result.original} color="cyan" maxRange={maxRange} />
           </div>
           <div className="bg-slate-900/50 rounded-lg p-4">
             <div className="text-sm text-slate-400 mb-2">After {bits}-bit Quantization</div>
-            <MiniHistogram values={result.dequantized} color="amber" />
+            <MiniHistogram values={result.dequantized} color="amber" maxRange={maxRange} />
           </div>
         </div>
 
