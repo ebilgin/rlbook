@@ -123,6 +123,33 @@ function FormatVisualizer({
 }) {
   const bits = useMemo(() => floatToBits(value, format), [value, format]);
 
+  // Calculate the reconstruction values for display
+  const reconstruction = useMemo(() => {
+    const signValue = bits.sign === '1' ? -1 : 1;
+    const signSymbol = bits.sign === '1' ? '−' : '+';
+    const exponentDecimal = parseInt(bits.exponent, 2);
+    const unbiasedExponent = exponentDecimal - format.exponentBias;
+
+    // Mantissa as decimal: 1 + sum of (bit_i * 2^(-i))
+    let mantissaDecimal = 1; // The implicit leading 1
+    for (let i = 0; i < bits.mantissa.length; i++) {
+      if (bits.mantissa[i] === '1') {
+        mantissaDecimal += Math.pow(2, -(i + 1));
+      }
+    }
+
+    const reconstructedValue = signValue * mantissaDecimal * Math.pow(2, unbiasedExponent);
+
+    return {
+      signValue,
+      signSymbol,
+      exponentDecimal,
+      unbiasedExponent,
+      mantissaDecimal,
+      reconstructedValue,
+    };
+  }, [bits, format.exponentBias]);
+
   return (
     <div className="bg-slate-900/50 rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
@@ -160,6 +187,50 @@ function FormatVisualizer({
           <span className="w-3 h-3 rounded bg-blue-500/70"></span>
           <span className="text-slate-400">Mantissa ({format.mantissaBits})</span>
         </span>
+      </div>
+
+      {/* Reconstruction formula */}
+      <div className="bg-slate-800/70 rounded-lg p-3 mb-3 border border-slate-700">
+        <div className="text-xs text-slate-400 mb-2">Reconstruction formula:</div>
+        <div className="font-mono text-sm text-slate-200 mb-3">
+          value = <span className="text-red-400">sign</span> × <span className="text-blue-400">mantissa</span> × 2<sup className="text-emerald-400">exponent</sup>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+          <div className="bg-slate-900/50 rounded p-2">
+            <div className="text-red-400 font-medium mb-1">Sign</div>
+            <div className="text-slate-300">
+              {bits.sign}<sub>2</sub> → <span className="text-slate-200 font-semibold">{reconstruction.signSymbol}1</span>
+            </div>
+          </div>
+          <div className="bg-slate-900/50 rounded p-2">
+            <div className="text-emerald-400 font-medium mb-1">Exponent</div>
+            <div className="text-slate-300">
+              {bits.exponent}<sub>2</sub> = {reconstruction.exponentDecimal}
+            </div>
+            <div className="text-slate-400 text-[10px] mt-0.5">
+              {reconstruction.exponentDecimal} − {format.exponentBias} = <span className="text-slate-200 font-semibold">{reconstruction.unbiasedExponent}</span>
+            </div>
+          </div>
+          <div className="bg-slate-900/50 rounded p-2">
+            <div className="text-blue-400 font-medium mb-1">Mantissa</div>
+            <div className="text-slate-300">
+              1.{bits.mantissa.slice(0, 4)}...<sub>2</sub>
+            </div>
+            <div className="text-slate-400 text-[10px] mt-0.5">
+              = <span className="text-slate-200 font-semibold">{reconstruction.mantissaDecimal.toFixed(6)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 pt-2 border-t border-slate-700">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400">Result:</span>
+            <span className="font-mono text-slate-200">
+              {reconstruction.signSymbol}1 × {reconstruction.mantissaDecimal.toFixed(4)} × 2<sup>{reconstruction.unbiasedExponent}</sup> = <span className="text-cyan-400 font-bold">{reconstruction.reconstructedValue.toPrecision(6)}</span>
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Characteristics */}
@@ -258,6 +329,66 @@ export function BitLayoutVisualizer() {
             <FormatVisualizer key={name} format={formats[name]} value={value} />
           ))}
         </div>
+
+        {/* Understanding the format */}
+        <details className="mt-6 group">
+          <summary className="cursor-pointer text-sm text-slate-400 hover:text-slate-300 flex items-center gap-2">
+            <span className="text-xs group-open:rotate-90 transition-transform">▶</span>
+            How does floating point work?
+          </summary>
+          <div className="mt-4 space-y-4 text-sm">
+            {/* Scientific notation analogy */}
+            <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+              <div className="text-slate-200 font-medium mb-2">The idea: Scientific notation in binary</div>
+              <div className="text-slate-400">
+                Just like we write <span className="font-mono text-cyan-400">6.02 × 10<sup>23</sup></span> in decimal,
+                computers store numbers as <span className="font-mono text-cyan-400">1.xxxx × 2<sup>n</sup></span> in binary.
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-3 text-xs">
+                <div className="bg-slate-900/50 rounded p-2">
+                  <div className="text-red-400 font-medium">Sign bit</div>
+                  <div className="text-slate-400 mt-1">Is it positive or negative?</div>
+                  <div className="text-slate-500 mt-1">0 = positive, 1 = negative</div>
+                </div>
+                <div className="bg-slate-900/50 rounded p-2">
+                  <div className="text-emerald-400 font-medium">Exponent</div>
+                  <div className="text-slate-400 mt-1">How big/small? (the power of 2)</div>
+                  <div className="text-slate-500 mt-1">Stored with a bias so we can represent tiny numbers too</div>
+                </div>
+                <div className="bg-slate-900/50 rounded p-2">
+                  <div className="text-blue-400 font-medium">Mantissa</div>
+                  <div className="text-slate-400 mt-1">The precise digits after "1."</div>
+                  <div className="text-slate-500 mt-1">The leading 1 is implicit (free bit!)</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Why bias? */}
+            <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+              <div className="text-slate-200 font-medium mb-2">Why subtract a bias from the exponent?</div>
+              <div className="text-slate-400">
+                We need both large numbers (2<sup>100</sup>) and tiny numbers (2<sup>-100</sup>).
+                But binary integers are always positive. The solution: store <span className="font-mono text-emerald-400">exponent + bias</span>,
+                then subtract the bias when decoding.
+              </div>
+              <div className="mt-2 text-slate-500 text-xs">
+                Example (float32, bias=127): To store 2<sup>-10</sup>, we save 127 + (-10) = 117. When reading, we compute 117 - 127 = -10.
+              </div>
+            </div>
+
+            {/* Why implicit 1? */}
+            <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+              <div className="text-slate-200 font-medium mb-2">Why is there an "implicit 1" in the mantissa?</div>
+              <div className="text-slate-400">
+                In normalized binary, the first digit is always 1 (just like 6.02×10<sup>23</sup> always starts with a non-zero digit).
+                Since it's always 1, we don't need to store it—we get an extra bit of precision for free!
+              </div>
+              <div className="mt-2 text-slate-500 text-xs">
+                The stored mantissa bits represent the fractional part after "1." — so 1.1011... means 1 + 1/2 + 0/4 + 1/8 + 1/16...
+              </div>
+            </div>
+          </div>
+        </details>
 
         {/* Comparison insight */}
         <div className="mt-6 p-4 bg-gradient-to-r from-violet-900/30 to-violet-800/10 border border-violet-700/50 rounded-lg">
