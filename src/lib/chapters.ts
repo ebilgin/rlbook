@@ -868,6 +868,12 @@ export const chapters: Record<string, ChapterData> = {
         description: 'Tools, techniques, and hands-on examples',
         order: 40,
       },
+      {
+        slug: 'summary-exercises',
+        title: 'Summary & Exercises',
+        description: 'Key takeaways and hands-on practice',
+        order: 50,
+      },
     ],
   },
 };

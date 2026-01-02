@@ -1,0 +1,171 @@
+---
+title: "Summary & Exercises"
+slug: "summary-exercises"
+section: "ML Concepts"
+description: "Key takeaways and hands-on practice"
+status: "editor_reviewed"
+lastReviewed: "2025-01-02"
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Summary & Exercises
+
+## Key Takeaways
+
+<div className="space-y-4 my-8">
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-2xl">1</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">Quantization trades precision for efficiency</div>
+      <div className="text-slate-400 text-sm">Using fewer bits per number reduces memory and speeds up inference, with minimal accuracy loss in well-designed models.</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-2xl">2</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">Different formats for different purposes</div>
+      <div className="text-slate-400 text-sm"><code className="text-blue-300">float16</code> offers precision for inference, <code className="text-amber-300">bfloat16</code> handles training's large values, and <code className="text-emerald-300">int8</code>/<code className="text-violet-300">int4</code> maximize deployment efficiency.</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-2xl">3</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">PTQ vs QAT: calibration vs training</div>
+      <div className="text-slate-400 text-sm">Post-Training Quantization is fast but less accurate. Quantization-Aware Training takes longer but produces better results, especially for aggressive compression.</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-2xl">4</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">Scale and zero-point are the core parameters</div>
+      <div className="text-slate-400 text-sm">Quantization maps continuous values to discrete integers using a scale factor (and optionally a zero-point for asymmetric quantization).</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-2xl">5</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">Per-channel beats per-tensor</div>
+      <div className="text-slate-400 text-sm">Using separate scales for each channel preserves more information when weight magnitudes vary across channels.</div>
+    </div>
+  </div>
+</div>
+
+## Quick Quiz
+
+Test your understanding with these conceptual questions.
+
+<div className="space-y-6 my-8">
+
+<div className="p-5 bg-slate-800/30 rounded-xl border border-slate-700">
+  <div className="font-bold text-slate-200 mb-3">1. Why does <code className="text-amber-300">bfloat16</code> work better than <code className="text-blue-300">float16</code> for training?</div>
+  <details className="mt-3">
+    <summary className="cursor-pointer text-cyan-400 hover:text-cyan-300">Show answer</summary>
+    <div className="mt-3 p-3 bg-slate-900/50 rounded-lg text-slate-300">
+      <code className="text-amber-300">bfloat16</code> has 8 exponent bits (same as <code>float32</code>), giving it a much larger range (±3.4×10³⁸ vs ±65,504). During training, gradients and intermediate activations can spike to large values. <code className="text-blue-300">float16</code> would overflow to <code>inf</code>, breaking training, while <code className="text-amber-300">bfloat16</code> handles these values safely.
+    </div>
+  </details>
+</div>
+
+<div className="p-5 bg-slate-800/30 rounded-xl border border-slate-700">
+  <div className="font-bold text-slate-200 mb-3">2. A model has 7 billion parameters. How much memory does it need in <code className="text-slate-300">float32</code> vs <code className="text-violet-300">int4</code>?</div>
+  <details className="mt-3">
+    <summary className="cursor-pointer text-cyan-400 hover:text-cyan-300">Show answer</summary>
+    <div className="mt-3 p-3 bg-slate-900/50 rounded-lg text-slate-300">
+      <strong>float32:</strong> 7B × 4 bytes = <strong>28 GB</strong><br/>
+      <strong>int4:</strong> 7B × 0.5 bytes = <strong>3.5 GB</strong><br/><br/>
+      That's an 8× reduction, making the difference between needing a data center GPU and running on a laptop.
+    </div>
+  </details>
+</div>
+
+<div className="p-5 bg-slate-800/30 rounded-xl border border-slate-700">
+  <div className="font-bold text-slate-200 mb-3">3. When would you use asymmetric quantization instead of symmetric?</div>
+  <details className="mt-3">
+    <summary className="cursor-pointer text-cyan-400 hover:text-cyan-300">Show answer</summary>
+    <div className="mt-3 p-3 bg-slate-900/50 rounded-lg text-slate-300">
+      Use <strong>asymmetric</strong> quantization for activations after ReLU, which are always non-negative. Symmetric quantization would waste half the range (the negative side). Asymmetric adds a zero-point offset to shift the range, using all available levels efficiently.<br/><br/>
+      Use <strong>symmetric</strong> for weights, which are typically centered around zero.
+    </div>
+  </details>
+</div>
+
+<div className="p-5 bg-slate-800/30 rounded-xl border border-slate-700">
+  <div className="font-bold text-slate-200 mb-3">4. Why is inference typically memory-bound rather than compute-bound?</div>
+  <details className="mt-3">
+    <summary className="cursor-pointer text-cyan-400 hover:text-cyan-300">Show answer</summary>
+    <div className="mt-3 p-3 bg-slate-900/50 rounded-lg text-slate-300">
+      GPU compute cores have tiny caches (a few MB), while models have billions of parameters (tens of GB). For each forward pass, all weights must be loaded from memory to the compute units. The GPU spends most of its time waiting for data transfer, not computing. Smaller weights (via quantization) = faster loading = more tokens per second.
+    </div>
+  </details>
+</div>
+
+<div className="p-5 bg-slate-800/30 rounded-xl border border-slate-700">
+  <div className="font-bold text-slate-200 mb-3">5. What's the difference between PTQ and QAT? When would you choose each?</div>
+  <details className="mt-3">
+    <summary className="cursor-pointer text-cyan-400 hover:text-cyan-300">Show answer</summary>
+    <div className="mt-3 p-3 bg-slate-900/50 rounded-lg text-slate-300">
+      <strong>PTQ (Post-Training Quantization):</strong> Quantize a pre-trained model using calibration data. Fast (minutes), no training needed, but may lose accuracy.<br/><br/>
+      <strong>QAT (Quantization-Aware Training):</strong> Train with simulated quantization so weights learn to be quantization-friendly. Takes longer but produces better results.<br/><br/>
+      <strong>Choose PTQ</strong> when: you need quick results, have limited compute, or are using <code className="text-emerald-300">int8</code> (mild compression).<br/>
+      <strong>Choose QAT</strong> when: accuracy is critical, you're using <code className="text-violet-300">int4</code> or lower, or PTQ results are unacceptable.
+    </div>
+  </details>
+</div>
+
+</div>
+
+## Coding Exercises
+
+Practice implementing quantization from scratch with these hands-on exercises.
+
+<div className="flex flex-wrap gap-3 my-6">
+  <a href="https://colab.research.google.com/github/ebilgin/rlbook/blob/main/public/notebooks/quantization-exercises.ipynb" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-500 hover:to-orange-500 transition-all">
+    <span className="text-xl">🚀</span>
+    <div>
+      <div className="font-semibold">Open Exercises in Colab</div>
+      <div className="text-xs text-amber-100">Includes solutions</div>
+    </div>
+  </a>
+</div>
+
+<div className="grid md:grid-cols-2 gap-4 my-6">
+  <div className="p-4 bg-slate-800/30 rounded-lg border border-slate-700">
+    <div className="font-bold text-slate-200 mb-2">Exercise 1: Symmetric Quantization</div>
+    <div className="text-sm text-slate-400">Implement `int8` quantization from scratch using NumPy. Calculate scale factors and measure reconstruction error.</div>
+  </div>
+  <div className="p-4 bg-slate-800/30 rounded-lg border border-slate-700">
+    <div className="font-bold text-slate-200 mb-2">Exercise 2: Per-Channel vs Per-Tensor</div>
+    <div className="text-sm text-slate-400">Compare quantization error when using one scale for all weights vs one scale per channel.</div>
+  </div>
+  <div className="p-4 bg-slate-800/30 rounded-lg border border-slate-700">
+    <div className="font-bold text-slate-200 mb-2">Exercise 3: Visualize Error vs Bits</div>
+    <div className="text-sm text-slate-400">Plot how quantization error changes from 2-bit to 8-bit. See the exponential improvement.</div>
+  </div>
+  <div className="p-4 bg-slate-800/30 rounded-lg border border-slate-700">
+    <div className="font-bold text-slate-200 mb-2">Exercise 4: PyTorch Quantization</div>
+    <div className="text-sm text-slate-400">Use `torch.quantization.quantize_dynamic` to quantize a model and measure size/speed improvements.</div>
+  </div>
+</div>
+
+## What's Next?
+
+<Note>
+
+You now understand how to make neural networks smaller and faster through quantization. These techniques are essential for:
+
+- **Deploying RL policies** on edge devices (robots, drones, embedded systems)
+- **Scaling rollout collection** by running more parallel environments
+- **Reducing inference costs** in production systems
+
+To go deeper, explore:
+- **GPTQ and AWQ** for LLM-specific quantization
+- **Mixed-precision training** with automatic loss scaling
+- **Hardware-specific optimizations** (TensorRT, ONNX Runtime)
+
+</Note>
