@@ -3,9 +3,20 @@ title: "Try It Yourself"
 description: "Experience the RL loop with an interactive GridWorld demo"
 ---
 
-import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
-import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
-import GridWorldIntro from '@/components/interactive/GridWorldIntro';
+import {
+  Intuition,
+  Mathematical,
+  Implementation,
+  DeepDive,
+} from "@/components/ui/ContentLayers";
+import {
+  Note,
+  Warning,
+  Tip,
+  Example,
+  Definition,
+} from "@/components/ui/Callouts";
+import GridWorldIntro from "@/components/interactive/GridWorldIntro";
 
 ## See RL in Action
 
@@ -23,6 +34,20 @@ The agent (🤖) needs to reach the goal (🎯). Watch what happens at each step
 
 </Intuition>
 
+<Intuition>
+**❓The Question You May Ask**: *Is revisiting the same cell allowed for the agent?*
+
+**Answer:** Yes. Unlike classic shortest-path algorithms such as **BFS\*** or **DFS\***, reinforcement learning (RL) is about **states, not paths**. An RL agent reasons in terms of:
+
+- _How good is this state?_
+- _How good is taking this action in this state?_
+
+If revisiting a state leads to a higher **expected long-term reward**, the learned policy will allow it. In practice, revisiting states is normal and often necessary during learning. The reward function (e.g., a step penalty) naturally discourages inefficient loops rather than explicitly forbidding revisits.
+
+\**:* BFS and DFS avoid revisiting the same cell by maintaining a visited set, which is suitable for deterministic path-finding problems but not required in reinforcement learning.
+
+</Intuition>
+
 <GridWorldIntro client:load />
 
 ## What to Notice
@@ -35,19 +60,26 @@ The agent (🤖) needs to reach the goal (🎯). Watch what happens at each step
     </div>
   </div>
 
-  <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 border border-amber-700/50 rounded-xl p-5">
-    <div className="text-amber-400 font-bold mb-2">Rewards Shape Behavior</div>
-    <div className="text-slate-400 text-sm">
-      The -1 step penalty encourages the shortest path. Without it, the agent wouldn't care how long it takes. <strong>Reward design</strong> is crucial in RL.
-    </div>
-  </div>
+{" "}
 
-  <div className="bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 border border-emerald-700/50 rounded-xl p-5">
-    <div className="text-emerald-400 font-bold mb-2">Cumulative Reward</div>
-    <div className="text-slate-400 text-sm">
-      Watch the total reward. The agent maximizes this over the whole episode, not just the next step. That's why it takes the shortest path.
-    </div>
+<div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 border border-amber-700/50 rounded-xl p-5">
+  <div className="text-amber-400 font-bold mb-2">Rewards Shape Behavior</div>
+  <div className="text-slate-400 text-sm">
+    The -1 step penalty encourages the shortest path. Without it, the agent
+    wouldn't care how long it takes. <strong>Reward design</strong> is crucial
+    in RL.
   </div>
+</div>
+
+{" "}
+
+<div className="bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 border border-emerald-700/50 rounded-xl p-5">
+  <div className="text-emerald-400 font-bold mb-2">Cumulative Reward</div>
+  <div className="text-slate-400 text-sm">
+    Watch the total reward. The agent maximizes this over the whole episode, not
+    just the next step. That's why it takes the shortest path.
+  </div>
+</div>
 
   <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 border border-violet-700/50 rounded-xl p-5">
     <div className="text-violet-400 font-bold mb-2">This Is Just the Beginning</div>
@@ -57,16 +89,77 @@ The agent (🤖) needs to reach the goal (🎯). Watch what happens at each step
   </div>
 </div>
 
+<Implementation>
+```python
+
+def agentReachingGoal(grid, policy):
+rows = len(grid)
+cols = len(grid[0])
+state = (0, 0)
+reward = 0
+steps = 0
+
+    def transition(state, action):
+        r, c = state
+        if action == "UP":
+            r -= 1
+        elif action == "DOWN":
+            r += 1
+        elif action == "LEFT":
+            c -= 1
+        elif action == "RIGHT":
+            c += 1
+        if r < 0 or r >= rows or c < 0 or c >= cols:
+            return state
+        return (r, c)
+
+    while True:
+        r, c = state
+        action = policy[r][c]
+
+        if action == "GOAL":
+            reward += 10
+            print("Agent reached the goal!")
+            break
+
+        next_state = transition(state, action)
+        reward -= 1
+        state = next_state
+
+    return reward
+
+# how to run with given grid and policy
+
+grid = [
+["-1", "-1", "-1", "-1"],
+["-1", "-1", "-1", "-1"],
+["-1", "-1", "-1", "-1"],
+["-1", "-1", "-1", "10"]
+]
+
+policy = [
+["DOWN", "DOWN", "DOWN", "RIGHT"],
+["RIGHT", "DOWN", "DOWN", "RIGHT"],
+["RIGHT", "RIGHT", "DOWN", "RIGHT"],
+["RIGHT", "RIGHT", "RIGHT", "GOAL"]
+]
+
+total_reward = agentReachingGoal(grid, policy)
+print("Total reward:", total_reward)
+
+```
+</Implementation>
+
 <Tip title="Experiment!">
 
 Try these:
+
 - Reset and step through manually to see each action
 - Use "Play" and watch the agent navigate automatically
 - Toggle "Show Policy" to see the learned strategy
 - Notice how the total reward is always maximized (6 steps × -1 + 10 = +4)
 
 </Tip>
-
 ## The RL Loop, Visualized
 
 What you just saw is the core of all reinforcement learning:
@@ -97,9 +190,9 @@ What you just saw is the core of all reinforcement learning:
     </div>
   </div>
 </div>
-
 <Note title="Ready for More?">
 
 In the next chapter, we'll start with the simplest RL problem: **Multi-Armed Bandits**. There's only one state—just a choice between options with uncertain rewards. It's where you'll learn the fundamentals of exploration and exploitation that power all of RL.
 
 </Note>
+```
