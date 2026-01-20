@@ -23,4 +23,4 @@ export {
 } from './ChapterNav';
 
 // Callouts
-export { Note, Warning, Tip, Example, Definition, Theorem, Proof } from './Callouts';
+export { Note, Warning, Tip, Example, Question, Definition, Theorem, Proof } from './Callouts';
