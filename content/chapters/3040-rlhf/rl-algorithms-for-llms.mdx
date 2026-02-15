@@ -1,0 +1,683 @@
+---
+title: "RL Algorithms for LLMs"
+slug: "rl-algorithms-for-llms"
+section: "Advanced Topics"
+description: "From PPO to DPO to GRPO: the evolution toward simplicity"
+status: "draft"
+lastReviewed: null
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+import AlgorithmExplorer from '@/components/interactive/AlgorithmExplorer';
+
+# RL Algorithms for LLMs
+
+<AlgorithmExplorer client:load />
+
+The visualization above lets you compare three algorithms that shape modern language models. Each represents a different answer to the same question: **how do you optimize a language model using a reward signal?** The answer has evolved from the heavyweight machinery of PPO toward the elegant simplicity of GRPO, driven by a relentless push to reduce memory, complexity, and instability.
+
+## PPO for Language Models: The Classic Approach
+
+<Note title="Building on PPO">
+
+This section assumes familiarity with PPO's clipped objective. For the full derivation, see the [PPO chapter](/chapters/ppo). Here we focus on what changes when the policy is a language model instead of an Atari agent.
+
+</Note>
+
+<Definition title="PPO for RLHF">
+
+PPO applied to language models optimizes a KL-regularized reward objective: generate responses that score highly under a reward model while staying close to a reference policy. The objective balances reward maximization against distributional drift.
+
+</Definition>
+
+<Intuition>
+
+You already know how PPO works for games: collect experience, compute advantages, clip the policy ratio, update. For language models the mechanics are identical, but the scale changes everything.
+
+<div className="grid md:grid-cols-2 gap-3 my-6">
+  <div className="bg-emerald-900/15 border border-emerald-700/40 rounded-lg p-4">
+    <div className="text-emerald-400 font-semibold text-sm mb-2">What stays the same</div>
+    <div className="space-y-2 text-sm text-slate-300">
+      <div className="flex items-start gap-2"><span className="text-emerald-500 mt-0.5">&#10003;</span> Clipped surrogate objective prevents catastrophic updates</div>
+      <div className="flex items-start gap-2"><span className="text-emerald-500 mt-0.5">&#10003;</span> GAE assigns credit to individual decisions</div>
+      <div className="flex items-start gap-2"><span className="text-emerald-500 mt-0.5">&#10003;</span> Multiple minibatch epochs per batch of experience</div>
+    </div>
+  </div>
+  <div className="bg-amber-900/15 border border-amber-700/40 rounded-lg p-4">
+    <div className="text-amber-400 font-semibold text-sm mb-2">What changes for LLMs</div>
+    <div className="space-y-2 text-sm text-slate-300">
+      <div className="flex items-start gap-2"><span className="text-amber-500 mt-0.5">&#9651;</span> Actions = tokens from 50K+ vocabulary</div>
+      <div className="flex items-start gap-2"><span className="text-amber-500 mt-0.5">&#9651;</span> Episodes = full responses (hundreds of tokens)</div>
+      <div className="flex items-start gap-2"><span className="text-amber-500 mt-0.5">&#9651;</span> Reward is sparse: one score for the whole response</div>
+      <div className="flex items-start gap-2"><span className="text-amber-500 mt-0.5">&#9651;</span> KL penalty anchors policy to a reference model</div>
+    </div>
+  </div>
+</div>
+
+The RLHF objective with KL penalty:
+
+$$J(\theta) = \mathbb{E}_{x, y \sim \pi_\theta}[r_\phi(x,y) - \beta D_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}})]$$
+
+Without the KL penalty, the model quickly learns to exploit reward model weaknesses. It might generate repetitive praise, absurdly long responses, or text that "sounds confident" without being correct. The KL term says: "improve, but don't become something completely different."
+
+</Intuition>
+
+<Mathematical>
+
+**Per-token reward decomposition:**
+
+The KL penalty applies at every token, while the reward model score arrives only at the end:
+
+- For tokens $t = 1, \ldots, T-1$: $\quad r_t = -\beta \log \frac{\pi_\theta(y_t \mid x, y_{< t})}{\pi_{\text{ref}}(y_t \mid x, y_{< t})}$
+- For the final token $t = T$: $\quad r_T = r_\phi(x, y) - \beta \log \frac{\pi_\theta(y_T \mid x, y_{< T})}{\pi_{\text{ref}}(y_T \mid x, y_{< T})}$
+
+This creates a dense reward signal from a sparse one. The KL penalty on every token provides continuous feedback, while the reward model score at the end provides the learning signal about response quality.
+
+**Credit assignment through the value function:**
+
+A value function $V_\psi(x, y_{\leq t})$ estimates expected future reward from any point in generation:
+
+$$V_\psi(x, y_{\leq t}) = \mathbb{E}\left[\sum_{t'=t}^{T} r_{t'} \mid x, y_{\leq t}\right]$$
+
+The advantage $\hat{A}_t = r_t + \gamma V(s_{t+1}) - V(s_t)$ tells us: "Was this token better or worse than expected?" This is critical for learning which tokens in a response actually contributed to its quality.
+
+</Mathematical>
+
+### The Four-Model Problem
+
+<Intuition>
+
+PPO for RLHF requires four models in GPU memory simultaneously:
+
+1. **Policy model** $\pi_\theta$ -- the model being trained
+2. **Reference model** $\pi_{\text{ref}}$ -- frozen copy for KL computation
+3. **Value function** $V_\psi$ -- the critic for advantage estimation
+4. **Reward model** $r_\phi$ -- scores complete responses
+
+For a 7B parameter model, the memory budget looks like this:
+
+</Intuition>
+
+<div className="my-6 bg-slate-800/50 rounded-xl p-5 border border-slate-700">
+  <div className="text-slate-300 font-medium mb-4">Memory footprint for PPO with a 7B model (FP16):</div>
+  <div className="space-y-2 text-sm">
+    <div className="flex justify-between items-center">
+      <span className="text-blue-400">Policy model (7B params)</span>
+      <span className="text-slate-300 font-mono">14 GB</span>
+    </div>
+    <div className="flex justify-between items-center">
+      <span className="text-blue-400">Reference model (frozen)</span>
+      <span className="text-slate-300 font-mono">14 GB</span>
+    </div>
+    <div className="flex justify-between items-center">
+      <span className="text-blue-400">Value function (7B + head)</span>
+      <span className="text-slate-300 font-mono">14 GB</span>
+    </div>
+    <div className="flex justify-between items-center">
+      <span className="text-blue-400">Reward model (7B + head)</span>
+      <span className="text-slate-300 font-mono">14 GB</span>
+    </div>
+    <div className="border-t border-slate-600 pt-2 flex justify-between items-center">
+      <span className="text-slate-300 font-bold">Parameters only</span>
+      <span className="text-amber-400 font-mono font-bold">~56 GB</span>
+    </div>
+    <div className="flex justify-between items-center">
+      <span className="text-slate-400">+ Optimizer states, activations, gradients</span>
+      <span className="text-red-400 font-mono">+40-80 GB</span>
+    </div>
+  </div>
+</div>
+
+<Intuition>
+
+This is why PPO for LLMs is an infrastructure challenge as much as an algorithmic one. Training a 70B model with PPO requires clusters of high-end GPUs. The question that drives the rest of this section: **can we get the same results with fewer models?**
+
+</Intuition>
+
+## The Critic Problem
+
+<Intuition>
+
+In standard RL, the critic is tiny compared to the policy. A CartPole critic has a few hundred parameters. An Atari critic has a few million. The cost of the critic is negligible.
+
+In LLM RL, the critic IS another language model -- the same size as the policy. It needs to understand language well enough to predict "how good will this partially-generated response turn out?" That requires billions of parameters.
+
+Worse, training this critic on sparse, sequence-level rewards is inherently difficult. The reward arrives once at the end of generation. The critic must learn to predict this final score from partial sequences, which requires many training samples and careful optimization.
+
+This motivates two complementary strategies:
+- **DPO**: eliminate the reward model entirely by folding preferences into a supervised loss
+- **GRPO**: eliminate the critic by using group statistics as a baseline instead
+
+</Intuition>
+
+## DPO: Direct Preference Optimization
+
+<Definition title="Direct Preference Optimization (DPO)">
+
+DPO bypasses RL entirely by exploiting a mathematical insight: the optimal policy under the RLHF objective has a closed-form relationship with the reward function. This lets us reparameterize the reward in terms of the policy itself, turning RL into a supervised learning problem on preference pairs.
+
+</Definition>
+
+<Intuition>
+
+DPO starts from a remarkable observation. The RLHF objective with KL penalty has an exact solution:
+
+$$\pi^*(y \mid x) \propto \pi_{\text{ref}}(y \mid x) \exp\left(\frac{r(x,y)}{\beta}\right)$$
+
+If you could compute this, you would not need RL at all. You would just adjust the reference policy by the exponentiated reward. The problem is that you do not know the reward function $r$ -- that is what the reward model learns.
+
+DPO's trick: **rearrange this equation to express the reward in terms of the policy**:
+
+$$r(x, y) = \beta \log \frac{\pi_\theta(y \mid x)}{\pi_{\text{ref}}(y \mid x)} + C$$
+
+where $C$ is a constant that depends only on the prompt $x$, not the response $y$.
+
+Now substitute this "implicit reward" into the Bradley-Terry preference model. The constant $C$ cancels (it appears in both the chosen and rejected terms), and you get a loss that depends only on the policy and the reference model -- no reward model needed.
+
+**What the DPO loss does intuitively:**
+- Increase the probability of the preferred response (relative to the reference)
+- Decrease the probability of the rejected response (relative to the reference)
+- The reference model acts as an anchor, preventing the policy from collapsing
+
+</Intuition>
+
+<Mathematical>
+
+**Deriving the DPO loss:**
+
+Start from the optimal policy under KL-constrained reward maximization:
+
+$$\pi^*(y \mid x) = \frac{1}{Z(x)} \pi_{\text{ref}}(y \mid x) \exp\left(\frac{r(x,y)}{\beta}\right)$$
+
+Solve for the reward:
+
+$$r(x, y) = \beta \log \frac{\pi^*(y \mid x)}{\pi_{\text{ref}}(y \mid x)} + \beta \log Z(x)$$
+
+Under the Bradley-Terry model, the preference probability is:
+
+$$P(y_w \succ y_l \mid x) = \sigma(r(x, y_w) - r(x, y_l))$$
+
+Substituting the implicit reward (the $\beta \log Z(x)$ terms cancel):
+
+$$P(y_w \succ y_l \mid x) = \sigma\left(\beta \log \frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \log \frac{\pi_\theta(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)}\right)$$
+
+The DPO loss is the negative log-likelihood of the observed preferences:
+
+$$L_{\text{DPO}}(\theta) = -\mathbb{E}_{(x, y_w, y_l)}\left[\log \sigma\left(\beta \log \frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \log \frac{\pi_\theta(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)}\right)\right]$$
+
+**Gradient analysis:**
+
+The gradient of the DPO loss increases the log-probability of preferred responses and decreases it for rejected responses, weighted by how "surprising" the current preference is. When the model already strongly prefers the correct response, the gradient is small. When it gets the preference wrong, the gradient is large.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from dataclasses import dataclass
+from typing import List, Dict, Tuple
+
+
+@dataclass
+class DPOConfig:
+    """Configuration for DPO training."""
+    beta: float = 0.1          # KL penalty strength
+    learning_rate: float = 1e-6
+    max_length: int = 512
+    epochs: int = 3
+
+
+def compute_sequence_log_probs(
+    model: nn.Module,
+    input_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
+    response_start: int
+) -> torch.Tensor:
+    """
+    Compute log-probability of the response tokens.
+
+    Args:
+        model: Language model
+        input_ids: Full sequence [batch, seq_len]
+        attention_mask: Mask [batch, seq_len]
+        response_start: Index where response begins
+
+    Returns:
+        Log-probabilities summed over response tokens [batch]
+    """
+    outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+    logits = outputs.logits
+
+    # Shift for autoregressive prediction
+    shift_logits = logits[:, response_start - 1:-1, :]
+    shift_labels = input_ids[:, response_start:]
+    shift_mask = attention_mask[:, response_start:]
+
+    log_probs = F.log_softmax(shift_logits, dim=-1)
+    token_log_probs = log_probs.gather(
+        dim=-1, index=shift_labels.unsqueeze(-1)
+    ).squeeze(-1)
+
+    # Sum log-probs over response tokens
+    return (token_log_probs * shift_mask).sum(dim=-1)
+
+
+def dpo_loss(
+    policy: nn.Module,
+    ref_policy: nn.Module,
+    chosen_ids: torch.Tensor,
+    chosen_mask: torch.Tensor,
+    rejected_ids: torch.Tensor,
+    rejected_mask: torch.Tensor,
+    response_start: int,
+    beta: float = 0.1
+) -> Tuple[torch.Tensor, Dict[str, float]]:
+    """
+    Compute DPO loss on a batch of preference pairs.
+
+    Returns:
+        loss: Scalar DPO loss
+        metrics: Training metrics
+    """
+    # Policy log-probs
+    pi_chosen = compute_sequence_log_probs(
+        policy, chosen_ids, chosen_mask, response_start
+    )
+    pi_rejected = compute_sequence_log_probs(
+        policy, rejected_ids, rejected_mask, response_start
+    )
+
+    # Reference log-probs (no gradients)
+    with torch.no_grad():
+        ref_chosen = compute_sequence_log_probs(
+            ref_policy, chosen_ids, chosen_mask, response_start
+        )
+        ref_rejected = compute_sequence_log_probs(
+            ref_policy, rejected_ids, rejected_mask, response_start
+        )
+
+    # DPO logits: beta * (log_ratio_chosen - log_ratio_rejected)
+    logits = beta * (
+        (pi_chosen - ref_chosen) - (pi_rejected - ref_rejected)
+    )
+
+    loss = -F.logsigmoid(logits).mean()
+
+    # Metrics
+    with torch.no_grad():
+        accuracy = (logits > 0).float().mean().item()
+        chosen_reward = beta * (pi_chosen - ref_chosen).mean().item()
+        rejected_reward = beta * (pi_rejected - ref_rejected).mean().item()
+
+    metrics = {
+        'loss': loss.item(),
+        'accuracy': accuracy,
+        'chosen_reward': chosen_reward,
+        'rejected_reward': rejected_reward,
+        'reward_margin': chosen_reward - rejected_reward,
+    }
+
+    return loss, metrics
+```
+
+</Implementation>
+
+<Intuition>
+
+**When DPO works well:**
+- You have high-quality paired preference data
+- The preference labels are clean and consistent
+- The task is well-covered by existing data
+
+**When DPO struggles:**
+- **Distribution shift**: DPO trains on pre-collected data. If the policy moves far from where the data was collected, the preferences may no longer be meaningful.
+- **Noisy labels**: DPO can overfit to annotation noise because it treats every preference as ground truth.
+- **No online learning**: You cannot generate new responses and get fresh feedback during training. The model only learns from the fixed dataset.
+
+These limitations motivate online methods like PPO and GRPO, which generate fresh data during training and can adapt to the policy's current behavior.
+
+</Intuition>
+
+## GRPO: Group Relative Policy Optimization
+
+<Definition title="Group Relative Policy Optimization (GRPO)">
+
+GRPO eliminates the critic by replacing it with group statistics. For each prompt, sample a group of completions, score them, and use the group mean and standard deviation as a baseline. This turns sparse rewards into normalized advantages without training a value function.
+
+</Definition>
+
+<Note title="REINFORCE Revisited">
+
+GRPO is essentially REINFORCE with a group-based baseline. If the connection to REINFORCE feels unfamiliar, review the [REINFORCE chapter](/chapters/reinforce), especially the section on variance reduction through baselines. The idea is the same: subtract a baseline from the reward to reduce variance without introducing bias.
+
+</Note>
+
+<Intuition>
+
+GRPO's insight is beautifully simple. Instead of training a massive value network to estimate "how good is this partial response?", just ask: "how good is this response compared to other responses for the same prompt?"
+
+**The algorithm:**
+
+1. **Sample a group**: For each prompt $x$, generate $G$ completions from the current policy: $y_1, y_2, \ldots, y_G$
+2. **Score each completion**: Compute reward $r_i$ for each (e.g., a correctness check for math, or a reward model score)
+3. **Normalize within the group**: Compute the advantage as $\hat{A}_i = \frac{r_i - \mu_G}{\sigma_G + \epsilon}$ where $\mu_G$ and $\sigma_G$ are the group mean and standard deviation
+4. **Apply PPO's clipped objective**: Use these normalized advantages with the standard clipped ratio
+5. **Add KL penalty**: Prevent divergence from the reference model
+
+That is it. No critic. No value function training. No GAE computation. The group statistics serve as a "free" baseline.
+
+**Why this works:**
+- If one response in a group scores much higher than the others, it gets a large positive advantage -- "do more of this"
+- If a response scores below the group average, it gets a negative advantage -- "do less of this"
+- The normalization ensures the learning signal is well-scaled regardless of reward magnitude
+
+</Intuition>
+
+<Mathematical>
+
+**GRPO objective (summary):**
+
+For a prompt $x$, sample $G$ completions $\{y_i\}_{i=1}^G$. The group-relative advantage is:
+
+$$\hat{A}_i = \frac{r(x, y_i) - \mu_G}{\sigma_G + \epsilon}$$
+
+These advantages feed into PPO's clipped objective at the token level, plus a KL penalty against the reference model:
+
+$$L_{\text{GRPO}}(\theta) = -\frac{1}{G}\sum_{i=1}^{G}\frac{1}{T_i}\sum_{t=1}^{T_i} \min\left(\rho_{i,t} \hat{A}_i,\; \text{clip}(\rho_{i,t}, 1-\epsilon, 1+\epsilon)\hat{A}_i\right) + \beta\, D_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}})$$
+
+Key observation: $\hat{A}_i$ is the same for all tokens in response $i$ -- the advantage is at the response level, not the token level. This is precisely because GRPO replaces per-token credit assignment (which requires a critic) with per-response scoring.
+
+For the full derivation, KL estimator details, and the connection to REINFORCE, see the [GRPO deep dive](/chapters/rl-for-llms/grpo-and-reasoning).
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from dataclasses import dataclass
+from typing import List, Dict, Tuple
+import numpy as np
+
+
+@dataclass
+class GRPOConfig:
+    """Configuration for GRPO training."""
+    group_size: int = 8         # Completions per prompt
+    clip_range: float = 0.2     # PPO clip parameter
+    beta: float = 0.04          # KL penalty coefficient
+    learning_rate: float = 1e-6
+    max_new_tokens: int = 256
+    temperature: float = 0.7
+    ppo_epochs: int = 1         # Update epochs per batch
+
+
+def grpo_step(
+    policy: nn.Module,
+    ref_policy: nn.Module,
+    prompts: List[str],
+    tokenizer,
+    reward_fn,
+    config: GRPOConfig,
+    optimizer: torch.optim.Optimizer
+) -> Dict[str, float]:
+    """
+    One GRPO training step.
+
+    Args:
+        policy: Current policy model
+        ref_policy: Frozen reference model
+        prompts: Batch of prompts
+        tokenizer: Tokenizer
+        reward_fn: Function(prompt, response) -> float
+        config: GRPO configuration
+        optimizer: Optimizer for policy
+
+    Returns:
+        Dictionary of training metrics
+    """
+    device = next(policy.parameters()).device
+    all_metrics = []
+
+    for prompt in prompts:
+        # Step 1: Generate G completions
+        prompt_ids = tokenizer(
+            prompt, return_tensors='pt'
+        ).input_ids.to(device)
+        prompt_len = prompt_ids.shape[1]
+
+        # Repeat prompt for group generation
+        repeated_ids = prompt_ids.repeat(config.group_size, 1)
+
+        with torch.no_grad():
+            outputs = policy.generate(
+                repeated_ids,
+                max_new_tokens=config.max_new_tokens,
+                do_sample=True,
+                temperature=config.temperature,
+            )
+
+        response_ids = outputs[:, prompt_len:]
+        responses = tokenizer.batch_decode(
+            response_ids, skip_special_tokens=True
+        )
+
+        # Step 2: Score each completion
+        rewards = torch.tensor([
+            reward_fn(prompt, resp) for resp in responses
+        ], dtype=torch.float32, device=device)
+
+        # Step 3: Compute group-relative advantages
+        mu = rewards.mean()
+        sigma = rewards.std() + 1e-8
+        advantages = (rewards - mu) / sigma  # [G]
+
+        # Step 4: Compute old log-probs (for ratio)
+        with torch.no_grad():
+            old_logits = policy(outputs).logits
+            old_log_probs = F.log_softmax(old_logits, dim=-1)
+            old_token_log_probs = old_log_probs[:, prompt_len - 1:-1, :].gather(
+                dim=-1, index=response_ids.unsqueeze(-1)
+            ).squeeze(-1)  # [G, T]
+
+            # Reference log-probs for KL
+            ref_logits = ref_policy(outputs).logits
+            ref_log_probs = F.log_softmax(ref_logits, dim=-1)
+            ref_token_log_probs = ref_log_probs[:, prompt_len - 1:-1, :].gather(
+                dim=-1, index=response_ids.unsqueeze(-1)
+            ).squeeze(-1)  # [G, T]
+
+        # Step 5: PPO update with clipped objective
+        for _ in range(config.ppo_epochs):
+            new_logits = policy(outputs).logits
+            new_log_probs = F.log_softmax(new_logits, dim=-1)
+            new_token_log_probs = new_log_probs[:, prompt_len - 1:-1, :].gather(
+                dim=-1, index=response_ids.unsqueeze(-1)
+            ).squeeze(-1)  # [G, T]
+
+            # Per-token ratio
+            ratio = torch.exp(
+                new_token_log_probs - old_token_log_probs
+            )  # [G, T]
+
+            # Expand advantages to token level
+            adv = advantages.unsqueeze(1).expand_as(ratio)  # [G, T]
+
+            # Clipped surrogate loss
+            pg_loss1 = -adv * ratio
+            pg_loss2 = -adv * torch.clamp(
+                ratio, 1 - config.clip_range, 1 + config.clip_range
+            )
+            pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+
+            # KL penalty (unbiased estimator)
+            log_ratio = ref_token_log_probs - new_token_log_probs
+            kl = (torch.exp(log_ratio) - log_ratio - 1).mean()
+
+            loss = pg_loss + config.beta * kl
+
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(policy.parameters(), 1.0)
+            optimizer.step()
+
+        all_metrics.append({
+            'loss': loss.item(),
+            'mean_reward': rewards.mean().item(),
+            'reward_std': rewards.std().item(),
+            'kl': kl.item(),
+            'mean_advantage': advantages.mean().item(),
+        })
+
+    # Average across prompts
+    return {
+        k: np.mean([m[k] for m in all_metrics])
+        for k in all_metrics[0].keys()
+    }
+```
+
+</Implementation>
+
+<Intuition>
+
+**When GRPO shines:**
+- **Verifiable rewards**: Math problems where you can check correctness, code tasks where you can run tests. No reward model needed -- just a binary "correct or incorrect" signal.
+- **Reasoning tasks**: The group sampling naturally explores different reasoning paths, and GRPO reinforces the ones that reach correct answers.
+- **Memory-constrained settings**: Only 2 models in memory (policy + reference), compared to PPO's 4.
+
+**The tradeoff:**
+GRPO needs to generate $G$ completions per prompt, which costs inference time. For $G = 8$, you generate 8x more tokens per training step than PPO. But generation is typically cheaper than training a separate critic, and the algorithmic simplicity makes implementation much easier.
+
+</Intuition>
+
+## Modern Variants: SimPO, KTO, and ORPO
+
+<div className="grid md:grid-cols-3 gap-4 my-8">
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-xl p-5 border border-violet-700/50">
+    <div className="text-violet-400 font-bold text-lg mb-2">SimPO</div>
+    <div className="text-slate-300 text-sm space-y-2">
+      <p>Removes the reference model entirely. Uses the average log-probability of the response as an implicit reward, eliminating the need to store and query a reference policy. Simpler than DPO with competitive performance.</p>
+    </div>
+  </div>
+  <div className="bg-gradient-to-br from-rose-900/30 to-rose-800/10 rounded-xl p-5 border border-rose-700/50">
+    <div className="text-rose-400 font-bold text-lg mb-2">KTO</div>
+    <div className="text-slate-300 text-sm space-y-2">
+      <p>Works with unpaired data: you only need "this response is good" or "this response is bad" labels -- no pairwise comparisons required. Inspired by prospect theory from behavioral economics, it handles the asymmetry between gains and losses.</p>
+    </div>
+  </div>
+  <div className="bg-gradient-to-br from-teal-900/30 to-teal-800/10 rounded-xl p-5 border border-teal-700/50">
+    <div className="text-teal-400 font-bold text-lg mb-2">ORPO</div>
+    <div className="text-slate-300 text-sm space-y-2">
+      <p>Combines SFT and alignment in a single training step. Adds a preference penalty directly to the language modeling loss, requiring no reference model and no separate alignment phase. The simplest pipeline of all.</p>
+    </div>
+  </div>
+</div>
+
+<Intuition>
+
+The trend is clear: each generation of algorithms removes a component. PPO needs four models. DPO needs two. SimPO and ORPO need just one. The field is converging on approaches where alignment is built into the training objective itself, rather than layered on as a separate stage.
+
+</Intuition>
+
+## Algorithm Selection Guide
+
+<div className="my-8 bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+  <div className="text-slate-200 font-bold text-lg mb-4">Which algorithm should you use?</div>
+
+  <div className="space-y-3 text-sm">
+    <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-700/30">
+      <span className="text-amber-400 font-bold mt-0.5">Q:</span>
+      <div>
+        <span className="text-slate-300">Do you have verifiable rewards (math, code)?</span>
+        <div className="text-amber-400 mt-1 font-medium">Use GRPO. Binary correctness signals are ideal for group-relative optimization.</div>
+      </div>
+    </div>
+
+    <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-700/30">
+      <span className="text-emerald-400 font-bold mt-0.5">Q:</span>
+      <div>
+        <span className="text-slate-300">Do you have paired preference data (chosen vs. rejected)?</span>
+        <div className="text-emerald-400 mt-1 font-medium">Use DPO. It is the simplest approach for offline preference learning.</div>
+      </div>
+    </div>
+
+    <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-700/30">
+      <span className="text-blue-400 font-bold mt-0.5">Q:</span>
+      <div>
+        <span className="text-slate-300">Do you need online learning with a reward model?</span>
+        <div className="text-blue-400 mt-1 font-medium">Use PPO or GRPO. Both generate fresh data during training. GRPO is simpler; PPO allows finer credit assignment.</div>
+      </div>
+    </div>
+
+    <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-700/30">
+      <span className="text-rose-400 font-bold mt-0.5">Q:</span>
+      <div>
+        <span className="text-slate-300">Do you only have unpaired good/bad labels?</span>
+        <div className="text-rose-400 mt-1 font-medium">Use KTO. It does not require pairwise comparisons.</div>
+      </div>
+    </div>
+
+    <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-700/30">
+      <span className="text-violet-400 font-bold mt-0.5">Q:</span>
+      <div>
+        <span className="text-slate-300">Are you severely memory constrained?</span>
+        <div className="text-violet-400 mt-1 font-medium">Use DPO or GRPO (2 models). Or SimPO/ORPO (1 model). Avoid PPO (4 models).</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+### Comparison Table
+
+<div className="my-6 overflow-x-auto">
+
+| Algorithm | Models in Memory | Data Type | Online / Offline | Best For |
+|-----------|-----------------|-----------|-----------------|----------|
+| **PPO** | 4 (policy, ref, critic, reward) | Reward model scores | Online | General alignment with fine credit assignment |
+| **DPO** | 2 (policy, reference) | Paired preferences | Offline | Simple alignment from preference datasets |
+| **GRPO** | 2 (policy, reference) | Any scalar reward | Online | Reasoning tasks with verifiable rewards |
+| **KTO** | 2 (policy, reference) | Unpaired good/bad labels | Offline | When pairwise data is unavailable |
+| **SimPO** | 1 (policy only) | Paired preferences | Offline | Maximum memory efficiency |
+
+</div>
+
+<Mathematical>
+
+**Unifying perspective:**
+
+All of these algorithms optimize variants of the same core objective:
+
+$$\max_\theta \mathbb{E}_{x}\left[\text{Quality}(\pi_\theta, x) - \beta \cdot \text{Divergence}(\pi_\theta, \pi_{\text{ref}}, x)\right]$$
+
+They differ in:
+- **How quality is measured**: reward model (PPO), implicit reward from preferences (DPO), group-relative rewards (GRPO), correctness checks (GRPO with verifiable rewards)
+- **How divergence is controlled**: explicit KL penalty (PPO, GRPO), implicit through the loss (DPO), or removed entirely (SimPO)
+- **Whether the critic is needed**: Yes (PPO), No (DPO, GRPO, KTO, SimPO)
+- **Whether training is online**: Yes (PPO, GRPO), No (DPO, KTO, SimPO)
+
+The evolution from PPO to GRPO is the story of discovering which components are essential and which can be replaced by simpler alternatives.
+
+</Mathematical>
+
+## Summary
+
+The landscape of RL algorithms for LLMs has evolved rapidly:
+
+- **PPO** is the classic RLHF algorithm: powerful but memory-hungry, requiring four models and careful tuning of the value function, KL coefficient, and clipping parameters
+- **DPO** eliminates the reward model and the RL loop entirely, turning alignment into supervised learning on preference pairs -- simpler and cheaper, but limited to offline data
+- **GRPO** eliminates the critic by using group statistics as a baseline, combining PPO's online learning with DPO's simplicity -- the algorithm behind DeepSeek R1's reasoning capabilities
+- **Modern variants** (SimPO, KTO, ORPO) push further toward simplicity, removing even the reference model
+
+The trend is unmistakable: **simpler is better**, as long as you can preserve the core learning signal. Each algorithm removes a component while maintaining (or improving) alignment quality.
+
+<Tip title="Next: GRPO and the Reasoning Revolution">
+
+GRPO is more than an efficiency improvement over PPO. When combined with verifiable rewards from math and code, it produces something remarkable: models that learn to reason step by step, without ever being taught chain-of-thought. The next section explores how DeepSeek R1 used GRPO to create emergent reasoning.
+
+</Tip>

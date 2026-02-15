@@ -1,0 +1,54 @@
+{
+  "episode_rewards": [
+    -66829.65,
+    -74141.25,
+    -80807.90000000001,
+    -81474.95,
+    -73908.55000000002
+  ],
+  "avg_wait_times": [
+    148.18367346938774,
+    150.78846153846155,
+    145.96747967479675,
+    144.82258064516128,
+    143.72972972972974
+  ],
+  "epsilon_history": [
+    0.995,
+    0.990025,
+    0.985074875,
+    0.9801495006250001,
+    0.9752487531218751
+  ],
+  "loss_history": [
+    1080.1323980994548,
+    6744.166575181749,
+    23715.603852437336,
+    46856.28069959852,
+    75894.1153797743
+  ],
+  "baseline_results": {
+    "Random": {
+      "avg_wait_time": 146.24899359362726,
+      "avg_passengers_served": 13.05
+    },
+    "Nearest Car": {
+      "avg_wait_time": 65.39454822903798,
+      "avg_passengers_served": 52.4
+    },
+    "SCAN": {
+      "avg_wait_time": 6.572261904761905,
+      "avg_passengers_served": 128.05
+    }
+  },
+  "agent_results": {
+    "avg_wait_time": 145.47598227370688,
+    "avg_passengers_served": 2.4
+  },
+  "config": {
+    "n_episodes": 5,
+    "n_floors": 10,
+    "n_elevators": 3,
+    "traffic_pattern": "morning_rush"
+  }
+}

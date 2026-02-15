@@ -92,15 +92,18 @@ When guiding the reader through exercises or demos:
    - Connections to other concepts
    - Historical context or alternatives
 
-7. Summary
-   - Key takeaways (3-5 bullets)
-   - What's next
-
-8. Exercises
-   - Conceptual questions
-   - Coding challenges
-   - Open-ended exploration
+7. Summary & Exercises (can be a separate subsection)
+   - Key takeaways (use numbered takeaway cards)
+   - Quick quiz with expandable answers
+   - Coding exercises (link to Colab notebook)
+   - What's next pointers
 ```
+
+For chapters with substantial content, consider making "Summary & Exercises" a dedicated subsection. See [VISUAL_PATTERNS.md](VISUAL_PATTERNS.md) for:
+- **Numbered Takeaway Cards** for key points
+- **Quiz with Expandable Answers** for self-assessment
+- **Colab Link Buttons** for coding exercises
+- **Exercise Preview Cards** for exercise overviews
 
 ### Section Length
 
@@ -179,17 +182,29 @@ For important numbers, use centered grids with large text:
 </div>
 ```
 
-### Progress Bars for Comparisons
+### Progress Bars and Horizontal Bar Charts
+
+**Important**: Use inline styles for percentage widths. Tailwind's JIT compiler may not generate classes like `w-[75%]` unless they're in a safelist.
 
 ```jsx
+{/* Progress bar - use inline style for width */}
 <div className="flex items-center gap-3">
-  <span className="text-xs text-slate-500 w-16">Label</span>
-  <div className="flex-1 h-4 bg-slate-700 rounded relative">
-    <div className="absolute left-0 top-0 h-full w-[75%] bg-cyan-400 rounded"></div>
+  <span className="text-xs text-slate-400 w-16 font-mono shrink-0">Label</span>
+  <div className="flex-1">
+    <div style={{width: '75%', backgroundColor: '#3b82f6'}} className="h-6 rounded flex items-center justify-end pr-2">
+      <span className="text-xs text-white font-semibold">1.5×</span>
+    </div>
   </div>
-  <span className="text-xs text-cyan-400">1.5×</span>
 </div>
 ```
+
+**Key patterns:**
+- Use `style={{width: 'X%'}}` instead of `w-[X%]`
+- Use hex colors (`backgroundColor: '#3b82f6'`) for reliable rendering
+- Add `shrink-0` to labels to prevent compression
+- Wrap bars in `flex-1` container for alignment
+
+See [VISUAL_PATTERNS.md](VISUAL_PATTERNS.md#pattern-horizontal-bar-charts) for full template.
 
 ### Interactive Component Integration
 

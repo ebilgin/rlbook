@@ -15,6 +15,7 @@ export { TDLearningDemo } from './TDLearningDemo';
 export { QuantizationDemo } from './QuantizationDemo';
 export { MemoryCalculator } from './MemoryCalculator';
 export { BitLayoutVisualizer } from './BitLayoutVisualizer';
+export { ElevatorSimulation } from './ElevatorDispatch';
 
 // TODO: Add more interactive components as they are implemented
 // export { CliffWalking } from './CliffWalking';

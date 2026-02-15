@@ -1,0 +1,1034 @@
+---
+title: "Elevator Dispatch with Multi-Agent RL"
+slug: "elevator-dispatch"
+description: "How to formulate elevator dispatch as a multi-agent RL problem. Minimizing wait times through coordination without communication."
+section: "Operations & Systems"
+status: draft
+lastReviewed: null
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip } from '@/components/ui/Callouts';
+import { ElevatorSimulation } from '@/components/interactive';
+
+# Elevator Dispatch with Multi-Agent RL
+
+<Intuition>
+
+You're on the 8th floor, running late. You press the elevator button and wait. And wait.
+
+An empty elevator passes by—heading somewhere else. When one finally arrives, it's already packed.
+
+**Why does this happen?**
+
+Elevators solve a **coordination problem**: multiple agents working together to minimize wait times across an entire building, adapting to changing traffic patterns throughout the day.
+
+This isn't simple scheduling—it's **sequential decision-making under uncertainty**. Passenger arrivals are random, demands shift (morning rush vs quiet periods), and elevators decide in real-time without knowing future requests.
+
+**Perfect for reinforcement learning.**
+
+</Intuition>
+
+---
+
+## See It In Action
+
+<Intuition>
+
+Before diving into the details, try controlling elevators yourself! Compare different algorithms:
+
+<ElevatorSimulation client:load />
+
+**Quick experiment:**
+1. Set algorithm to "Nearest Car", traffic to "Morning Rush"
+2. Press Play and watch wait times
+3. Switch to "Random" — notice the chaos!
+4. Try "RL" — see the learned coordination
+
+Now let's understand *why* this problem is challenging...
+
+</Intuition>
+
+---
+
+## Why Traditional Rules Fail
+
+<Intuition>
+
+Traditional elevator systems use simple heuristics:
+
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
+<div className="p-4 border border-gray-700 rounded-lg bg-gray-900">
+<h3 className="font-bold text-blue-400 mb-2 text-sm md:text-base break-words">First-Come-First-Served</h3>
+<p className="text-xs md:text-sm mb-2">Serve requests in arrival order</p>
+<p className="text-xs text-red-400">❌ Can starve upper floors</p>
+</div>
+
+<div className="p-4 border border-gray-700 rounded-lg bg-gray-900">
+<h3 className="font-bold text-blue-400 mb-2 text-sm md:text-base break-words">SCAN Algorithm</h3>
+<p className="text-xs md:text-sm mb-2">Continue in direction until no more requests</p>
+<p className="text-xs text-red-400">❌ Ignores individual wait times</p>
+</div>
+
+<div className="p-4 border border-gray-700 rounded-lg bg-gray-900">
+<h3 className="font-bold text-blue-400 mb-2 text-sm md:text-base break-words">Nearest Car</h3>
+<p className="text-xs md:text-sm mb-2">Send closest available elevator</p>
+<p className="text-xs text-red-400">❌ No lookahead</p>
+</div>
+</div>
+
+These work in simple scenarios but struggle when faced with:
+
+- **Time-varying traffic** — Rush hours vs quiet periods
+- **Multi-objective tradeoffs** — Wait time vs energy vs fairness
+- **Coordination** — Multiple elevators working together
+- **Long-term planning** — Positioning for future demand
+
+**RL agents learn policies that handle all of this.**
+
+</Intuition>
+
+---
+
+## The Problem Domain
+
+<Intuition>
+
+### Our Test Building
+
+<div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-4">
+<div className="text-center p-3 bg-gray-800 rounded">
+<div className="text-3xl font-bold text-blue-400">10</div>
+<div className="text-xs text-gray-400">Floors</div>
+</div>
+<div className="text-center p-3 bg-gray-800 rounded">
+<div className="text-3xl font-bold text-blue-400">3</div>
+<div className="text-xs text-gray-400">Elevators</div>
+</div>
+<div className="text-center p-3 bg-gray-800 rounded">
+<div className="text-3xl font-bold text-blue-400">8</div>
+<div className="text-xs text-gray-400">Capacity</div>
+</div>
+<div className="text-center p-3 bg-gray-800 rounded">
+<div className="text-3xl font-bold text-blue-400">10m</div>
+<div className="text-xs text-gray-400">Episode</div>
+</div>
+</div>
+
+Each episode simulates 300 timesteps (10 minutes at 2 seconds per step). Elevators move at 0.5 floors/timestep.
+
+</Intuition>
+
+<Intuition>
+
+### Traffic Patterns
+
+Real buildings have predictable patterns throughout the day:
+
+<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-6">
+  <div className="border-l-4 border-orange-500 bg-orange-50 dark:bg-orange-900/20 p-4 rounded-r">
+    <div className="flex items-center gap-2 mb-2">
+      <span className="text-2xl">🌅</span>
+      <div className="font-bold text-orange-900 dark:text-orange-300">Morning Rush (7-9am)</div>
+    </div>
+    <div className="text-sm text-gray-700 dark:text-gray-300">70% lobby → upper floors, high volume</div>
+  </div>
+
+  <div className="border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20 p-4 rounded-r">
+    <div className="flex items-center gap-2 mb-2">
+      <span className="text-2xl">🍽️</span>
+      <div className="font-bold text-blue-900 dark:text-blue-300">Lunch Time (12-1pm)</div>
+    </div>
+    <div className="text-sm text-gray-700 dark:text-gray-300">Bidirectional, moderate volume</div>
+  </div>
+
+  <div className="border-l-4 border-purple-500 bg-purple-50 dark:bg-purple-900/20 p-4 rounded-r">
+    <div className="flex items-center gap-2 mb-2">
+      <span className="text-2xl">🌆</span>
+      <div className="font-bold text-purple-900 dark:text-purple-300">Evening Rush (5-7pm)</div>
+    </div>
+    <div className="text-sm text-gray-700 dark:text-gray-300">70% upper floors → lobby, high volume</div>
+  </div>
+
+  <div className="border-l-4 border-gray-500 bg-gray-50 dark:bg-gray-800 p-4 rounded-r">
+    <div className="flex items-center gap-2 mb-2">
+      <span className="text-2xl">🌙</span>
+      <div className="font-bold text-gray-900 dark:text-gray-300">Quiet Period</div>
+    </div>
+    <div className="text-sm text-gray-700 dark:text-gray-300">Low volume, random destinations</div>
+  </div>
+</div>
+
+<Note>
+Passengers arrive following a **Poisson process** with time-varying rates (λ changes by pattern).
+</Note>
+
+</Intuition>
+
+<Intuition>
+
+### Success Metrics
+
+We measure performance across multiple dimensions:
+
+<div className="space-y-3 my-6">
+  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <div className="text-xl shrink-0">⏱️</div>
+    <div className="flex-1 min-w-0">
+      <div className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100">Average wait time</div>
+      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Primary user experience metric</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <div className="text-xl shrink-0">⚠️</div>
+    <div className="flex-1 min-w-0">
+      <div className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100">Max wait time</div>
+      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Fairness — prevent starvation</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <div className="text-xl shrink-0">📊</div>
+    <div className="flex-1 min-w-0">
+      <div className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100">Throughput</div>
+      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">How many passengers served</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <div className="text-xl shrink-0">⚡</div>
+    <div className="flex-1 min-w-0">
+      <div className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100">Energy cost</div>
+      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total floors traveled (efficiency)</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <div className="text-xl shrink-0">📈</div>
+    <div className="flex-1 min-w-0">
+      <div className="font-bold text-sm sm:text-base text-gray-900 dark:text-gray-100">Utilization</div>
+      <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">How full elevators are when moving</div>
+    </div>
+  </div>
+</div>
+
+The RL agent must balance all of these simultaneously.
+
+</Intuition>
+
+---
+
+## The MDP Formulation
+
+<Intuition>
+
+### State Space: What Each Elevator Sees
+
+Each elevator has a **~46-dimensional observation vector** containing:
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
+<div className="p-4 bg-gray-800 rounded border border-gray-700">
+<h4 className="font-bold text-green-400 mb-2">Own State (14 dims)</h4>
+<ul className="text-sm space-y-1">
+<li>• Current floor</li>
+<li>• Direction (UP/DOWN/IDLE)</li>
+<li>• Passenger count</li>
+<li>• Destination floors (which buttons pressed)</li>
+</ul>
+</div>
+
+<div className="p-4 bg-gray-800 rounded border border-gray-700">
+<h4 className="font-bold text-green-400 mb-2">Pending Requests (20 dims)</h4>
+<ul className="text-sm space-y-1">
+<li>• Waiting passengers per floor</li>
+<li>• Request directions (up/down buttons)</li>
+<li>• How long they've been waiting</li>
+</ul>
+</div>
+
+<div className="p-4 bg-gray-800 rounded border border-gray-700">
+<h4 className="font-bold text-green-400 mb-2">Other Elevators (8 dims)</h4>
+<ul className="text-sm space-y-1">
+<li>• Positions of other 2 elevators</li>
+<li>• Their directions</li>
+<li>• Their passenger loads</li>
+</ul>
+</div>
+
+<div className="p-4 bg-gray-800 rounded border border-gray-700">
+<h4 className="font-bold text-green-400 mb-2">Time Context (4 dims)</h4>
+<ul className="text-sm space-y-1">
+<li>• Traffic pattern (one-hot)</li>
+<li>• Morning/Lunch/Evening/Quiet</li>
+</ul>
+</div>
+</div>
+
+<Warning>
+**Partial observability**: Elevators don't know exact passenger destinations until they board—only which floors have waiting passengers and their desired direction.
+</Warning>
+
+</Intuition>
+
+<Mathematical>
+
+The observation for elevator $i$ at time $t$ is:
+
+$$\mathbf{o}_i^t = [\mathbf{s}_i^t, \mathbf{r}^t, \mathbf{e}_{-i}^t, \mathbf{c}^t]$$
+
+where:
+- $\mathbf{s}_i^t \in \mathbb{R}^{14}$: Own state (floor, direction one-hot, passenger count, destination floors binary)
+- $\mathbf{r}^t \in \mathbb{R}^{20}$: Requests (waiting passengers per floor, up/down buttons)
+- $\mathbf{e}_{-i}^t \in \mathbb{R}^{8}$: Other elevators (2 elevators × 4 features each)
+- $\mathbf{c}^t \in \mathbb{R}^{4}$: Traffic context (one-hot)
+
+Total observation dimension: $d = 46$
+
+</Mathematical>
+
+<Intuition>
+
+### Action Space: Where To Go Next
+
+Each elevator chooses a **target floor** (0-9) every timestep.
+
+<Tip>
+We use high-level actions (target floor) rather than low-level control (MOVE_UP/MOVE_DOWN/OPEN_DOOR). The environment handles pathfinding—if target is floor 7, the elevator moves toward 7, stopping to pick up/drop off passengers en route.
+</Tip>
+
+<div className="flex gap-4 my-4 text-center">
+<div className="flex-1 p-3 bg-blue-900 rounded">
+<div className="text-sm text-gray-300">Per Elevator</div>
+<div className="text-2xl font-bold">Discrete(10)</div>
+</div>
+<div className="flex-1 p-3 bg-purple-900 rounded">
+<div className="text-sm text-gray-300">Joint (3 elevators)</div>
+<div className="text-2xl font-bold">10³ = 1000</div>
+</div>
+</div>
+
+</Intuition>
+
+<Mathematical>
+
+At each timestep $t$, each elevator $i$ selects an action:
+
+$$a_i^t \in \mathcal{A}_i = \{0, 1, \ldots, 9\}$$
+
+The joint action is $\mathbf{a}^t = (a_1^t, a_2^t, a_3^t)$.
+
+</Mathematical>
+
+<Intuition>
+
+### Reward Design: Balancing Multiple Goals
+
+The reward function must balance competing objectives:
+
+<div className="space-y-3 my-4">
+
+<div className="p-4 bg-red-900/20 border-l-4 border-red-500 rounded">
+<div className="font-bold text-red-300">Wait Time Penalty</div>
+<div className="text-sm mt-1">-1.0 per waiting passenger per timestep</div>
+<div className="text-xs text-gray-400 mt-1">Primary goal: minimize wait</div>
+</div>
+
+<div className="p-4 bg-orange-900/20 border-l-4 border-orange-500 rounded">
+<div className="font-bold text-orange-300">Starvation Penalty</div>
+<div className="text-sm mt-1">-5.0 per passenger waiting &gt; 60 seconds</div>
+<div className="text-xs text-gray-400 mt-1">Fairness: don't ignore anyone</div>
+</div>
+
+<div className="p-4 bg-green-900/20 border-l-4 border-green-500 rounded">
+<div className="font-bold text-green-300">Delivery Bonus</div>
+<div className="text-sm mt-1">+10.0 per passenger delivered</div>
+<div className="text-xs text-gray-400 mt-1">Reward completion, not just attempts</div>
+</div>
+
+<div className="p-4 bg-blue-900/20 border-l-4 border-blue-500 rounded">
+<div className="font-bold text-blue-300">Energy Cost</div>
+<div className="text-sm mt-1">-0.1 per floor moved</div>
+<div className="text-xs text-gray-400 mt-1">Efficiency: discourage wasted movement</div>
+</div>
+
+</div>
+
+<Tip>
+**Why is delivery bonus (+10) so much larger than wait penalty (-1)?** Because it takes multiple timesteps to pick up and deliver a passenger. This ratio prevents short-term thinking.
+</Tip>
+
+Total reward each timestep:
+
+$$r^t = r_{\text{wait}} + r_{\text{starvation}} + r_{\text{delivery}} + r_{\text{energy}}$$
+
+</Intuition>
+
+<Mathematical>
+
+Formally, the reward at timestep $t$ is:
+
+$$r^t = -\sum_{p \in W^t} w(p) + 10 \cdot |D^t| - 0.1 \cdot \sum_{i=1}^{3} m_i^t$$
+
+where:
+- $W^t$: set of waiting passengers at time $t$
+- $w(p) = \begin{cases} 6 & \text{if wait time} > 60 \\ 1 & \text{otherwise} \end{cases}$
+- $D^t$: set of passengers delivered at time $t$
+- $m_i^t$: floors moved by elevator $i$ at time $t$
+
+The discount factor is $\gamma = 0.99$ (episodes are short, so we weight near-future heavily).
+
+</Mathematical>
+
+<Intuition>
+
+### Episode Structure
+
+<div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
+<div className="p-3 bg-gray-800 rounded text-center">
+<div className="text-xs text-gray-400">Duration</div>
+<div className="font-bold text-blue-400">300 steps</div>
+<div className="text-xs text-gray-500">(10 min)</div>
+</div>
+<div className="p-3 bg-gray-800 rounded text-center">
+<div className="text-xs text-gray-400">Start Position</div>
+<div className="font-bold text-blue-400">Floor 0</div>
+<div className="text-xs text-gray-500">(lobby)</div>
+</div>
+<div className="p-3 bg-gray-800 rounded text-center">
+<div className="text-xs text-gray-400">Arrivals</div>
+<div className="font-bold text-blue-400">Poisson</div>
+<div className="text-xs text-gray-500">(λ varies)</div>
+</div>
+<div className="p-3 bg-gray-800 rounded text-center">
+<div className="text-xs text-gray-400">Termination</div>
+<div className="font-bold text-blue-400">Fixed</div>
+<div className="text-xs text-gray-500">(no early end)</div>
+</div>
+</div>
+
+This creates episodes with rush hours, coordination challenges, and consequences for positioning decisions.
+
+</Intuition>
+
+---
+
+---
+
+## The Multi-Agent Challenge
+
+<Intuition>
+
+With a **single** elevator, this is a standard MDP. With **three** elevators? Much harder.
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
+
+<div className="p-3 sm:p-4 bg-red-900/10 border border-red-700 rounded-lg">
+<div className="text-base sm:text-lg font-bold text-red-400 mb-2 break-words">1. Credit Assignment</div>
+<div className="text-xs sm:text-sm">When wait times improve, which elevator deserves credit? All three contribute, but actions are coupled.</div>
+</div>
+
+<div className="p-3 sm:p-4 bg-orange-900/10 border border-orange-700 rounded-lg">
+<div className="text-base sm:text-lg font-bold text-orange-400 mb-2 break-words">2. Non-Stationarity</div>
+<div className="text-xs sm:text-sm">From elevator 1's view, the world is constantly changing because elevators 2 and 3 are learning too. What worked yesterday fails today.</div>
+</div>
+
+<div className="p-3 sm:p-4 bg-yellow-900/10 border border-yellow-700 rounded-lg">
+<div className="text-base sm:text-lg font-bold text-yellow-400 mb-2 break-words">3. Coordination Without Communication</div>
+<div className="text-xs sm:text-sm">Elevators must learn to partition floors or specialize—without talking to each other. Coordination emerges from shared experience.</div>
+</div>
+
+<div className="p-3 sm:p-4 bg-blue-900/10 border border-blue-700 rounded-lg">
+<div className="text-base sm:text-lg font-bold text-blue-400 mb-2 break-words">4. Safe Exploration</div>
+<div className="text-xs sm:text-sm">Trying "what if I skip this request?" can cause terrible wait times. Can't explore recklessly in production.</div>
+</div>
+
+</div>
+
+</Intuition>
+
+<Mathematical>
+
+This is a **Decentralized Partially Observable Markov Decision Process (Dec-POMDP)**.
+
+Formally:
+- **Agents**: $\mathcal{N} = \{1, 2, 3\}$ (three elevators)
+- **Joint observation**: $\mathbf{o}^t = (o_1^t, o_2^t, o_3^t)$ where each $o_i^t$ depends on true state $s^t$
+- **Joint action**: $\mathbf{a}^t = (a_1^t, a_2^t, a_3^t)$
+- **Shared reward**: $r^t$ (all agents receive the same reward signal)
+- **Transition**: $s^{t+1} \sim P(\cdot | s^t, \mathbf{a}^t)$
+
+The goal is to find a joint policy $\pi = (\pi_1, \pi_2, \pi_3)$ that maximizes expected return:
+
+$$J(\pi) = \mathbb{E}_{\tau \sim \pi}\left[\sum_{t=0}^{T} \gamma^t r^t\right]$$
+
+</Mathematical>
+
+---
+
+## Baseline Approaches
+
+<Intuition>
+
+Before applying RL, let's see what simple rules achieve:
+
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
+
+<div className="p-4 sm:p-5 bg-gray-800 border border-gray-600 rounded-lg">
+<div className="text-lg sm:text-xl font-bold text-red-400 mb-2 sm:mb-3 break-words">🎲 Random</div>
+<div className="text-xs sm:text-sm mb-2 sm:mb-3">Each elevator picks random floors.</div>
+<div className="text-xs space-y-1">
+<div className="text-green-400">✓ Dead simple</div>
+<div className="text-red-400">✗ Ignores all info</div>
+<div className="text-red-400">✗ Terrible</div>
+</div>
+</div>
+
+<div className="p-4 sm:p-5 bg-gray-800 border border-gray-600 rounded-lg">
+<div className="text-lg sm:text-xl font-bold text-yellow-400 mb-2 sm:mb-3 break-words">🚗 Nearest Car</div>
+<div className="text-xs sm:text-sm mb-2 sm:mb-3">Closest idle elevator takes each request.</div>
+<div className="text-xs space-y-1">
+<div className="text-green-400">✓ Intuitive</div>
+<div className="text-red-400">✗ Elevators cluster</div>
+<div className="text-red-400">✗ No lookahead</div>
+</div>
+</div>
+
+<div className="p-4 sm:p-5 bg-gray-800 border border-gray-600 rounded-lg">
+<div className="text-lg sm:text-xl font-bold text-blue-400 mb-2 sm:mb-3 break-words">↕️ SCAN</div>
+<div className="text-xs sm:text-sm mb-2 sm:mb-3">Continue in direction until no more requests, then reverse.</div>
+<div className="text-xs space-y-1">
+<div className="text-green-400">✓ Good for uni-directional</div>
+<div className="text-red-400">✗ Poor for bidirectional</div>
+<div className="text-red-400">✗ No coordination</div>
+</div>
+</div>
+
+</div>
+
+<Note>
+These baselines set performance bounds our RL agent must beat.
+</Note>
+
+</Intuition>
+
+---
+
+## The RL Solution: Independent Q-Learning
+
+<Intuition>
+
+Our approach: **Independent Q-Learning** with a **shared replay buffer**.
+
+<div className="p-5 bg-gradient-to-r from-blue-900 to-purple-900 rounded-lg my-4 border border-blue-700">
+<div className="font-bold text-lg mb-2">💡 Key Idea</div>
+<div className="text-sm">Each elevator has its own Q-network learning $Q_i(o_i, a_i)$, but all three share a replay buffer.</div>
+<div className="mt-3 space-y-1 text-sm">
+<div>✓ <strong>Decentralized execution</strong> — each elevator decides independently</div>
+<div>✓ <strong>Implicit coordination</strong> — learn from each other's experiences</div>
+<div>✓ <strong>Simple</strong> — easier than QMIX, MADDPG, etc.</div>
+</div>
+</div>
+
+</Intuition>
+
+<Intuition>
+
+### Network Architecture
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-4">
+
+<div className="p-4 bg-gray-800 rounded border border-gray-700">
+<div className="font-bold text-blue-400 mb-3">Q-Network (one per elevator)</div>
+<div className="space-y-2 text-sm">
+<div className="flex justify-between">
+<span className="text-gray-400">Input:</span>
+<span className="font-mono text-green-400">46 dims</span>
+</div>
+<div className="flex justify-between">
+<span className="text-gray-400">Hidden:</span>
+<span className="font-mono text-green-400">[128, 128] ReLU</span>
+</div>
+<div className="flex justify-between">
+<span className="text-gray-400">Output:</span>
+<span className="font-mono text-green-400">10 Q-values</span>
+</div>
+</div>
+</div>
+
+<div className="p-4 bg-gray-800 rounded border border-gray-700">
+<div className="font-bold text-purple-400 mb-3">Training Hyperparameters</div>
+<div className="space-y-2 text-sm">
+<div className="flex justify-between">
+<span className="text-gray-400">Replay buffer:</span>
+<span className="font-mono text-green-400">50,000</span>
+</div>
+<div className="flex justify-between">
+<span className="text-gray-400">Batch size:</span>
+<span className="font-mono text-green-400">64</span>
+</div>
+<div className="flex justify-between">
+<span className="text-gray-400">ε-greedy:</span>
+<span className="font-mono text-green-400">1.0 → 0.01</span>
+</div>
+<div className="flex justify-between">
+<span className="text-gray-400">Target update:</span>
+<span className="font-mono text-green-400">every 100 steps</span>
+</div>
+<div className="flex justify-between">
+<span className="text-gray-400">Optimizer:</span>
+<span className="font-mono text-green-400">Adam lr=0.001</span>
+</div>
+</div>
+</div>
+
+</div>
+
+</Intuition>
+
+<Implementation>
+
+Here's the core training loop:
+
+```python
+from rlbook.envs import ElevatorDispatch
+from rlbook.agents import ElevatorDQN
+
+# Create environment
+env = ElevatorDispatch(
+    n_floors=10,
+    n_elevators=3,
+    traffic_pattern="morning_rush",
+    max_timesteps=300
+)
+
+# Create multi-agent DQN
+agent = ElevatorDQN(
+    n_floors=10,
+    n_elevators=3,
+    observation_dim=46,
+    hidden_dims=(128, 128),
+    gamma=0.99,
+    epsilon=1.0,
+    epsilon_decay=0.995
+)
+
+# Training loop
+for episode in range(1000):
+    obs, info = env.reset()
+    episode_reward = 0
+
+    for step in range(env.max_timesteps):
+        # Each elevator selects action from its Q-network
+        actions = agent.select_actions(obs, training=True)
+
+        # Environment step
+        next_obs, reward, done, truncated, info = env.step(actions)
+
+        # Store all three elevators' transitions
+        agent.store_transitions(obs, actions, reward, next_obs, done)
+
+        # Train all networks
+        loss = agent.train_step()
+
+        episode_reward += reward
+        obs = next_obs
+
+        if done or truncated:
+            break
+
+    # Decay exploration
+    agent.decay_epsilon()
+```
+
+**Full implementation**: [code/rlbook/examples/train_elevator.py](https://github.com/ebilgin/rlbook/tree/main/code/rlbook/examples/train_elevator.py)
+
+</Implementation>
+
+<Mathematical>
+
+Each elevator $i$ learns a Q-function $Q_i: \mathcal{O}_i \times \mathcal{A}_i \to \mathbb{R}$ via:
+
+$$Q_i(o_i^t, a_i^t) \leftarrow Q_i(o_i^t, a_i^t) + \alpha \left[r^t + \gamma \max_{a_i'} Q_i(o_i^{t+1}, a_i') - Q_i(o_i^t, a_i^t)\right]$$
+
+Note that the reward $r^t$ is **shared** (global), but each elevator updates based on its own observation-action pairs.
+
+The policy for elevator $i$ is:
+
+$$\pi_i(o_i) = \arg\max_{a_i} Q_i(o_i, a_i)$$
+
+During training, we use ε-greedy exploration:
+
+$$a_i^t = \text{argmax}_{a_i} Q_i(o_i^t, a_i) \text{ with prob. } 1-\epsilon, \text{ else random}$$
+
+Or more precisely:
+- With probability $\epsilon$: select random floor
+- With probability $1-\epsilon$: select $\pi_i(o_i^t)$
+
+</Mathematical>
+
+---
+
+## Results
+
+<Intuition>
+
+**Training time**: 1000 episodes (~30 minutes on laptop CPU)
+
+<div className="my-6 space-y-3">
+
+<div className="flex items-center gap-2 sm:gap-4 p-3 sm:p-4 bg-red-900/10 border border-red-800 rounded">
+<div className="text-2xl sm:text-3xl shrink-0">🎲</div>
+<div className="flex-1 min-w-0">
+<div className="font-bold text-red-400 text-sm sm:text-base truncate">Random</div>
+<div className="text-xs text-gray-400">Baseline - terrible</div>
+</div>
+<div className="text-right shrink-0">
+<div className="text-xl sm:text-2xl font-bold text-red-300">45.2s</div>
+<div className="text-xs text-gray-400">87 served</div>
+</div>
+</div>
+
+<div className="flex items-center gap-2 sm:gap-4 p-3 sm:p-4 bg-yellow-900/10 border border-yellow-800 rounded">
+<div className="text-2xl sm:text-3xl shrink-0">🚗</div>
+<div className="flex-1 min-w-0">
+<div className="font-bold text-yellow-400 text-sm sm:text-base truncate">Nearest Car</div>
+<div className="text-xs text-gray-400">Decent, no coordination</div>
+</div>
+<div className="text-right shrink-0">
+<div className="text-xl sm:text-2xl font-bold text-yellow-300">18.3s</div>
+<div className="text-xs text-gray-400">142 served</div>
+</div>
+</div>
+
+<div className="flex items-center gap-2 sm:gap-4 p-3 sm:p-4 bg-blue-900/10 border border-blue-800 rounded">
+<div className="text-2xl sm:text-3xl shrink-0">↕️</div>
+<div className="flex-1 min-w-0">
+<div className="font-bold text-blue-400 text-sm sm:text-base truncate">SCAN</div>
+<div className="text-xs text-gray-400">Good for uni-directional</div>
+</div>
+<div className="text-right shrink-0">
+<div className="text-xl sm:text-2xl font-bold text-blue-300">16.7s</div>
+<div className="text-xs text-gray-400">148 served</div>
+</div>
+</div>
+
+<div className="flex items-center gap-2 sm:gap-4 p-3 sm:p-4 bg-green-900/20 border-2 border-green-500 rounded">
+<div className="text-2xl sm:text-3xl shrink-0">🧠</div>
+<div className="flex-1 min-w-0">
+<div className="font-bold text-green-400 text-sm sm:text-base truncate">DQN (Trained RL)</div>
+<div className="text-xs text-green-300">26% better!</div>
+</div>
+<div className="text-right shrink-0">
+<div className="text-2xl sm:text-3xl font-bold text-green-400">12.4s</div>
+<div className="text-xs text-gray-300">156 served</div>
+</div>
+</div>
+
+</div>
+
+</Intuition>
+
+<Intuition>
+
+### Emergent Behaviors
+
+The trained agent discovered coordination strategies we never programmed:
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
+
+<div className="p-3 sm:p-4 bg-purple-900/20 border-l-4 border-purple-500 rounded">
+<div className="font-bold text-purple-300 mb-1 text-sm sm:text-base break-words">🗺️ Implicit Zoning</div>
+<div className="text-xs sm:text-sm text-gray-300">Elevators naturally partition floors (e.g., one serves 0-3, another 4-6, another 7-9)</div>
+</div>
+
+<div className="p-3 sm:p-4 bg-blue-900/20 border-l-4 border-blue-500 rounded">
+<div className="font-bold text-blue-300 mb-1 text-sm sm:text-base break-words">🎯 Anticipatory Positioning</div>
+<div className="text-xs sm:text-sm text-gray-300">During quiet periods, position at likely request floors</div>
+</div>
+
+<div className="p-3 sm:p-4 bg-green-900/20 border-l-4 border-green-500 rounded">
+<div className="font-bold text-green-300 mb-1 text-sm sm:text-base break-words">↗️ Direction Awareness</div>
+<div className="text-xs sm:text-sm text-gray-300">Prefer picking up passengers going the same direction</div>
+</div>
+
+<div className="p-3 sm:p-4 bg-orange-900/20 border-l-4 border-orange-500 rounded">
+<div className="font-bold text-orange-300 mb-1 text-sm sm:text-base break-words">⚖️ Load Balancing</div>
+<div className="text-xs sm:text-sm text-gray-300">If one elevator is full, others compensate nearby</div>
+</div>
+
+</div>
+
+<Note>
+This coordination **emerged** from independent learning—we never explicitly programmed these strategies!
+</Note>
+
+</Intuition>
+
+---
+
+## Challenges & Solutions
+
+<Intuition>
+
+<div className="space-y-4 my-6">
+
+<div className="border-l-4 border-red-500 bg-gray-800 p-3 sm:p-4 rounded">
+<div className="font-bold text-red-400 mb-2 text-sm sm:text-base break-words">❌ Challenge: Slow Initial Learning</div>
+<div className="text-xs sm:text-sm text-gray-300 mb-2">With ε=1.0, early episodes are random walks → very negative rewards → slow buffer fill</div>
+<div className="text-xs sm:text-sm text-green-400">✓ <strong>Solution:</strong></div>
+<ul className="text-xs sm:text-sm text-gray-300 ml-4 mt-1 space-y-1">
+<li>• Pre-fill buffer with nearest-car policy (100 episodes)</li>
+<li>• Or use shaped rewards (bonus for approaching requests)</li>
+</ul>
+</div>
+
+<div className="border-l-4 border-orange-500 bg-gray-800 p-3 sm:p-4 rounded">
+<div className="font-bold text-orange-400 mb-2 text-sm sm:text-base break-words">❌ Challenge: Non-Stationarity</div>
+<div className="text-xs sm:text-sm text-gray-300 mb-2">All three elevators' policies change during training → non-stationary environment</div>
+<div className="text-xs sm:text-sm text-green-400">✓ <strong>Solution:</strong></div>
+<ul className="text-xs sm:text-sm text-gray-300 ml-4 mt-1 space-y-1">
+<li>• Shared replay buffer stabilizes learning</li>
+<li>• Target networks reduce moving-target problem</li>
+<li>• Slower epsilon decay allows adaptation</li>
+</ul>
+</div>
+
+<div className="border-l-4 border-yellow-500 bg-gray-800 p-3 sm:p-4 rounded">
+<div className="font-bold text-yellow-400 mb-2 text-sm sm:text-base break-words">❌ Challenge: Exploration in Production</div>
+<div className="text-xs sm:text-sm text-gray-300 mb-2">Can't let elevators explore wildly—real passengers would complain!</div>
+<div className="text-xs sm:text-sm text-green-400">✓ <strong>Solution:</strong></div>
+<ul className="text-xs sm:text-sm text-gray-300 ml-4 mt-1 space-y-1">
+<li>• Train fully in simulation first</li>
+<li>• Deploy with low ε (0.05) for minimal exploration</li>
+<li>• Constrain actions to "reasonable" floors only</li>
+<li>• Safety fallback: if wait &gt; threshold → nearest-car override</li>
+</ul>
+</div>
+
+</div>
+
+</Intuition>
+
+---
+
+## Deployment Considerations
+
+<Intuition>
+
+Moving from simulation to real buildings requires careful engineering:
+
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-4">
+
+<div className="p-4 bg-gray-800 rounded border border-gray-700">
+<div className="font-bold text-blue-400 mb-2">🔄 Sim-to-Real Gap</div>
+<div className="text-sm space-y-2">
+<div className="text-gray-400 text-xs font-bold">Gaps:</div>
+<ul className="text-xs space-y-1 text-gray-300">
+<li>• Real passengers ≠ Poisson</li>
+<li>• Mechanical delays & failures</li>
+<li>• Special events (fire, maintenance)</li>
+</ul>
+<div className="text-gray-400 text-xs font-bold mt-2">Fixes:</div>
+<ul className="text-xs space-y-1 text-gray-300">
+<li>• Use real building data</li>
+<li>• Domain randomization</li>
+<li>• Continuous fine-tuning</li>
+</ul>
+</div>
+</div>
+
+<div className="p-4 bg-gray-800 rounded border border-gray-700">
+<div className="font-bold text-red-400 mb-2">🛡️ Safety Constraints</div>
+<div className="text-sm space-y-2">
+<div className="text-xs space-y-1 text-gray-300">
+<li>• Hard timeout: 2 min max wait</li>
+<li>• Minimum service frequency/floor</li>
+<li>• Emergency mode overrides</li>
+</div>
+<div className="mt-2">
+<Warning>
+Implemented as **wrappers**, not learned!
+</Warning>
+</div>
+</div>
+</div>
+
+<div className="p-4 bg-gray-800 rounded border border-gray-700">
+<div className="font-bold text-yellow-400 mb-2">📊 Monitoring</div>
+<div className="text-sm space-y-2">
+<div className="text-gray-400 text-xs font-bold">Track:</div>
+<ul className="text-xs space-y-1 text-gray-300">
+<li>• Wait time (mean, p95, max)</li>
+<li>• Starvation events</li>
+<li>• Utilization & energy</li>
+</ul>
+<div className="text-gray-400 text-xs font-bold mt-2">Red flags:</div>
+<ul className="text-xs space-y-1 text-red-300">
+<li>• Wait spike → revert to baseline</li>
+<li>• Clustering → check coordination</li>
+</ul>
+</div>
+</div>
+
+</div>
+
+</Intuition>
+
+---
+
+---
+
+## Extensions
+
+<Intuition>
+
+Ways to push this further:
+
+<div className="space-y-3 my-4">
+
+<div className="p-3 sm:p-4 bg-gray-800 rounded border border-blue-600">
+<div className="font-bold text-blue-400 mb-1 text-sm sm:text-base break-words">🏢 Larger Buildings</div>
+<div className="text-xs sm:text-sm text-gray-300">50 floors × 10 elevators. Use **graph neural networks** (GNNs) to encode relationships. Consider CTDE methods like QMIX.</div>
+</div>
+
+<div className="p-3 sm:p-4 bg-gray-800 rounded border border-purple-600">
+<div className="font-bold text-purple-400 mb-1 text-sm sm:text-base break-words">⚡ Express Elevators</div>
+<div className="text-xs sm:text-sm text-gray-300">Some elevators skip floors (1, 10, 20...). RL learns when to use express vs local—better than fixed rules.</div>
+</div>
+
+<div className="p-3 sm:p-4 bg-gray-800 rounded border border-green-600">
+<div className="font-bold text-green-400 mb-1 text-sm sm:text-base break-words">⚖️ Multi-Objective Optimization</div>
+<div className="text-xs sm:text-sm text-gray-300">Trade-off wait time vs energy vs fairness. Use weighted reward. Building managers tune weights. Pareto front finds non-dominated policies.</div>
+</div>
+
+<div className="p-3 sm:p-4 bg-gray-800 rounded border border-yellow-600">
+<div className="font-bold text-yellow-400 mb-1 text-sm sm:text-base break-words">🎯 Destination Dispatch</div>
+<div className="text-xs sm:text-sm text-gray-300">Passengers enter destination before boarding → full observability → easier credit assignment and better routing.</div>
+</div>
+
+<div className="p-3 sm:p-4 bg-gray-800 rounded border border-orange-600">
+<div className="font-bold text-orange-400 mb-1 text-sm sm:text-base break-words">🔄 Lifelong Learning</div>
+<div className="text-xs sm:text-sm text-gray-300">Building patterns shift (new tenants, seasons). Keep replay buffer in production, fine-tune nightly, detect distribution drift and retrain automatically.</div>
+</div>
+
+</div>
+
+</Intuition>
+
+---
+
+---
+
+## Try It Yourself
+
+<Implementation>
+
+### Hands-On Training
+
+Train your own elevator dispatch agent:
+
+```bash
+# Clone the repository
+git clone https://github.com/ebilgin/rlbook
+cd rlbook/code
+
+# Install dependencies
+pip install -e .
+
+# Train for 1000 episodes (takes ~30 minutes on CPU)
+python -m rlbook.examples.train_elevator --episodes 1000
+
+# Try different traffic patterns
+python -m rlbook.examples.train_elevator --traffic evening_rush
+
+# Larger building
+python -m rlbook.examples.train_elevator --n-floors 20 --n-elevators 5
+```
+
+**Colab Notebook**: [Open in Colab](https://colab.research.google.com/github/ebilgin/rlbook/blob/main/notebooks/elevator_dispatch.ipynb) *(coming soon)*
+
+### Exercises
+
+1. **Reward Shaping**: Modify the reward function to prioritize fairness over average wait time. How does this change behavior?
+
+2. **Architecture Experiments**: Try different network sizes ([64,64] vs [256,256]). How does this affect sample efficiency?
+
+3. **Baseline Improvement**: Implement a smarter nearest-car policy that considers elevator direction. Can you beat RL?
+
+4. **Traffic Generalization**: Train on morning_rush, then evaluate on evening_rush. How well does it transfer?
+
+5. **Communication**: Allow elevators to share their target floors with each other. Does this improve coordination?
+
+</Implementation>
+
+## Key Takeaways
+
+<Intuition>
+
+<div className="space-y-3 my-6">
+
+<div className="flex gap-3 sm:gap-4 p-3 sm:p-4 bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg">
+<div className="text-2xl sm:text-3xl font-bold text-blue-300 shrink-0">1</div>
+<div className="min-w-0">
+<div className="font-bold text-blue-200 text-sm sm:text-base break-words">RL shines for coordination problems</div>
+<div className="text-xs sm:text-sm text-gray-300">When multiple agents work together without explicit communication, RL discovers emergent coordination.</div>
+</div>
+</div>
+
+<div className="flex gap-3 sm:gap-4 p-3 sm:p-4 bg-gradient-to-r from-purple-900 to-purple-800 rounded-lg">
+<div className="text-2xl sm:text-3xl font-bold text-purple-300 shrink-0">2</div>
+<div className="min-w-0">
+<div className="font-bold text-purple-200 text-sm sm:text-base break-words">Reward engineering is critical</div>
+<div className="text-xs sm:text-sm text-gray-300">Small changes (delivery bonus, starvation penalty) drastically affect learned behavior.</div>
+</div>
+</div>
+
+<div className="flex gap-3 sm:gap-4 p-3 sm:p-4 bg-gradient-to-r from-green-900 to-green-800 rounded-lg">
+<div className="text-2xl sm:text-3xl font-bold text-green-300 shrink-0">3</div>
+<div className="min-w-0">
+<div className="font-bold text-green-200 text-sm sm:text-base break-words">Baselines matter</div>
+<div className="text-xs sm:text-sm text-gray-300">Simple heuristics (SCAN) can be surprisingly good. Always compare to strong baselines, not just random.</div>
+</div>
+</div>
+
+<div className="flex gap-3 sm:gap-4 p-3 sm:p-4 bg-gradient-to-r from-yellow-900 to-yellow-800 rounded-lg">
+<div className="text-2xl sm:text-3xl font-bold text-yellow-300 shrink-0">4</div>
+<div className="min-w-0">
+<div className="font-bold text-yellow-200 text-sm sm:text-base break-words">Sim-to-real gap is real</div>
+<div className="text-xs sm:text-sm text-gray-300">Training in simulation is easy; deployment requires careful safety engineering and monitoring.</div>
+</div>
+</div>
+
+<div className="flex gap-3 sm:gap-4 p-3 sm:p-4 bg-gradient-to-r from-red-900 to-red-800 rounded-lg">
+<div className="text-2xl sm:text-3xl font-bold text-red-300 shrink-0">5</div>
+<div className="min-w-0">
+<div className="font-bold text-red-200 text-sm sm:text-base break-words">Multi-agent is hard</div>
+<div className="text-xs sm:text-sm text-gray-300">Non-stationarity and credit assignment make MARL harder than single-agent. Independent Q-learning with shared replay is a good starting point.</div>
+</div>
+</div>
+
+</div>
+
+</Intuition>
+
+---
+
+## Further Reading
+
+**Papers**:
+- [Multi-Agent Actor-Critic for Mixed Cooperative-Competitive Environments](https://arxiv.org/abs/1706.02275) (Lowe et al., 2017) - MADDPG
+- [QMIX: Monotonic Value Function Factorisation for Decentralised Multi-Agent RL](https://arxiv.org/abs/1803.11485) (Rashid et al., 2018)
+- [Real-World Elevator Group Control with Deep RL](https://arxiv.org/abs/1811.09004) (Hakonen et al., 2018)
+
+**Related Chapters**:
+- [Deep Q-Networks](/chapters/deep-q-networks) - Foundation for DQN algorithm
+- [Multi-Agent RL](/chapters/multi-agent-rl) - Advanced coordination methods *(coming soon)*
+
+**Related Applications**:
+- Traffic Signal Control - Similar multi-agent coordination problem
+- Warehouse Robotics - Fleet coordination with physical constraints
+
+---
+
+*This application demonstrates that RL isn't just for games and robotics—it's powerful for any sequential decision problem with delayed rewards and coordination requirements.*

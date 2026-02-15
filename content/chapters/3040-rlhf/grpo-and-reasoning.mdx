@@ -1,0 +1,602 @@
+---
+title: "GRPO and the Reasoning Revolution"
+slug: "grpo-and-reasoning"
+section: "Advanced Topics"
+description: "Verifiable rewards, DeepSeek R1, and emergent chain-of-thought"
+status: "draft"
+lastReviewed: null
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+import GRPOExplorer from '@/components/interactive/GRPOExplorer';
+
+# GRPO and the Reasoning Revolution
+
+<GRPOExplorer client:load />
+
+The visualization above shows the heart of GRPO: **advantages are relative**. The same completion can be "good" or "bad" depending on what else the model generated for the same prompt. Try adjusting a single reward and watch every advantage in the group shift. This is the mechanism that taught models to reason.
+
+In the [previous subsection](/chapters/rl-for-llms/rl-algorithms-for-llms), we introduced GRPO as an efficient alternative to PPO -- no critic, no value function, just group statistics. Here we go deeper: what happens when you combine GRPO with rewards you can *verify*? The answer changed the trajectory of AI.
+
+## RLVR: When Rewards Tell the Truth
+
+<Definition title="Reinforcement Learning from Verifiable Rewards (RLVR)">
+
+**RLVR** is RL training where the reward signal comes from ground truth verification rather than a learned proxy. For a math problem, the reward is 1 if the final answer matches the known solution and 0 otherwise. For code, the reward is whether the generated code passes a test suite. No neural network, no approximation, no hacking.
+
+</Definition>
+
+<Intuition>
+
+Recall from [Why RL for Language Models?](/chapters/rl-for-llms/why-rl-for-llms) the distinction between proxy and verifiable rewards. RLHF uses a learned reward model -- a neural network that *predicts* what humans would prefer. It works, but it is a "crappy proxy" (Karpathy's words). Optimize too hard and the model finds shortcuts: verbose confidence, sycophantic agreement, formatting tricks.
+
+RLVR flips the script. The reward is not predicted -- it is *checked*. Did the model get 23 x 17 = 391? Yes or no. Does the Python function pass all test cases? Yes or no. There is nothing to hack.
+
+This distinction matters enormously for what RL can achieve:
+
+</Intuition>
+
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/20 rounded-xl p-5 border border-slate-600/50">
+    <div className="text-slate-300 font-bold text-lg mb-3">RLHF (Proxy Rewards)</div>
+    <div className="text-slate-400 text-sm space-y-2">
+      <p>Reward model trained on ~100K human comparisons. An approximation that can be exploited.</p>
+    </div>
+    <div className="mt-3 space-y-2">
+      <div className="flex items-start gap-2">
+        <span className="text-emerald-400 text-sm">+</span>
+        <span className="text-slate-400 text-sm">Works for subjective tasks</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-red-400 text-sm">-</span>
+        <span className="text-slate-400 text-sm">Must limit optimization (high KL penalty)</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-red-400 text-sm">-</span>
+        <span className="text-slate-400 text-sm">Cannot push capabilities beyond training data</span>
+      </div>
+    </div>
+  </div>
+  <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-xl p-5 border-2 border-amber-500/70 ring-2 ring-amber-500/20">
+    <div className="text-amber-400 font-bold text-lg mb-3">RLVR (Verifiable Rewards)</div>
+    <div className="text-slate-400 text-sm space-y-2">
+      <p>Ground truth check: did the model get the right answer? Binary signal, no approximation.</p>
+    </div>
+    <div className="mt-3 space-y-2">
+      <div className="flex items-start gap-2">
+        <span className="text-emerald-400 text-sm">+</span>
+        <span className="text-slate-400 text-sm">Cannot be hacked -- reward is truth</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-emerald-400 text-sm">+</span>
+        <span className="text-slate-400 text-sm">Can optimize aggressively (low KL penalty)</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-emerald-400 text-sm">+</span>
+        <span className="text-slate-400 text-sm">Model discovers novel strategies</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-red-400 text-sm">-</span>
+        <span className="text-slate-400 text-sm">Only works for tasks with checkable answers</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<Intuition>
+
+Karpathy captured why this matters in his 2025 Year in Review: RLVR has emerged as a leading paradigm for capability improvement. When you train against verifiable rewards, you are doing "real RL" -- closer to AlphaGo than to RLHF. The model is not learning to mimic what humans wrote; it is learning to *solve problems* through trial and error, just like an agent learning to play Go.
+
+The capability-to-cost ratio of RLVR is remarkably high. You need only a dataset of problems with known answers -- no expensive human annotators, no reward model training, no complex multi-model infrastructure. A math dataset and a correctness checker are enough to produce reasoning breakthroughs.
+
+**Types of verifiable rewards:**
+- **Math**: Extract the final numerical answer, compare to ground truth (GSM8K, MATH benchmark)
+- **Code**: Execute the generated function against a test suite
+- **Logic puzzles**: Check if the solution satisfies all constraints
+- **Formal proofs**: Verify against a proof assistant (Lean, Coq)
+
+</Intuition>
+
+<Mathematical>
+
+The verifiable reward function is typically binary:
+
+$$R(x, y) = \mathbb{1}[\text{extract}(y) = \text{answer}(x)]$$
+
+where $\text{extract}(y)$ parses the final answer from the model's response and $\text{answer}(x)$ is the ground truth for prompt $x$.
+
+Because this reward is exact, the KL penalty coefficient $\beta$ can be set much lower than in RLHF:
+- **RLHF typical**: $\beta \approx 0.1 - 0.2$ (must constrain strongly to prevent reward hacking)
+- **RLVR typical**: $\beta \approx 0.01 - 0.04$ (light constraint, allowing more aggressive optimization)
+
+This means the model has more freedom to explore and discover novel solution strategies. The reward cannot be exploited, so there is no danger in letting the model deviate further from the reference.
+
+</Mathematical>
+
+## GRPO: The Algorithm Step by Step
+
+<Note title="Building on the Previous Section">
+
+We introduced GRPO's core idea in [RL Algorithms for LLMs](/chapters/rl-for-llms/rl-algorithms-for-llms). This section provides a more detailed algorithmic walkthrough and deepens the mathematical treatment. If the group-relative advantage concept feels unfamiliar, review that section first.
+
+</Note>
+
+<Intuition>
+
+GRPO turns the problem of training a reasoning model into five concrete steps. Here is the algorithm for a single training iteration:
+
+**Step 1: Sample a group.** For each prompt $x$, generate $G$ completions from the current policy $\pi_\theta$. Typical group sizes are 8 to 64.
+
+**Step 2: Compute rewards.** Score each completion. For RLVR, this is binary: $r_i = 1$ if correct, $r_i = 0$ if wrong.
+
+**Step 3: Compute group-relative advantages.** Normalize rewards within the group. The advantage of completion $i$ is how much better (or worse) it scored compared to the group average, measured in standard deviations.
+
+**Step 4: Compute importance ratios.** For each token in each completion, compute the ratio of the current policy's probability to the old policy's probability. This is the same ratio used in [PPO](/chapters/ppo).
+
+**Step 5: Apply clipped objective + KL penalty.** Use PPO's clipped surrogate loss with the group-relative advantages, plus a KL divergence penalty to stay close to the reference model.
+
+That is the entire algorithm. No critic network. No value function. No GAE computation. The group statistics serve as a "free" baseline.
+
+</Intuition>
+
+<Mathematical>
+
+**Full GRPO formulation:**
+
+Given a prompt $x$, sample $G$ completions $\{y_i\}_{i=1}^G \sim \pi_{\theta_{\text{old}}}(y \mid x)$.
+
+**Step 2 -- Rewards:**
+
+$$r_i = R(x, y_i)$$
+
+**Step 3 -- Group-relative advantage:**
+
+$$\hat{A}_i = \frac{r_i - \mu_G}{\sigma_G + \epsilon}$$
+
+where $\mu_G = \frac{1}{G}\sum_{j=1}^G r_j$ is the group mean and $\sigma_G = \sqrt{\frac{1}{G}\sum_{j=1}^G (r_j - \mu_G)^2}$ is the group standard deviation.
+
+**Step 4 -- Per-token importance ratio:**
+
+$$\rho_{i,t} = \frac{\pi_\theta(y_{i,t} \mid x, y_{i,{< t}})}{\pi_{\theta_{\text{old}}}(y_{i,t} \mid x, y_{i,{< t}})}$$
+
+**Step 5 -- Clipped objective with KL penalty:**
+
+$$L_{\text{GRPO}}(\theta) = -\frac{1}{G}\sum_{i=1}^{G}\frac{1}{T_i}\sum_{t=1}^{T_i} \min\left(\rho_{i,t}\, \hat{A}_i,\; \text{clip}(\rho_{i,t},\, 1-\epsilon,\, 1+\epsilon)\, \hat{A}_i\right) + \beta\, D_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}})$$
+
+Key observations:
+- $\hat{A}_i$ is **constant across all tokens** in response $i$ -- the advantage is at the response level, not the token level
+- The clipping applies **per-token** through $\rho_{i,t}$, preventing any single token's probability from changing too much
+- The KL penalty is against the **reference model** $\pi_{\text{ref}}$ (the frozen SFT checkpoint), not against $\pi_{\theta_{\text{old}}}$
+
+</Mathematical>
+
+## Connection to REINFORCE
+
+<Note title="REINFORCE Revisited">
+
+If the derivation below feels unfamiliar, review the [REINFORCE chapter](/chapters/reinforce), especially the section on [baselines and variance reduction](/chapters/reinforce/baselines). GRPO's group mean is a specific instance of the REINFORCE baseline technique.
+
+</Note>
+
+<Intuition>
+
+GRPO is not a fundamentally new algorithm. It is **REINFORCE with three practical additions**:
+
+1. **Group mean as baseline**: Instead of training a value network to estimate $V(s)$, GRPO uses the average reward across the group. This is a valid baseline in the REINFORCE sense -- it reduces variance without introducing bias.
+
+2. **PPO clipping**: The importance ratio is clipped to prevent catastrophically large updates. This is borrowed directly from [PPO](/chapters/ppo/ppo-algorithm).
+
+3. **KL penalty against reference model**: Prevents the policy from drifting too far from the pretrained model, preserving general capabilities while improving reasoning.
+
+**Why is the group mean a good baseline?** In the standard REINFORCE derivation, any function that does not depend on the action can serve as a baseline without biasing the gradient. The group mean $\mu_G$ depends only on the prompt and the group composition -- not on which specific completion we are computing the gradient for. So it is a valid baseline.
+
+The advantage of this baseline over a learned value function: it requires *zero training*. No separate network, no optimization loop, no hyperparameter tuning for the critic. The price you pay is variance -- the group mean is a noisier estimate of the expected reward than a well-trained value function. But for large group sizes ($G \geq 8$), this noise is manageable.
+
+</Intuition>
+
+<Mathematical>
+
+**REINFORCE with baseline:**
+
+$$\nabla_\theta J(\theta) = \mathbb{E}\left[\nabla_\theta \log \pi_\theta(y \mid x) \cdot (R(x, y) - b(x))\right]$$
+
+where $b(x)$ is any baseline that does not depend on $y$.
+
+**GRPO's baseline choice:**
+
+$$b(x) = \mu_G = \frac{1}{G}\sum_{j=1}^G R(x, y_j)$$
+
+This is a *Monte Carlo estimate* of $\mathbb{E}_{y \sim \pi_\theta}[R(x, y)]$, the expected reward for prompt $x$ under the current policy. As $G \to \infty$, it converges to the optimal baseline $V^{\pi_\theta}(x)$.
+
+The normalization by $\sigma_G$ is an additional variance reduction technique: it ensures the advantage is on a standardized scale regardless of the reward magnitude. This is not theoretically required (it does not affect the gradient direction), but it improves training stability significantly.
+
+**Why not just use REINFORCE?**
+
+Vanilla REINFORCE computes one gradient step per batch and discards the data. GRPO reuses the data through the importance ratio $\rho_{i,t}$, allowing multiple optimization epochs per batch -- just like PPO. The clipping ensures this reuse does not lead to policy collapse.
+
+</Mathematical>
+
+## The DeepSeek R1 Story
+
+This is the section where theory meets practice. DeepSeek R1 (January 2025) demonstrated that GRPO with verifiable rewards can produce models that reason step-by-step -- without ever being explicitly taught chain-of-thought.
+
+### The Four-Stage Pipeline
+
+<div className="my-8 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
+  <div className="text-slate-200 font-medium text-center mb-6">DeepSeek R1 Training Pipeline</div>
+  <div className="flex items-stretch justify-center gap-2 md:gap-3 flex-wrap">
+    <div className="text-center px-3 py-4 bg-cyan-900/20 rounded-lg border border-cyan-700/40 flex-1 min-w-0" style={{minWidth: '130px', maxWidth: '200px'}}>
+      <div className="text-cyan-400 text-xs uppercase tracking-wider mb-2">Stage 1</div>
+      <div className="text-cyan-300 font-bold text-sm mb-2">Cold-Start SFT</div>
+      <div className="text-slate-400 text-xs leading-relaxed">Fine-tune on curated chain-of-thought examples. Teaches the model the *format* of step-by-step reasoning.</div>
+    </div>
+    <div className="text-slate-500 text-xl self-center hidden md:block">&#8594;</div>
+    <div className="text-center px-3 py-4 bg-amber-900/20 rounded-lg border-2 border-amber-500/60 flex-1 min-w-0" style={{minWidth: '130px', maxWidth: '200px'}}>
+      <div className="text-amber-400 text-xs uppercase tracking-wider mb-2">Stage 2</div>
+      <div className="text-amber-300 font-bold text-sm mb-2">RL for Reasoning</div>
+      <div className="text-slate-400 text-xs leading-relaxed">GRPO with correctness-only rewards. Binary: right answer = 1, wrong = 0. This is where reasoning emerges.</div>
+    </div>
+    <div className="text-slate-500 text-xl self-center hidden md:block">&#8594;</div>
+    <div className="text-center px-3 py-4 bg-violet-900/20 rounded-lg border border-violet-700/40 flex-1 min-w-0" style={{minWidth: '130px', maxWidth: '200px'}}>
+      <div className="text-violet-400 text-xs uppercase tracking-wider mb-2">Stage 3</div>
+      <div className="text-violet-300 font-bold text-sm mb-2">Rejection Sampling + SFT</div>
+      <div className="text-slate-400 text-xs leading-relaxed">600K reasoning + 200K non-reasoning examples. Filters the best outputs from Stage 2 and re-trains.</div>
+    </div>
+    <div className="text-slate-500 text-xl self-center hidden md:block">&#8594;</div>
+    <div className="text-center px-3 py-4 bg-emerald-900/20 rounded-lg border border-emerald-700/40 flex-1 min-w-0" style={{minWidth: '130px', maxWidth: '200px'}}>
+      <div className="text-emerald-400 text-xs uppercase tracking-wider mb-2">Stage 4</div>
+      <div className="text-emerald-300 font-bold text-sm mb-2">RL for Alignment</div>
+      <div className="text-slate-400 text-xs leading-relaxed">RLHF for helpfulness and harmlessness. Standard alignment, applied after reasoning is established.</div>
+    </div>
+  </div>
+  <div className="text-center mt-6 text-slate-500 text-xs">
+    Stage 2 is the breakthrough: correctness-only RL produces chain-of-thought reasoning.
+  </div>
+</div>
+
+<Intuition>
+
+Each stage serves a distinct purpose:
+
+**Stage 1 (Cold-Start SFT)** solves the bootstrapping problem. A base model does not know how to produce step-by-step reasoning at all. You need a small amount of curated chain-of-thought data to teach the *format*: "think step by step, show your work, box your final answer." This is not where reasoning emerges -- it just teaches the model what reasoning *looks like*.
+
+**Stage 2 (RL for Reasoning)** is where the magic happens. Using GRPO with binary correctness rewards, the model learns which reasoning *strategies* actually lead to correct answers. The reward does not care about the reasoning process -- only the final answer. Yet the model spontaneously learns to self-correct, backtrack, and verify its own work.
+
+**Stage 3 (Rejection Sampling + SFT)** is a cleanup phase. Stage 2 produces powerful reasoning but also artifacts: repetitive loops, language mixing (switching between Chinese and English mid-sentence), and formatting inconsistencies. DeepSeek samples many responses, keeps the best ones, and re-trains with SFT to clean up the output.
+
+**Stage 4 (RL for Alignment)** applies standard RLHF for helpfulness and safety. Reasoning models also need to be polite, safe, and well-formatted. This is the same alignment training we covered in previous subsections, applied as the final polish.
+
+</Intuition>
+
+### R1-Zero: Pure RL, No SFT
+
+<Intuition>
+
+Before building R1, DeepSeek ran an even more radical experiment: **R1-Zero**. They applied GRPO directly to a base model (DeepSeek-V3-Base) with *no supervised fine-tuning at all*. No chain-of-thought demonstrations. No instruction tuning. Just raw RL against correctness rewards.
+
+The result was remarkable and flawed in equal measure.
+
+**What worked:**
+- The model learned to solve math problems it could not solve before
+- It spontaneously developed multi-step reasoning
+- It discovered self-verification: checking its own work before producing a final answer
+- Performance improved steadily throughout training
+
+**What broke:**
+- Repetitive loops: the model would repeat the same reasoning step dozens of times
+- Language mixing: responses switched between Chinese and English mid-sentence
+- Poor formatting: no consistent structure to the reasoning output
+- Readability: the reasoning was correct but nearly impossible for humans to follow
+
+R1-Zero proved the concept: **reasoning CAN emerge from pure RL**, without any demonstrations. But the output was too messy for production use, which motivated the four-stage pipeline of R1.
+
+</Intuition>
+
+### The "Aha Moment"
+
+<Example title="Emergent Self-Reflection in R1-Zero">
+
+During training, DeepSeek observed what they called an "aha moment" -- the point where the model spontaneously began producing self-reflective reasoning. Here is a representative example (paraphrased from the R1 paper):
+
+**Problem:** A math problem requiring multi-step calculation.
+
+**Early training response:**
+"The answer is 42."
+(Incorrect, no reasoning shown.)
+
+**Mid-training response:**
+"Let me calculate step by step. First, 23 times 17... 23 times 10 is 230, 23 times 7 is 161... 230 plus 161 is 391. The answer is 391."
+(Correct, with chain-of-thought.)
+
+**Later training response:**
+"Let me work through this carefully. First attempt: 23 times 17... I get 391. **Wait, let me reconsider.** Let me verify by computing 17 times 23 instead. 17 times 20 is 340, 17 times 3 is 51, 340 plus 51 is 391. Both methods give 391, so I am confident. The answer is 391."
+(Correct, with self-verification and backtracking.)
+
+The phrase "Wait, let me reconsider" was never in the training data. The model invented self-reflection as a *strategy for getting higher rewards*. Responses that pause and verify are more likely to be correct, so RL reinforces this behavior.
+
+</Example>
+
+<Warning title="How Remarkable Is This?">
+
+The emergence of self-reflection in R1-Zero generated enormous excitement. But the significance is debated. Some researchers found that self-reflective patterns (like "wait, let me reconsider") appear in base model outputs at epoch 0 -- before any RL training. They are rare but present, because the pretraining data contains examples of human self-correction.
+
+What RL does is not *create* self-reflection from nothing. It *selects for* responses that happen to contain self-reflection, because those responses tend to be correct. Over many iterations, self-reflective patterns become dominant because they are rewarded.
+
+This is still significant: RL turns a latent, unreliable capability into a consistent, reliable one. But "emergent reasoning from pure RL" is a stronger claim than the evidence supports. A more accurate framing: **RL amplifies latent capabilities by selecting for strategies that improve outcomes.**
+
+</Warning>
+
+## The Emergence Debate
+
+<Intuition>
+
+Does RL create genuinely new reasoning capabilities, or does it merely surface and strengthen what the base model already knows? This question matters for understanding the limits of RLVR.
+
+**The strong claim:** RL creates new reasoning capabilities that did not exist in the base model. The model learns to reason through trial and error, just as AlphaGo learned strategies no human had conceived.
+
+**The counter-evidence:** Base models already contain chain-of-thought patterns, self-correction, and step-by-step reasoning in their pretraining data (web text, textbooks, math forums). RL does not *invent* these patterns; it makes them more frequent and reliable.
+
+**The nuanced view (likely correct):** RL does something subtle but powerful. It does not create individual reasoning patterns from nothing. Instead, it learns to *compose and select* patterns in ways the base model could not reliably do. A base model might occasionally self-correct. After RL, it self-corrects *when it matters* -- when its first attempt is likely wrong. This reliable, targeted application of reasoning strategies is a genuine new capability, even if the individual building blocks existed before.
+
+This parallels what we see in classical RL: a randomly initialized policy contains all possible behaviors with some probability. Training does not create new behaviors -- it makes the good ones more likely. The "emergence" is in the reliable composition, not the individual components.
+
+</Intuition>
+
+## Process vs. Outcome Reward Models
+
+<Intuition>
+
+So far, we have focused on **outcome rewards**: score the final answer, ignore the reasoning process. This is what RLVR and DeepSeek R1 use. But there is an alternative: reward each *step* of the reasoning.
+
+</Intuition>
+
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-xl p-5 border border-amber-700/50">
+    <div className="text-amber-400 font-bold text-lg mb-3">Outcome Reward Model (ORM)</div>
+    <div className="text-slate-300 text-sm space-y-2">
+      <p>Scores only the final answer. Used by DeepSeek R1, OpenAI o1/o3.</p>
+      <p>Simple to implement: just check if the answer is correct.</p>
+    </div>
+    <div className="mt-3 space-y-2">
+      <div className="flex items-start gap-2">
+        <span className="text-emerald-400 text-sm">+</span>
+        <span className="text-slate-400 text-sm">Cheap: one check per response</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-emerald-400 text-sm">+</span>
+        <span className="text-slate-400 text-sm">No annotation of intermediate steps</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-red-400 text-sm">-</span>
+        <span className="text-slate-400 text-sm">Poor credit assignment: which step caused failure?</span>
+      </div>
+    </div>
+  </div>
+  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 rounded-xl p-5 border border-violet-700/50">
+    <div className="text-violet-400 font-bold text-lg mb-3">Process Reward Model (PRM)</div>
+    <div className="text-slate-300 text-sm space-y-2">
+      <p>Scores each reasoning step. Inspired by OpenAI's "Let's Verify Step by Step" (2023).</p>
+      <p>Better credit assignment: knows exactly which step went wrong.</p>
+    </div>
+    <div className="mt-3 space-y-2">
+      <div className="flex items-start gap-2">
+        <span className="text-emerald-400 text-sm">+</span>
+        <span className="text-slate-400 text-sm">~8% higher accuracy on math tasks</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-emerald-400 text-sm">+</span>
+        <span className="text-slate-400 text-sm">Better feedback for learning</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-red-400 text-sm">-</span>
+        <span className="text-slate-400 text-sm">1.5-5x more expensive (annotate every step)</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-red-400 text-sm">-</span>
+        <span className="text-slate-400 text-sm">Harder to train: needs step-level labels</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<Intuition>
+
+The trade-off is credit assignment vs. cost. An ORM tells you "this response is wrong" but not *where* the reasoning went off track. A PRM can pinpoint the exact step that introduced an error, providing a much stronger learning signal.
+
+OpenAI's "Let's Verify Step by Step" paper (2023) showed that PRMs significantly outperform ORMs for selecting correct solutions among multiple candidates (best-of-N sampling). On the MATH benchmark, PRM-guided selection was approximately 8% more accurate than ORM-guided selection.
+
+But PRMs are expensive: you need human annotations for every reasoning step, not just the final answer. And you need a model that can reliably classify steps as correct or incorrect, which is itself a hard problem.
+
+In practice, the field has largely converged on ORMs for training (because they are simpler) and PRMs for inference-time selection (because they improve final accuracy). DeepSeek R1, OpenAI o1, and most reasoning models use outcome rewards during RL training.
+
+</Intuition>
+
+<Mathematical>
+
+**ORM scoring:**
+
+$$R_{\text{ORM}}(x, y) = \text{score}(\text{final\_answer}(y))$$
+
+A single scalar for the entire response.
+
+**PRM scoring:**
+
+$$R_{\text{PRM}}(x, y) = \prod_{k=1}^{K} P(\text{step } k \text{ is correct} \mid x, y_{\leq k})$$
+
+where $K$ is the number of reasoning steps. The product form means one bad step brings the entire score down, naturally identifying where reasoning fails.
+
+For best-of-N selection at inference time, the PRM score provides a more reliable ranking than the ORM score because it evaluates the *reasoning process*, not just the outcome. A response might reach the right answer by lucky cancellation of errors -- the PRM would catch this, while the ORM would not.
+
+</Mathematical>
+
+## Test-Time Compute: A New Scaling Dimension
+
+<Intuition>
+
+For years, scaling in AI meant one thing: **bigger models**. More parameters, more training data, more compute at training time. GPT-3 to GPT-4 was a story of scale.
+
+Reasoning models introduce a second scaling dimension: **test-time compute**. Instead of making the model bigger, you let it think *longer*. A model that generates a 2000-token chain-of-thought will generally outperform the same model generating a 200-token response, because more tokens mean more reasoning steps, more self-verification, and more chances to correct errors.
+
+This decouples capability from model size. A smaller model thinking for 30 seconds can outperform a larger model answering immediately. OpenAI's o1 demonstrated this: by generating extensive internal reasoning chains before responding, it achieved performance that would have required a much larger model at lower inference compute.
+
+The implications are profound:
+- **Adaptive compute**: easy questions get short reasoning chains; hard questions get long ones
+- **Cost efficiency**: deploy a smaller model that thinks longer, rather than a bigger model that answers instantly
+- **Capability on demand**: the same model can operate at different intelligence levels depending on how much thinking time you allow
+
+This is still an active area of research. The relationship between reasoning chain length and accuracy is not yet well understood, and there are diminishing returns -- longer chains eventually introduce more noise than signal. But the core insight holds: **thinking harder is a viable alternative to being bigger**.
+
+</Intuition>
+
+## Putting It All Together
+
+<Implementation>
+
+Here is the core GRPO training loop with verifiable rewards, distilled to its essentials:
+
+```python
+import torch
+import torch.nn.functional as F
+
+def grpo_training_step(
+    policy, ref_policy, prompt_ids, tokenizer,
+    reward_fn, group_size=8, clip_eps=0.2,
+    beta=0.04, max_new_tokens=256
+):
+    """
+    One GRPO step: sample, score, normalize, clip, update.
+
+    Args:
+        policy: The model being trained
+        ref_policy: Frozen reference model (SFT checkpoint)
+        prompt_ids: Tokenized prompt [1, prompt_len]
+        reward_fn: callable(prompt, response) -> float
+        group_size: Number of completions per prompt
+    """
+    device = next(policy.parameters()).device
+    prompt_len = prompt_ids.shape[1]
+
+    # Step 1: Sample G completions
+    repeated = prompt_ids.repeat(group_size, 1)
+    with torch.no_grad():
+        outputs = policy.generate(
+            repeated, max_new_tokens=max_new_tokens,
+            do_sample=True, temperature=0.7
+        )
+    response_ids = outputs[:, prompt_len:]
+    responses = tokenizer.batch_decode(
+        response_ids, skip_special_tokens=True
+    )
+    prompt_text = tokenizer.decode(
+        prompt_ids[0], skip_special_tokens=True
+    )
+
+    # Step 2: Compute rewards (verifiable!)
+    rewards = torch.tensor([
+        reward_fn(prompt_text, r) for r in responses
+    ], device=device)
+
+    # Step 3: Group-relative advantages
+    mu, sigma = rewards.mean(), rewards.std() + 1e-8
+    advantages = (rewards - mu) / sigma  # [G]
+
+    # Step 4: Compute log-probs for ratio
+    with torch.no_grad():
+        old_logits = policy(outputs).logits
+        old_lp = F.log_softmax(old_logits[:, prompt_len-1:-1], dim=-1)
+        old_tok_lp = old_lp.gather(-1, response_ids.unsqueeze(-1)).squeeze(-1)
+
+        ref_logits = ref_policy(outputs).logits
+        ref_lp = F.log_softmax(ref_logits[:, prompt_len-1:-1], dim=-1)
+        ref_tok_lp = ref_lp.gather(-1, response_ids.unsqueeze(-1)).squeeze(-1)
+
+    # Step 5: Clipped objective + KL penalty
+    new_logits = policy(outputs).logits
+    new_lp = F.log_softmax(new_logits[:, prompt_len-1:-1], dim=-1)
+    new_tok_lp = new_lp.gather(-1, response_ids.unsqueeze(-1)).squeeze(-1)
+
+    ratio = torch.exp(new_tok_lp - old_tok_lp)  # [G, T]
+    adv = advantages.unsqueeze(1).expand_as(ratio)
+
+    # PPO clipped loss
+    loss1 = -adv * ratio
+    loss2 = -adv * ratio.clamp(1 - clip_eps, 1 + clip_eps)
+    pg_loss = torch.max(loss1, loss2).mean()
+
+    # KL penalty against reference
+    log_r = ref_tok_lp - new_tok_lp
+    kl = (torch.exp(log_r) - log_r - 1).mean()
+
+    return pg_loss + beta * kl
+```
+
+The reward function for math is as simple as:
+
+```python
+import re
+
+def math_reward(prompt: str, response: str) -> float:
+    """Binary reward: 1 if correct, 0 if wrong."""
+    # Extract answer from boxed format: \boxed{391}
+    match = re.search(r'\\boxed\{([^}]+)\}', response)
+    if not match:
+        return 0.0
+
+    predicted = match.group(1).strip()
+    # Ground truth extracted from prompt metadata
+    expected = get_ground_truth(prompt)
+    return 1.0 if predicted == expected else 0.0
+```
+
+</Implementation>
+
+## Summary
+
+<div className="space-y-4 my-8">
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-2xl">1</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">Verifiable rewards change the game</div>
+      <div className="text-slate-400 text-sm">RLVR replaces learned proxy rewards with ground truth verification. This eliminates reward hacking and allows aggressive optimization, producing genuine capability improvements.</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-2xl">2</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">GRPO is REINFORCE made practical</div>
+      <div className="text-slate-400 text-sm">Group-relative advantages serve as a free baseline, eliminating the need for a critic network. Combined with PPO clipping and KL regularization, it is stable, memory-efficient, and effective.</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-2xl">3</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">DeepSeek R1 proved the concept</div>
+      <div className="text-slate-400 text-sm">A four-stage pipeline -- cold-start SFT, RL for reasoning, rejection sampling, RL for alignment -- produced a model with emergent chain-of-thought and self-verification capabilities.</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-2xl">4</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">RL amplifies latent capabilities</div>
+      <div className="text-slate-400 text-sm">Reasoning patterns exist in base models from pretraining. RL does not create them from nothing -- it selects for them, making occasional behaviors consistent and reliable.</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-2xl">5</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">Test-time compute is a new scaling axis</div>
+      <div className="text-slate-400 text-sm">Reasoning models can trade inference time for accuracy: thinking longer on hard problems. This decouples capability from model size, opening new design trade-offs.</div>
+    </div>
+  </div>
+</div>
+
+<Tip title="Next: Building a Reasoning Model">
+
+Theory is only half the story. In the next subsection, we walk through Karpathy's [nanochat](https://github.com/karpathy/nanochat) implementation -- a minimal, readable GRPO training loop that takes a small language model from 60% to 75% on GSM8K math problems. You will see every concept from this section in working code.
+
+</Tip>

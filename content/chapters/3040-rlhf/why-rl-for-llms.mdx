@@ -1,0 +1,480 @@
+---
+title: "Why RL for Language Models?"
+slug: "why-rl-for-llms"
+section: "Advanced Topics"
+description: "The alignment problem and the reasoning revolution"
+status: "draft"
+lastReviewed: null
+---
+
+import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
+import { KeyTakeaways } from '@/components/ui/ChapterNav';
+import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+
+# Why RL for Language Models?
+
+In 2022, reinforcement learning turned autocomplete engines into conversational partners. In 2025, it taught them to *reason*. These are two different problems solved by the same tool: **policy gradients**.
+
+This subsection explains why RL became essential for language models, what it adds that supervised learning cannot, and how the field evolved from proxy rewards to verifiable ones.
+
+## Two Motivations, One Tool
+
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-xl p-5 border border-cyan-700/50">
+    <div className="text-cyan-400 font-bold text-lg mb-2">Alignment (2022)</div>
+    <div className="text-slate-300 text-sm space-y-2">
+      <p>Teaching models what humans *want*. We can't write a loss function for "helpful" or "harmless," so we learn one from human preferences.</p>
+      <p className="text-cyan-400/70">Key technique: RLHF (PPO + learned reward model)</p>
+    </div>
+    <div className="text-slate-400 text-xs bg-slate-800/50 rounded-lg p-3 mt-3">
+      "Make responses that humans prefer."
+    </div>
+  </div>
+  <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-xl p-5 border border-amber-700/50">
+    <div className="text-amber-400 font-bold text-lg mb-2">Reasoning (2024-2025)</div>
+    <div className="text-slate-300 text-sm space-y-2">
+      <p>Developing new *capabilities*. Instead of human preferences, models train against math problems, code tests, and other tasks with checkable answers.</p>
+      <p className="text-amber-400/70">Key technique: GRPO + verifiable rewards (RLVR)</p>
+    </div>
+    <div className="text-slate-400 text-xs bg-slate-800/50 rounded-lg p-3 mt-3">
+      "Get the right answer, however you get there."
+    </div>
+  </div>
+</div>
+
+<Intuition>
+
+These two revolutions share a common backbone: **policy gradient methods**. Everything you learned about [REINFORCE](/chapters/reinforce) and [PPO](/chapters/ppo) applies directly. The model is a policy. Tokens are actions. Prompts are states. The only difference is the reward signal:
+
+- **Alignment** uses a *learned* reward (a neural network trained on human preferences)
+- **Reasoning** uses a *verifiable* reward (did the model get the math problem right?)
+
+The same optimization machinery drives both. But as we will see, these two reward types behave very differently in practice.
+
+</Intuition>
+
+## The Alignment Problem
+
+<Definition title="The Alignment Problem">
+
+The challenge of ensuring AI systems pursue goals aligned with human values and intentions. An aligned AI does what humans *actually want*, not just what maximizes some proxy metric.
+
+</Definition>
+
+Why can't we just write a loss function for "be helpful"? Consider the challenge:
+
+<div className="my-6 space-y-3">
+  <div className="flex items-start gap-3 bg-red-900/20 border border-red-800/40 rounded-lg p-4">
+    <div className="text-red-400 font-bold text-lg">1.</div>
+    <div>
+      <div className="text-red-300 font-medium">We can't specify what we want</div>
+      <div className="text-slate-400 text-sm">"Be helpful" is too vague. "Always answer accurately" fails on dangerous questions. Every rule creates new edge cases.</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-3 bg-red-900/20 border border-red-800/40 rounded-lg p-4">
+    <div className="text-red-400 font-bold text-lg">2.</div>
+    <div>
+      <div className="text-red-300 font-medium">Supervised data is limited</div>
+      <div className="text-slate-400 text-sm">Human-written ideal responses are expensive. Writers disagree. The model memorizes patterns rather than learning principles.</div>
+    </div>
+  </div>
+
+  <div className="flex items-start gap-3 bg-red-900/20 border border-red-800/40 rounded-lg p-4">
+    <div className="text-red-400 font-bold text-lg">3.</div>
+    <div>
+      <div className="text-red-300 font-medium">Human values are contextual</div>
+      <div className="text-slate-400 text-sm">The right answer depends on who is asking, why, and in what context. No fixed set of rules can capture this.</div>
+    </div>
+  </div>
+</div>
+
+But here is the insight that makes RLHF possible:
+
+<Example title="The Discriminator-Generator Gap">
+
+You don't need to write the perfect response to know which of two responses is better.
+
+Given the prompt "Explain quantum entanglement to a 10-year-old":
+
+**Response A**: "Quantum entanglement is a phenomenon where two particles become correlated such that the quantum state of one cannot be described independently..."
+
+**Response B**: "Imagine you have two magic coins. Whenever you flip one and get heads, the other one always lands on tails, no matter how far apart they are..."
+
+Most people immediately prefer B for this audience. But could they write B from scratch? Maybe not. **It is easier to judge quality than to produce it.**
+
+This is the discriminator-generator gap, and it is the foundation of RLHF. Humans provide comparative judgments. A reward model learns to predict those judgments. RL optimizes the model to produce responses the reward model scores highly.
+
+</Example>
+
+<Note title="Karpathy's Framing">
+
+Andrej Karpathy famously described RLHF as "just barely RL" because the reward signal is a learned proxy, not ground truth. The reward model is a neural network trained on a few hundred thousand comparisons -- it captures some of what humans want, but imperfectly. This contrasts sharply with games like Go, where the reward (win/loss) is unambiguous.
+
+We will return to this distinction -- proxy vs. verifiable rewards -- later in this subsection.
+
+</Note>
+
+## The LLM as an RL Agent
+
+<Intuition>
+
+A language model generating a response is an RL agent taking actions in an environment. The mapping is direct:
+
+</Intuition>
+
+<div className="my-8 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
+  <div className="text-slate-200 font-medium text-center mb-4">The RL-LLM Mapping</div>
+  <div className="grid grid-cols-2 gap-3 text-sm">
+    <div className="text-slate-400 font-medium p-2 bg-slate-900/50 rounded">State $s_t$</div>
+    <div className="text-cyan-400 p-2 bg-slate-900/50 rounded">Prompt + all tokens generated so far</div>
+    <div className="text-slate-400 font-medium p-2 bg-slate-900/50 rounded">Action $a_t$</div>
+    <div className="text-cyan-400 p-2 bg-slate-900/50 rounded">Next token from vocabulary (~32K-128K choices)</div>
+    <div className="text-slate-400 font-medium p-2 bg-slate-900/50 rounded">Policy $\pi_\theta(a_t \mid s_t)$</div>
+    <div className="text-cyan-400 p-2 bg-slate-900/50 rounded">The language model itself</div>
+    <div className="text-slate-400 font-medium p-2 bg-slate-900/50 rounded">Episode</div>
+    <div className="text-cyan-400 p-2 bg-slate-900/50 rounded">Generating one complete response</div>
+    <div className="text-slate-400 font-medium p-2 bg-slate-900/50 rounded">Reward $r$</div>
+    <div className="text-cyan-400 p-2 bg-slate-900/50 rounded">Human preference score or correctness check</div>
+  </div>
+</div>
+
+<Mathematical>
+
+The language model defines a policy over tokens:
+
+$$\pi_\theta(a_t \mid s_t) = \pi_\theta(\text{token}_t \mid \text{prompt}, \text{token}_1, \ldots, \text{token}_{t-1})$$
+
+A complete response $y = (a_1, a_2, \ldots, a_T)$ is an episode. The probability of generating response $y$ given prompt $x$ is:
+
+$$\pi_\theta(y \mid x) = \prod_{t=1}^{T} \pi_\theta(a_t \mid x, a_1, \ldots, a_{t-1})$$
+
+The RL objective is to maximize expected reward:
+
+$$J(\theta) = \mathbb{E}_{x \sim D,\, y \sim \pi_\theta(\cdot \mid x)} \left[ R(x, y) \right]$$
+
+where $R(x, y)$ is a scalar reward for the complete response. This is exactly the policy gradient setup from [REINFORCE](/chapters/reinforce), with tokens as actions.
+
+</Mathematical>
+
+<Implementation>
+
+```python
+import torch
+import torch.nn.functional as F
+
+def compute_response_log_prob(model, prompt_ids, response_ids):
+    """
+    Compute log π_θ(response | prompt).
+
+    In RL terms: the log probability of this episode
+    under the current policy.
+    """
+    # Concatenate prompt and response
+    input_ids = torch.cat([prompt_ids, response_ids], dim=-1)
+
+    # Forward pass through the language model
+    outputs = model(input_ids)
+    logits = outputs.logits
+
+    # Get log probabilities for the response tokens only
+    # Shift: logits[t] predicts token[t+1]
+    prompt_len = prompt_ids.shape[-1]
+    response_logits = logits[:, prompt_len - 1:-1, :]  # Predictions for response tokens
+    log_probs = F.log_softmax(response_logits, dim=-1)
+
+    # Gather the log prob of each actual response token
+    token_log_probs = log_probs.gather(
+        dim=-1,
+        index=response_ids.unsqueeze(-1)
+    ).squeeze(-1)
+
+    # Sum over tokens: log π(y|x) = Σ log π(a_t|s_t)
+    return token_log_probs.sum(dim=-1)
+```
+
+</Implementation>
+
+<Tip title="Why Token-Level Actions?">
+
+You might wonder: why not treat the entire response as a single action? Because the action space would be astronomically large -- every possible sequence of tokens. By treating each token as a separate action, we can compute gradients through the autoregressive structure, just like any sequential decision problem.
+
+</Tip>
+
+## The Three Training Stages
+
+Every modern LLM goes through a pipeline of three stages. Each stage adds a different capability, and you cannot skip stages.
+
+<div className="my-8 p-6 bg-slate-800/50 rounded-xl border border-slate-700">
+  <div className="text-slate-200 font-medium text-center mb-6">The LLM Training Pipeline</div>
+  <div className="flex items-stretch justify-center gap-2 md:gap-4 flex-wrap">
+    <div className="text-center px-4 py-4 bg-slate-700/50 rounded-lg border border-slate-600 flex-1 min-w-0" style={{minWidth: '140px', maxWidth: '220px'}}>
+      <div className="text-slate-400 text-xs uppercase tracking-wider mb-2">Stage 1</div>
+      <div className="text-slate-200 font-bold mb-2">Pretraining</div>
+      <div className="text-slate-400 text-xs leading-relaxed">Predict next token on trillions of words from the internet. Learns language, facts, and patterns.</div>
+      <div className="mt-3 text-xs text-slate-500 bg-slate-800/50 rounded p-2">Adds: <span className="text-slate-300">Knowledge</span></div>
+    </div>
+    <div className="text-slate-500 text-2xl self-center hidden md:block">&#8594;</div>
+    <div className="text-center px-4 py-4 bg-cyan-900/20 rounded-lg border border-cyan-700/40 flex-1 min-w-0" style={{minWidth: '140px', maxWidth: '220px'}}>
+      <div className="text-cyan-400 text-xs uppercase tracking-wider mb-2">Stage 2</div>
+      <div className="text-cyan-300 font-bold mb-2">SFT</div>
+      <div className="text-slate-400 text-xs leading-relaxed">Fine-tune on human-written examples of ideal assistant behavior. Learns format and instruction-following.</div>
+      <div className="mt-3 text-xs text-slate-500 bg-slate-800/50 rounded p-2">Adds: <span className="text-cyan-300">Instruction-following</span></div>
+    </div>
+    <div className="text-slate-500 text-2xl self-center hidden md:block">&#8594;</div>
+    <div className="text-center px-4 py-4 bg-amber-900/20 rounded-lg border border-amber-700/40 flex-1 min-w-0" style={{minWidth: '140px', maxWidth: '220px'}}>
+      <div className="text-amber-400 text-xs uppercase tracking-wider mb-2">Stage 3</div>
+      <div className="text-amber-300 font-bold mb-2">RL</div>
+      <div className="text-slate-400 text-xs leading-relaxed">Optimize against a reward signal -- either human preferences (RLHF) or verifiable answers (RLVR).</div>
+      <div className="mt-3 text-xs text-slate-500 bg-slate-800/50 rounded p-2">Adds: <span className="text-amber-300">Alignment / Reasoning</span></div>
+    </div>
+  </div>
+
+  <div className="text-center mt-6 text-slate-500 text-xs">
+    Each stage builds on the previous one. Skipping stages produces poor results.
+  </div>
+</div>
+
+<Intuition>
+
+**Why can't you skip stages?**
+
+<div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-4">
+  <div className="bg-red-900/15 border border-red-700/30 rounded-lg p-3">
+    <div className="text-red-400 font-semibold text-sm mb-1">Skip pretraining?</div>
+    <div className="text-slate-400 text-xs">The model doesn't know language. You can't align something that can't form sentences.</div>
+  </div>
+  <div className="bg-red-900/15 border border-red-700/30 rounded-lg p-3">
+    <div className="text-red-400 font-semibold text-sm mb-1">Skip SFT?</div>
+    <div className="text-slate-400 text-xs">The model knows language but not how to be an assistant. It might continue your prompt as a novel.</div>
+  </div>
+  <div className="bg-red-900/15 border border-red-700/30 rounded-lg p-3">
+    <div className="text-red-400 font-semibold text-sm mb-1">Skip RL?</div>
+    <div className="text-slate-400 text-xs">The model follows instructions but inconsistently. It may be helpful one moment and harmful the next.</div>
+  </div>
+</div>
+
+Think of it like training a doctor: medical school (pretraining) teaches knowledge, residency (SFT) teaches patient interaction, and peer review (RL) teaches judgment.
+
+</Intuition>
+
+<Mathematical>
+
+Each stage has a different training objective:
+
+**Stage 1 -- Pretraining** (next-token prediction):
+
+$$L_{\text{PT}}(\theta) = -\mathbb{E}_{x \sim D_{\text{text}}} \left[ \sum_{t=1}^{T} \log \pi_\theta(x_t \mid x_1, \ldots, x_{t-1}) \right]$$
+
+**Stage 2 -- Supervised Fine-Tuning** (imitate demonstrations):
+
+$$L_{\text{SFT}}(\theta) = -\mathbb{E}_{(x, y^*) \sim D_{\text{demo}}} \left[ \log \pi_\theta(y^* \mid x) \right]$$
+
+**Stage 3 -- RL** (maximize reward):
+
+$$J_{\text{RL}}(\theta) = \mathbb{E}_{x \sim D,\, y \sim \pi_\theta} \left[ R(x, y) - \beta \cdot D_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}}) \right]$$
+
+The KL divergence term in Stage 3 prevents the model from drifting too far from the SFT model. Without it, the model can exploit weaknesses in the reward signal.
+
+</Mathematical>
+
+## Timeline of Key Developments
+
+<div className="my-8 space-y-3">
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-slate-500 font-mono text-sm shrink-0 w-12">2017</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">Deep RL from Human Preferences</div>
+      <div className="text-slate-400 text-sm">Christiano et al. show that agents can learn complex behaviors from human comparative feedback, applied to Atari games and simulated robotics.</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-slate-500 font-mono text-sm shrink-0 w-12">2020</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">GPT-3 and Emergent Capabilities</div>
+      <div className="text-slate-400 text-sm">175 billion parameters. Few-shot learning emerges. But the model is unreliable, sometimes toxic, and hard to steer.</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-cyan-900/20 rounded-lg border border-cyan-700/40">
+    <div className="text-cyan-400 font-mono text-sm shrink-0 w-12">2022</div>
+    <div>
+      <div className="font-bold text-cyan-300 mb-1">InstructGPT and ChatGPT</div>
+      <div className="text-slate-400 text-sm">OpenAI applies RLHF at scale. InstructGPT paper shows the three-stage pipeline. ChatGPT launches and reaches 100 million users in two months.</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-slate-500 font-mono text-sm shrink-0 w-12">2023</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">DPO Simplifies the Pipeline</div>
+      <div className="text-slate-400 text-sm">Rafailov et al. show that the reward model can be eliminated entirely, optimizing preferences directly. Simpler, more stable, widely adopted.</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-slate-500 font-mono text-sm shrink-0 w-12">2024</div>
+    <div>
+      <div className="font-bold text-slate-200 mb-1">DeepSeekMath Introduces GRPO</div>
+      <div className="text-slate-400 text-sm">Group Relative Policy Optimization eliminates the critic network, using group statistics as baselines instead. Efficient and effective for math reasoning.</div>
+    </div>
+  </div>
+
+  <div className="flex gap-4 p-4 bg-amber-900/20 rounded-lg border border-amber-700/40">
+    <div className="text-amber-400 font-mono text-sm shrink-0 w-12">2025</div>
+    <div>
+      <div className="font-bold text-amber-300 mb-1">DeepSeek R1 and the Reasoning Revolution</div>
+      <div className="text-slate-400 text-sm">Pure RL produces emergent chain-of-thought reasoning. RLVR (RL from Verifiable Rewards) emerges as a leading approach for capability improvement. Models learn to think step by step without being told how.</div>
+    </div>
+  </div>
+</div>
+
+<Note title="The Arc of Simplification">
+
+Notice the trend: each major advance *simplifies* the pipeline. PPO-based RLHF requires four models in memory (policy, reference, critic, reward model). DPO eliminates the reward model. GRPO eliminates the critic. The algorithms are getting simpler, not more complex -- and producing better results.
+
+</Note>
+
+## Proxy vs. Verifiable Rewards
+
+This is the most important conceptual distinction in the field. It determines how far you can push optimization, how much you can trust the results, and which failure modes to worry about.
+
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 rounded-xl p-5 border border-cyan-700/50">
+    <div className="text-cyan-400 font-bold text-lg mb-3">Proxy Rewards (RLHF)</div>
+    <div className="text-slate-300 text-sm space-y-2">
+      <p>A neural network *predicts* what humans would prefer. Trained on ~100K comparisons.</p>
+      <p>The reward model is an approximation. Push too hard and the model finds ways to score high without actually being helpful.</p>
+    </div>
+    <div className="mt-3 space-y-2">
+      <div className="flex items-start gap-2">
+        <span className="text-emerald-400 text-sm">+</span>
+        <span className="text-slate-400 text-sm">Works for subjective tasks (writing, chat)</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-red-400 text-sm">-</span>
+        <span className="text-slate-400 text-sm">Can be gamed (reward hacking)</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-red-400 text-sm">-</span>
+        <span className="text-slate-400 text-sm">Requires KL penalty as safety net</span>
+      </div>
+    </div>
+  </div>
+  <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 rounded-xl p-5 border border-amber-700/50">
+    <div className="text-amber-400 font-bold text-lg mb-3">Verifiable Rewards (RLVR)</div>
+    <div className="text-slate-300 text-sm space-y-2">
+      <p>The answer is *checked* against ground truth. Did the math come out right? Does the code pass the tests?</p>
+      <p>The reward is exact. You can optimize aggressively because there is no proxy to exploit.</p>
+    </div>
+    <div className="mt-3 space-y-2">
+      <div className="flex items-start gap-2">
+        <span className="text-emerald-400 text-sm">+</span>
+        <span className="text-slate-400 text-sm">No reward hacking -- ground truth</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-emerald-400 text-sm">+</span>
+        <span className="text-slate-400 text-sm">Can optimize aggressively</span>
+      </div>
+      <div className="flex items-start gap-2">
+        <span className="text-red-400 text-sm">-</span>
+        <span className="text-slate-400 text-sm">Only works for tasks with checkable answers</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<Intuition>
+
+Karpathy captures this distinction perfectly: **"RLHF is just barely RL"** because the reward is a "crappy proxy" -- a neural network that approximates human preferences but can be fooled. The model might learn to produce verbose, confident-sounding responses that score well without being genuinely helpful.
+
+Verifiable rewards are "real" RL -- closer to AlphaGo. When the reward is "did you get the right answer to this math problem?", there is no shortcut. The model must actually develop reasoning capabilities to improve.
+
+This is why the shift from RLHF to RLVR was so important. It turned language model training from a fuzzy optimization problem into something closer to the classical RL successes we studied earlier in this book.
+
+</Intuition>
+
+<Mathematical>
+
+The distinction shows up in the reward function:
+
+**Proxy reward (RLHF)**:
+
+$$R_{\text{proxy}}(x, y) = r_\phi(x, y)$$
+
+where $r_\phi$ is a learned reward model. The objective must include a KL constraint to prevent exploitation:
+
+$$J(\theta) = \mathbb{E}\left[ r_\phi(x, y) - \beta \cdot D_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}}) \right]$$
+
+**Verifiable reward (RLVR)**:
+
+$$R_{\text{verify}}(x, y) = \mathbb{1}[\text{extract\_answer}(y) = \text{ground\_truth}(x)]$$
+
+This is a binary signal: 1 if correct, 0 if wrong. No learned model, no approximation, no hacking. The KL penalty is still used for stability, but can be set much lower because the reward is trustworthy.
+
+</Mathematical>
+
+<Warning title="Most Tasks Are Not Verifiable">
+
+Verifiable rewards work beautifully for math, code, and formal logic. But most real-world tasks -- writing, conversation, creative work, moral reasoning -- have no ground truth answer. For these, proxy rewards remain the only option.
+
+The frontier of the field is figuring out how to get verifiable-reward-quality training for tasks that lack ground truth. Approaches include debate, constitutional AI, and process reward models. We cover these in the [Challenges and Frontiers](/chapters/rl-for-llms/challenges) subsection.
+
+</Warning>
+
+## Why Not Just Use Supervised Learning?
+
+<Intuition>
+
+If we have examples of good responses, why not just train on those? Supervised Fine-Tuning (SFT) does exactly this -- and it helps. But it has fundamental limitations that RL overcomes.
+
+</Intuition>
+
+<div className="grid md:grid-cols-2 gap-4 my-8">
+  <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/20 rounded-xl p-5 border border-slate-600/50">
+    <div className="text-slate-300 font-bold text-lg mb-3">SFT: Learning by Imitation</div>
+    <div className="text-slate-400 text-sm space-y-2">
+      <p>Trains on human-written examples. The model learns to *copy* the distribution of responses it sees.</p>
+      <p>Limited by the quality and diversity of the training data. Cannot exceed the performance of its teachers.</p>
+    </div>
+    <div className="text-slate-500 text-xs bg-slate-900/50 rounded-lg p-3 mt-3">
+      "Repeat what the expert said."
+    </div>
+  </div>
+  <div className="bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 rounded-xl p-5 border border-emerald-700/50">
+    <div className="text-emerald-400 font-bold text-lg mb-3">RL: Learning by Exploration</div>
+    <div className="text-slate-400 text-sm space-y-2">
+      <p>Generates its own responses and learns from feedback. The model discovers strategies that no human demonstrator showed it.</p>
+      <p>Can surpass human performance because it explores beyond the training distribution.</p>
+    </div>
+    <div className="text-slate-500 text-xs bg-slate-900/50 rounded-lg p-3 mt-3">
+      "Find something even better."
+    </div>
+  </div>
+</div>
+
+<Example title="The Ceiling Problem">
+
+Suppose you hire 100 writers to produce ideal responses for math problems. The best writer solves 80% of problems correctly. SFT trains the model to match these writers -- so the model's ceiling is roughly 80%.
+
+With RL and verifiable rewards, the model generates many attempts, keeps what works, and discards what doesn't. It might discover solution strategies no individual writer used. DeepSeek R1 achieved math performance that exceeds most human demonstrators, precisely because RL is not bounded by the quality of demonstrations.
+
+This is the same dynamic that made AlphaGo superhuman: RL lets the system discover strategies beyond what any human teacher could provide.
+
+</Example>
+
+<KeyTakeaways>
+- RL for LLMs serves two purposes: alignment (teaching values from human preferences) and reasoning (developing capabilities from verifiable rewards)
+- The discriminator-generator gap makes RLHF possible: it is easier to judge quality than to produce it
+- A language model is an RL policy: state = context, action = next token, episode = generating a response
+- The three training stages (pretraining, SFT, RL) each add distinct capabilities and cannot be skipped
+- Proxy rewards (RLHF) enable subjective tasks but can be gamed; verifiable rewards (RLVR) enable aggressive optimization on tasks with checkable answers
+- RL can surpass supervised learning because it explores beyond the demonstration distribution
+</KeyTakeaways>
+
+<Tip title="Next: Reward Modeling">
+
+If you are familiar with [REINFORCE](/chapters/reinforce) and [PPO](/chapters/ppo), you have all the prerequisites. The next subsection on [Reward Modeling](/chapters/rl-for-llms/reward-modeling) introduces the Bradley-Terry model and preference data collection -- the foundation for everything that follows.
+
+</Tip>

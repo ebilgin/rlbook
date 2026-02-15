@@ -1,14 +1,15 @@
-# Chapter: RLHF and Language Models
+# Chapter: RL for Language Models
 
 ## Chapter Metadata
 
-**Chapter Number:** 25
-**Title:** RLHF and Language Models
+**Title:** RL for Language Models
+**Slug:** rl-for-llms
 **Section:** Advanced Topics
 **Prerequisites:**
-- PPO and Trust Region Methods
-- (Recommended) Introduction to Policy Gradients
-**Estimated Reading Time:** 40 minutes
+- PPO (Chapter 2040)
+- (Recommended) Introduction to Policy Gradients (Chapter 2010)
+- (Recommended) REINFORCE (Chapter 2020)
+**Estimated Reading Time:** 60 minutes
 
 ---
 
@@ -16,111 +17,138 @@
 
 By the end of this chapter, readers will be able to:
 
-1. Explain why RLHF is needed for aligning language models
-2. Describe the three-stage RLHF pipeline
-3. Explain how reward models learn from human preferences
-4. Apply PPO concepts to language model fine-tuning
-5. Understand recent alternatives like DPO
-6. Identify open challenges in AI alignment
+1. Explain the two motivations for RL in LLM post-training: alignment and reasoning
+2. Describe how reward models learn from human preferences (Bradley-Terry model)
+3. Compare PPO, DPO, and GRPO for LLM training — their tradeoffs and when to use each
+4. Explain how GRPO enables reasoning through verifiable rewards (RLVR)
+5. Walk through a real GRPO implementation (Karpathy's nanochat)
+6. Identify open challenges: reward hacking, mode collapse, alignment tax, scalable oversight
 
 ---
 
 ## Core Concepts to Cover
 
 ### Primary Concepts (Must Cover)
-- [ ] The alignment problem: why supervised learning isn't enough
-- [ ] The RLHF pipeline: SFT → Reward Modeling → RL
-- [ ] Reward modeling from human preferences
-- [ ] PPO for language models
-- [ ] KL penalty to prevent reward hacking
-- [ ] DPO: Direct Preference Optimization
+- [ ] Two motivations: alignment (teaching values) AND reasoning (developing capabilities)
+- [ ] The discriminator-generator gap (why preferences work)
+- [ ] Reward modeling from human preferences (Bradley-Terry)
+- [ ] PPO for language models (token-level decisions, KL penalty)
+- [ ] DPO: Direct Preference Optimization (eliminating the reward model)
+- [ ] GRPO: Group Relative Policy Optimization (eliminating the critic)
+- [ ] RLVR: Reinforcement Learning from Verifiable Rewards
+- [ ] DeepSeek R1: emergence of reasoning through RL
+- [ ] Karpathy's nanochat GRPO implementation
+- [ ] Reward hacking and mitigation
 
-### Secondary Concepts (Cover if Space Permits)
-- [ ] Constitutional AI
-- [ ] Debate and IDA
-- [ ] Reward model interpretability
-- [ ] Multi-objective RLHF
+### Secondary Concepts (Cover)
+- [ ] SimPO, KTO, ORPO — the modern landscape
+- [ ] Constitutional AI / RLAIF
+- [ ] Process vs. outcome reward models
+- [ ] Mode collapse and alignment tax
+- [ ] Scalable oversight
 
 ### Explicitly Out of Scope
-- Detailed LLM architecture
-- Pre-training details
-- Deployment and safety considerations
+- Detailed LLM architecture (transformer internals)
+- Pre-training details (tokenization, data curation)
+- Deployment infrastructure
 
 ---
 
 ## Narrative Arc
 
 ### Opening Hook
-"ChatGPT didn't just learn to predict text—it learned what humans actually want. The secret? Reinforcement learning from human feedback (RLHF). It's the technique that transformed capable-but-quirky language models into helpful, harmless, and honest assistants."
+"In 2022, ChatGPT turned language models from autocomplete engines into conversational partners. The secret ingredient? Reinforcement learning. Three years later, RL did something even more remarkable — it taught models to *reason*. This chapter tells both stories."
 
 ### Key Insight
-RLHF solves a fundamental problem: we can't write down exactly what we want from AI. Instead, we show examples of good behavior, train a reward model to predict what humans prefer, then use RL to optimize for that learned reward. It's preferences all the way down.
+RL for LLMs has evolved through two revolutions. The first (RLHF) taught models what humans want by learning from preferences. The second (RLVR/GRPO) taught models to reason by training against verifiable rewards. Both use the same core idea — policy gradients — but apply them in fundamentally different ways.
 
 ### Closing Connection
-"RLHF is how we've aligned today's AI systems—but it's not the final answer. As models become more capable, we need better alignment techniques. The future of AI safety depends on understanding and improving these methods."
+"The techniques in this chapter — from reward modeling to GRPO — represent the cutting edge of how we shape AI behavior. But the hardest problems remain unsolved: How do we align systems smarter than us? How do we verify reasoning we can't check? The tools you've learned here are the foundation for tackling those questions."
 
 ---
 
 ## Required Interactive Elements
 
-### Demo 1: Preference Comparison
-- **Purpose:** Show how human preferences are collected
+### Demo 1: Training Stage Pipeline (index.mdx)
+- **Component:** `TrainingStagePipeline.tsx`
+- **Purpose:** Show how each training stage transforms model behavior
 - **Interaction:**
-  - Show two AI responses to a prompt
-  - User picks preferred one (or tie)
-  - Show how this becomes training data
-  - Accumulate preferences into a dataset
-- **Expected Discovery:** Preferences are subjective but can be learned
+  - Horizontal pipeline: Pretraining → SFT → RL
+  - Click each stage to see sample responses
+  - Metrics bar: helpfulness, safety, reasoning accuracy
+  - Before/after comparison at each transition
+- **Expected Discovery:** Each stage adds a different capability; RL is what makes models aligned and capable reasoners
 
-### Demo 2: Reward Model Training
-- **Purpose:** Visualize reward model learning
+### Demo 2: Preference Labeler (reward-modeling.mdx)
+- **Component:** `PreferenceLabeler.tsx`
+- **Purpose:** Experience preference collection firsthand
 - **Interaction:**
-  - Show preference pairs
-  - Train a simple reward model
-  - Visualize predictions on new responses
-  - Show correlation with human preferences
-- **Expected Discovery:** The model learns to predict human preferences
+  - Display a prompt with two AI responses side-by-side
+  - User clicks preferred response (A, B, or Tie)
+  - Accumulated preferences shown as growing dataset
+  - Mini reward model "trains" on collected preferences
+  - Shows learned reward scores on new unseen response pairs
+- **Expected Discovery:** Ranking is easier than rating; a few dozen preferences are enough to learn patterns
 
-### Demo 3: The RLHF Pipeline
-- **Purpose:** Show the complete flow
+### Demo 3: Algorithm Explorer (rl-algorithms-for-llms.mdx)
+- **Component:** `AlgorithmExplorer.tsx`
+- **Purpose:** Compare PPO, DPO, and GRPO visually
 - **Interaction:**
-  - Start with base model generating responses
-  - Show SFT improving quality
-  - Show reward model scoring responses
-  - Show PPO optimizing for reward
-  - Compare responses at each stage
-- **Expected Discovery:** Each stage improves the model differently
+  - Three algorithm cards with pipeline diagrams
+  - Model size selector (1B, 7B, 13B, 70B)
+  - Memory bars showing GPU requirements per algorithm
+  - GPU VRAM markers (12GB, 24GB, 40GB, 80GB)
+  - Comparison table: models needed, data type, online/offline
+- **Expected Discovery:** PPO needs 4 models in memory; DPO needs 2; GRPO needs 2 but is online
 
-### Demo 4: Reward Hacking
-- **Purpose:** Show why KL penalty matters
+### Demo 4: GRPO Explorer (grpo-and-reasoning.mdx)
+- **Component:** `GRPOExplorer.tsx`
+- **Purpose:** Visualize how group-relative advantages work
 - **Interaction:**
-  - Optimize for reward without KL constraint
-  - Watch model generate high-reward but garbage outputs
-  - Add KL penalty; see quality maintained
-- **Expected Discovery:** Unconstrained optimization exploits reward model flaws
+  - Math problem displayed at top
+  - G=8 sample completions with rewards (correct=1.0, wrong=0.0)
+  - Step-by-step advantage calculation
+  - Slider: adjust one reward → watch ALL advantages change (relativity)
+  - Group size selector (4, 8, 16, 32)
+  - Policy update visualization: probability bars shifting
+- **Expected Discovery:** Advantages are relative — the same completion can be "good" or "bad" depending on its group
+
+### Demo 5: Reward Hacking Demo (challenges.mdx)
+- **Component:** `RewardHackingDemo.tsx`
+- **Purpose:** Show why unconstrained optimization is dangerous
+- **Interaction:**
+  - Simple optimization scenario with proxy and true reward
+  - Toggle: KL penalty ON/OFF
+  - Without KL: proxy reward climbs but true quality degrades
+  - With KL: moderate improvement maintained
+  - Two diverging metrics visualized over training steps
+- **Expected Discovery:** Optimizing a proxy too hard makes things worse; KL penalty is the safety net
 
 ---
 
 ## Recurring Examples to Use
 
-- **ChatGPT-style responses:** The canonical example
-- **Helpfulness comparison:** Detailed vs. terse answers
+- **Math reasoning tasks:** "What is 23 × 17?" — ideal for GRPO/RLVR because verifiable
+- **ChatGPT-style responses:** Helpfulness comparison (detailed vs. terse)
 - **Harmlessness:** Refusing dangerous requests
-- **Simple preference tasks:** Summarization, Q&A
+- **GSM8K problems:** The canonical GRPO benchmark (used in nanochat)
+- **Code generation:** Verifiable via execution
 
 ---
 
 ## Cross-References
 
 ### Build On (Backward References)
-- PPO: "We use PPO to optimize the policy..."
-- Policy Gradients: "LLMs are policies over tokens..."
-- Reward Functions: "Instead of designing reward, we learn it..."
+- REINFORCE (Chapter 2020): "GRPO is essentially REINFORCE with group-relative baselines"
+- PPO (Chapter 2040): "PPO's clipped objective carries over, but the critic doesn't"
+- Policy Gradients (Chapter 2010): "LLMs are policies over tokens"
+- Actor-Critic (Chapter 2030): "The advantage function we learned there — GRPO replaces the critic"
+- GRPO Paper: "For the full mathematical derivation, see the GRPO paper deep-dive"
 
 ### Set Up (Forward References)
-- (This is the capstone, but mention future directions)
 - AI safety research
 - Scalable oversight
+- Process reward models
 
 ---
 
@@ -129,21 +157,25 @@ RLHF solves a fundamental problem: we can't write down exactly what we want from
 ### Required Equations
 
 1. **Reward model training (Bradley-Terry)**:
-$$P(y_1 \succ y_2 | x) = \sigma(r_\phi(x, y_1) - r_\phi(x, y_2))$$
+$$P(y_w \succ y_l \mid x) = \sigma(r_\phi(x, y_w) - r_\phi(x, y_l))$$
 
 2. **RLHF objective with KL penalty**:
-$$\max_\pi \mathbb{E}_{x \sim \mathcal{D}, y \sim \pi(\cdot|x)} \left[ r_\phi(x, y) - \beta \cdot D_{\text{KL}}(\pi(\cdot|x) \| \pi_{\text{ref}}(\cdot|x)) \right]$$
+$$\max_\theta \mathbb{E}_{x, y \sim \pi_\theta} \left[ r_\phi(x, y) - \beta \cdot D_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}}) \right]$$
 
-3. **PPO clipped objective (adapted for LM)**:
-$$L^{\text{CLIP}} = \mathbb{E}_t \left[ \min(r_t \hat{A}_t, \text{clip}(r_t, 1-\epsilon, 1+\epsilon) \hat{A}_t) \right]$$
+3. **DPO loss**:
+$$L_{\text{DPO}} = -\mathbb{E} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)} - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)} \right) \right]$$
 
-4. **DPO loss**:
-$$L_{\text{DPO}} = -\mathbb{E}_{(x,y_w,y_l)} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)} - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)} \right) \right]$$
+4. **GRPO group-relative advantage**:
+$$\hat{A}_i = \frac{r_i - \mu_G}{\sigma_G + \epsilon}$$
+
+5. **GRPO objective**:
+$$L_{\text{GRPO}} = -\frac{1}{G} \sum_{i=1}^{G} \min\left( \rho_i \hat{A}_i, \text{clip}(\rho_i, 1-\epsilon, 1+\epsilon) \hat{A}_i \right) + \beta D_{\text{KL}}$$
 
 ### Derivations to Include (Mathematical Layer)
-- Why Bradley-Terry model for preferences
-- Deriving DPO from RLHF objective
-- Why KL penalty prevents collapse
+- Bradley-Terry from maximum likelihood
+- DPO derivation from RLHF objective (closed-form optimal policy)
+- GRPO connection to REINFORCE with baseline
+- Why group normalization replaces the critic
 
 ### Proofs to Omit
 - Convergence guarantees
@@ -151,149 +183,142 @@ $$L_{\text{DPO}} = -\mathbb{E}_{(x,y_w,y_l)} \left[ \log \sigma \left( \beta \lo
 
 ---
 
-## Code Examples Needed
+## Karpathy References
 
-### Intuition Layer
-```python
-def compute_reward(response, reward_model, tokenizer):
-    """Compute reward for a response."""
-    inputs = tokenizer(response, return_tensors="pt")
-    reward = reward_model(**inputs).logits
-    return reward.item()
-
-def rlhf_step(prompt, model, reward_model, ref_model, beta=0.1):
-    """Conceptual RLHF update."""
-    # Generate response
-    response = model.generate(prompt)
-
-    # Compute reward
-    reward = reward_model(prompt, response)
-
-    # Compute KL penalty
-    log_prob = model.log_prob(response | prompt)
-    ref_log_prob = ref_model.log_prob(response | prompt)
-    kl_penalty = log_prob - ref_log_prob
-
-    # Total reward signal
-    total_reward = reward - beta * kl_penalty
-
-    # Update model with PPO using total_reward
-    ...
-```
-
-### Implementation Layer
-```python
-class RewardModel(nn.Module):
-    def __init__(self, base_model):
-        super().__init__()
-        self.base = base_model
-        self.reward_head = nn.Linear(base_model.config.hidden_size, 1)
-
-    def forward(self, input_ids, attention_mask):
-        outputs = self.base(input_ids, attention_mask=attention_mask)
-        hidden = outputs.last_hidden_state[:, -1, :]  # Last token
-        reward = self.reward_head(hidden)
-        return reward
-
-
-def train_reward_model(model, preference_data, epochs=3):
-    """Train reward model on preference data."""
-    optimizer = AdamW(model.parameters(), lr=1e-5)
-
-    for epoch in range(epochs):
-        for prompt, chosen, rejected in preference_data:
-            # Get rewards for both responses
-            r_chosen = model(tokenize(prompt + chosen))
-            r_rejected = model(tokenize(prompt + rejected))
-
-            # Bradley-Terry loss
-            loss = -F.logsigmoid(r_chosen - r_rejected).mean()
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-```
-
----
-
-## Common Misconceptions to Address
-
-1. **"RLHF makes models truthful"**: RLHF makes models say what humans prefer—which correlates with truth but isn't the same thing.
-
-2. **"The reward model perfectly captures human values"**: Reward models are imperfect proxies. They can be exploited.
-
-3. **"RLHF is why models refuse harmful requests"**: That's mostly from SFT and system prompts. RLHF fine-tunes behavior.
-
-4. **"DPO is better than PPO"**: DPO is simpler but not universally better. PPO can still outperform for some tasks.
-
----
-
-## Exercises
-
-### Conceptual (3-5 questions)
-1. Why can't we just use the reward model as the loss function for supervised learning?
-2. What might happen if we trained with very high β (KL penalty)?
-3. Why is it hard to collect perfect preference data?
-
-### Coding (2-3 challenges)
-1. Implement a simple reward model training loop
-2. Compute KL divergence between two language models on sample prompts
-3. Simulate reward hacking by optimizing for a flawed reward
-
-### Exploration (1-2 open-ended)
-1. How might we improve RLHF for tasks where humans struggle to evaluate quality?
+| Resource | Where Used | How |
+|----------|-----------|-----|
+| [nanochat](https://github.com/karpathy/nanochat) `scripts/chat_rl.py` | hands-on.mdx | Annotated walkthrough with attribution |
+| ["RLHF is Just Barely RL"](https://x.com/karpathy/status/1821277264996352246) | why-rl-for-llms.mdx | Conceptual framing: proxy vs verifiable |
+| [2025 Year in Review](https://karpathy.bearblog.dev/year-in-review-2025/) | grpo-and-reasoning.mdx | RLVR as dominant paradigm |
+| ["Deep Dive into LLMs"](https://www.youtube.com/watch?v=7xTGNNLPyMI) video | why-rl-for-llms.mdx | Recommended resource |
+| ["Pong from Pixels"](http://karpathy.github.io/2016/05/31/rl/) | hands-on.mdx | Policy gradients → LLMs connection |
+| [DeepSeek R1 analysis](https://x.com/karpathy/status/1883941452738355376) | grpo-and-reasoning.mdx | Expert commentary |
 
 ---
 
 ## Subsection Breakdown
 
-### Subsection 1: RL for AI Alignment
-- The alignment problem: we can't specify what we want
-- Why supervised learning isn't enough
-- The RLHF insight: learn from preferences
-- Brief history: from games to language models
+### Subsection 1: Why RL for Language Models? (`why-rl-for-llms.mdx`)
+- Two motivations: alignment (ChatGPT, 2022) and reasoning (DeepSeek R1, 2025)
+- The alignment problem: we can't write a loss function for "helpful"
+- The discriminator-generator gap (Karpathy's insight: ranking is easier than generating)
+- The LLM as an RL agent: state = context, action = next token, policy = the model
+- Three training stages: pretraining → SFT → RL (what each adds)
+- Timeline: InstructGPT → ChatGPT → DPO → GRPO → DeepSeek R1
+- "RLHF is just barely RL" — Karpathy's framing
+- Transition: proxy rewards (RLHF) vs. verifiable rewards (RLVR)
 
-### Subsection 2: Reward Modeling
-- Collecting human preferences
-- The Bradley-Terry model
-- Training the reward model
-- Limitations and biases
-- Interactive: preference comparison demo
+### Subsection 2: Reward Modeling (`reward-modeling.mdx`)
+- Why pairwise comparisons > absolute ratings
+- Preference data collection (who labels, how, quality control)
+- The Bradley-Terry probabilistic model
+- Reward model architecture: language model base + scalar head
+- Training: binary cross-entropy on preference pairs
+- Reward model biases: length bias, sycophancy, format preference
+- Probing for biases (practical diagnostic techniques)
+- Improving reward models: ensembles, regularization, iterative refinement
+- Interactive: PreferenceLabeler demo
 
-### Subsection 3: PPO for Language Models
-- LLMs as policies
-- The RLHF objective with KL penalty
-- Why KL penalty matters (reward hacking)
-- PPO updates for token generation
-- Interactive: reward hacking demo
+### Subsection 3: RL Algorithms for LLMs (`rl-algorithms-for-llms.mdx`)
+- PPO for LLMs: token-level decisions, KL penalty, per-token reward distribution
+- The critic problem: 4 models in memory (policy, reference, critic, reward model)
+- Value function for credit assignment in text generation
+- DPO: eliminating the reward model (implicit reward via log-ratio)
+- DPO derivation: closed-form solution to RLHF objective
+- When DPO works well (sufficient offline data) vs. when it struggles (distribution shift)
+- GRPO: eliminating the critic (group-relative advantages)
+- GRPO connection to REINFORCE with baseline
+- Brief coverage: SimPO, KTO, ORPO
+- Algorithm selection guide: online vs offline, paired vs unpaired, verifiable vs subjective
+- Interactive: AlgorithmExplorer demo
 
-### Subsection 4: Current Frontiers
-- DPO: eliminating the reward model
-- Constitutional AI: self-improvement
-- Open challenges: scalable oversight, reward specification
-- The future of alignment
-- Interactive: RLHF pipeline demo
+### Subsection 4: GRPO and the Reasoning Revolution (`grpo-and-reasoning.mdx`)
+- RLVR: replacing learned rewards with verifiable ones
+- GRPO algorithm step by step: sample → reward → normalize → clip → update
+- Mathematical formulation and connection to REINFORCE
+- DeepSeek R1 case study: the 4-stage pipeline
+- R1-Zero: reasoning from pure RL (no SFT)
+- The "aha moment" — emergent self-reflection and backtracking
+- The debate: does RL create new capabilities or amplify latent ones?
+- Process vs. outcome reward models (OpenAI's "Let's Verify Step by Step")
+- Test-time compute: a new scaling dimension
+- Interactive: GRPOExplorer demo
+
+### Subsection 5: Building a Reasoning Model (`hands-on.mdx`)
+- Karpathy's nanochat walkthrough: annotated `scripts/chat_rl.py`
+  - Attribution and link to github.com/karpathy/nanochat
+  - The simplified GRPO: no trust region, on-policy, GAPO-style normalization
+  - "It's basically REINFORCE with group baselines"
+  - Step-by-step: prompt sampling → completion generation → reward computation → advantage normalization → policy update
+  - Expected results: GSM8K 60% → 75%
+- Our implementation: simplified GRPO in code/rlbook/agents/grpo.py
+- Connection to REINFORCE (Chapter 2020) and PPO (Chapter 2040)
+- Exercises: modify group size, try different reward functions, compare with/without KL
+
+### Subsection 6: Challenges and Frontiers (`challenges.mdx`)
+- Reward hacking: real examples (METR 2025 — o3 replacing chess engines, modifying test scripts)
+- Mode collapse: diversity loss during RL training
+- The alignment tax: capability degradation from safety training
+- Constitutional AI / RLAIF: Anthropic's approach, self-critique and revision
+- Scalable oversight: what happens when models surpass human evaluators?
+- What's next: process reward models, debate, interpretability
+- Interactive: RewardHackingDemo
 
 ---
 
-## Additional Context for AI
+## Common Misconceptions to Address
 
-- This is the capstone chapter. Connect all the threads.
-- RLHF is why readers should care about RL—it powers ChatGPT.
-- Make the alignment problem vivid: we can't write down what we want.
-- The demos should make the preference → reward → policy pipeline tangible.
-- Include DPO as the current alternative getting attention.
-- End with open questions: this is an active research area.
+1. **"RLHF makes models truthful"**: RLHF optimizes for preference, which correlates with truth but isn't truth.
+2. **"The reward model perfectly captures human values"**: Reward models are imperfect proxies that can be exploited.
+3. **"RLHF is why models refuse harmful requests"**: Mostly SFT and system prompts; RLHF refines behavior.
+4. **"DPO replaced PPO"**: DPO is simpler but PPO/GRPO are superior for online learning and reasoning tasks.
+5. **"GRPO is just REINFORCE"**: GRPO adds clipping, group normalization, and KL penalty — meaningful improvements.
+6. **"Reasoning emerges magically from RL"**: Evidence suggests RL amplifies patterns already present in pretraining data.
+
+---
+
+## Exercises
+
+### Conceptual
+1. Why can't we use the reward model as a supervised learning loss? (Hint: reward hacking)
+2. What happens with very high β (KL penalty)? Very low β?
+3. Why does GRPO need multiple completions per prompt while PPO needs only one?
+4. In what scenarios would DPO outperform GRPO? Vice versa?
+5. Why is verifiable reward (math, code) more reliable than learned reward (helpfulness)?
+
+### Coding
+1. Implement a simple reward model training loop with Bradley-Terry loss
+2. Implement simplified GRPO: sample completions, compute group advantages, update policy
+3. Simulate reward hacking: optimize against a proxy reward and measure true quality degradation
+
+### Exploration
+1. How might we align systems that are smarter than human evaluators?
+2. Design a reward function for a task where automated verification is impossible
 
 ---
 
 ## Quality Checklist
 
-- [ ] Alignment problem motivated
-- [ ] Three-stage pipeline explained
-- [ ] Reward modeling with Bradley-Terry
-- [ ] PPO application to LLMs
-- [ ] KL penalty justified
-- [ ] DPO covered as alternative
-- [ ] Interactive demos specified
-- [ ] Open challenges mentioned
+- [ ] Two motivations (alignment + reasoning) clearly distinguished
+- [ ] Reward modeling with Bradley-Terry fully explained
+- [ ] PPO, DPO, and GRPO compared with clear guidance on when to use each
+- [ ] GRPO algorithm explained step-by-step with connection to REINFORCE
+- [ ] DeepSeek R1 case study with 4-stage pipeline
+- [ ] Karpathy's nanochat implementation walked through with attribution
+- [ ] 5 interactive demos built and placed
+- [ ] All three complexity layers used in every subsection
+- [ ] Cross-references to policy gradient chapters
+- [ ] Reward hacking demonstrated with real examples
+- [ ] Exercises included (conceptual, coding, exploration)
+- [ ] `npm run build` passes
+
+---
+
+## Iteration Notes
+
+### Initial Design (2026-02-14)
+- Expanded from 4 subsections to 6 to cover GRPO, RLVR, and hands-on implementation
+- Added Karpathy's nanochat as primary code reference
+- Designed 5 interactive components (up from 4 specified, 0 built)
+- Restructured to tell the dual story: alignment (2022) + reasoning (2025)
+- Changed slug from 'rlhf' to 'rl-for-llms' to reflect broader scope

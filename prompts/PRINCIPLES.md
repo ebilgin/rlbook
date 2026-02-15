@@ -193,7 +193,45 @@ def q_learning_update(Q, s, a, r, s_prime, alpha=0.1, gamma=0.99, done=False):
     return td_error  # Useful for monitoring convergence
 ```
 
-## 8. Cross-Referencing
+## 8. Chapter Endings: Summary & Exercises
+
+Every chapter should end with consolidation and practice opportunities.
+
+### Summary Structure
+
+Use **numbered takeaway cards** (see [VISUAL_PATTERNS.md](VISUAL_PATTERNS.md#pattern-numbered-takeaway-cards)) to highlight 3-5 key concepts. Each takeaway should:
+- Have a clear, actionable title
+- Explain the "so what" in 1-2 sentences
+- Use code formatting for technical terms
+
+### Quiz Questions
+
+Include 4-6 conceptual questions using the **expandable answer pattern**. Good quiz questions:
+- Test understanding, not memorization
+- Include technical terms in code formatting
+- Provide thorough explanations in the answer (not just the answer itself)
+- Cover the range of topics in the chapter
+
+### Coding Exercises
+
+For hands-on practice:
+- **Link to Colab notebooks** rather than embedding long code blocks
+- Use **exercise preview cards** to show what each exercise covers
+- Include solutions in the notebook (in collapsed cells or separate sections)
+- Structure exercises from foundational to advanced
+
+### What's Next
+
+End with a `<Note>` callout that:
+- Summarizes what the reader can now do
+- Lists 2-3 advanced topics for further exploration
+- Connects to upcoming chapters where relevant
+
+### Dedicated Subsection
+
+For substantial chapters, consider making "Summary & Exercises" a dedicated subsection (separate MDX file) rather than embedding at the end of the main content. This keeps the main content focused and makes exercises easier to find.
+
+## 9. Cross-Referencing
 
 ### Link Generously
 
@@ -208,14 +246,14 @@ Every technical term should:
 2. Link to a glossary entry
 3. Show a tooltip on hover with brief definition
 
-## 9. Accessibility
+## 10. Accessibility
 
 - Alt text for all images describing the concept, not just the visual
 - Transcripts for any video content
 - Color choices that work for colorblind readers
 - Math available as both rendered and source
 
-## 10. Evolution and Feedback
+## 11. Evolution and Feedback
 
 ### Content Versioning
 

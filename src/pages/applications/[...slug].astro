@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { ComplexityToggle } from '../../components/ui/ComplexityToggle';
+import { TableOfContents } from '../../components/ui/TableOfContents';
 
 export function getStaticPaths() {
   const mdxModules = import.meta.glob('/content/applications/*/index.mdx', { eager: true });
@@ -71,15 +72,26 @@ const statusLabels: Record<string, string> = {
     </header>
 
     <!-- Content -->
-    <main class="max-w-4xl mx-auto px-4 py-12">
+    <main class="max-w-7xl mx-auto px-4 py-12">
       <!-- Complexity Toggle -->
       <div class="mb-8">
         <ComplexityToggle client:load />
       </div>
 
-      <article class="prose prose-lg dark:prose-invert max-w-none bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8">
-        <Content />
-      </article>
+      <div class="flex gap-8">
+        <!-- Main content -->
+        <article class="prose prose-lg dark:prose-invert max-w-none bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 flex-1 min-w-0">
+          <Content />
+        </article>
+
+        <!-- Table of Contents (desktop sidebar) -->
+        <div class="hidden lg:block w-64 flex-shrink-0">
+          <TableOfContents client:load />
+        </div>
+      </div>
+
+      <!-- Table of Contents (mobile floating button) -->
+      <TableOfContents client:load />
 
       <!-- Footer -->
       <footer class="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">

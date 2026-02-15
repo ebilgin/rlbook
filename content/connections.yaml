@@ -20,9 +20,9 @@ papers:
       - slug: policy-gradients
         relationship: extends
         context: "GRPO is a policy gradient method that replaces learned baselines with group statistics"
-      - slug: rlhf
+      - slug: rl-for-llms
         relationship: applies
-        context: "GRPO is now the dominant algorithm for RLHF in reasoning models"
+        context: "GRPO is now the dominant algorithm for RL fine-tuning in reasoning models"
 
   # Future entries:
   #

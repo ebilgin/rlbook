@@ -7,9 +7,11 @@ All environments follow the standard Gymnasium API.
 Available environments:
     - GridWorld: Classic grid navigation environment
     - MultiArmedBandit: K-armed bandit testbed
+    - ElevatorDispatch: Multi-elevator dispatch system
 """
 
 from rlbook.envs.gridworld import GridWorld
 from rlbook.envs.bandits import MultiArmedBandit
+from rlbook.envs.elevator import ElevatorDispatch
 
-__all__ = ["GridWorld", "MultiArmedBandit"]
+__all__ = ["GridWorld", "MultiArmedBandit", "ElevatorDispatch"]
