@@ -5,8 +5,19 @@ section: "Markov Decision Processes"
 description: "Why the present is all you need to predict the future"
 ---
 
-import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
-import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+import {
+  Intuition,
+  Mathematical,
+  Implementation,
+} from "@/components/ui/ContentLayers";
+import {
+  Note,
+  Warning,
+  Tip,
+  Example,
+  Question,
+  Definition,
+} from "@/components/ui/Callouts";
 
 # The Markov Property
 
@@ -20,6 +31,7 @@ A state is **Markov** if and only if the future is independent of the past given
 $$P(S_{t+1} | S_t, A_t, S_{t-1}, A_{t-1}, ..., S_0, A_0) = P(S_{t+1} | S_t, A_t)$$
 
 In words: knowing the current state is enough to predict the next state. History doesn't provide additional information.
+
 </Definition>
 
 <Intuition>
@@ -40,7 +52,9 @@ The Markov property is powerful because it dramatically simplifies reasoning:
 
 <div className="grid md:grid-cols-2 gap-6 my-6">
   <div className="p-4 bg-gradient-to-br from-red-900/20 to-red-800/10 rounded-lg border border-red-700/50">
-    <h4 className="font-semibold text-red-400 mb-3">❌ Without Markov Property</h4>
+    <h4 className="font-semibold text-red-400 mb-3">
+      ❌ Without Markov Property
+    </h4>
     <ul className="text-slate-400 text-sm space-y-2">
       <li>Must track entire history</li>
       <li>State space grows exponentially with time</li>
@@ -49,7 +63,9 @@ The Markov property is powerful because it dramatically simplifies reasoning:
     </ul>
   </div>
   <div className="p-4 bg-gradient-to-br from-emerald-900/20 to-emerald-800/10 rounded-lg border border-emerald-700/50 ring-2 ring-emerald-500/20">
-    <h4 className="font-semibold text-emerald-400 mb-3">✓ With Markov Property</h4>
+    <h4 className="font-semibold text-emerald-400 mb-3">
+      ✓ With Markov Property
+    </h4>
     <ul className="text-slate-400 text-sm space-y-2">
       <li>Only need current state</li>
       <li>State space is fixed</li>
@@ -72,7 +88,9 @@ This recursion only works because $V(s')$ depends only on $s'$, not on how we re
 ## Is the Real World Markov?
 
 <Warning>
-Strictly speaking, most real-world problems are **not** perfectly Markov. However, the Markov property isn't about the world—it's about our **state representation**.
+  Strictly speaking, most real-world problems are **not** perfectly Markov.
+  However, the Markov property isn't about the world—it's about our **state
+  representation**.
 </Warning>
 
 <Intuition>
@@ -80,9 +98,11 @@ Strictly speaking, most real-world problems are **not** perfectly Markov. Howeve
 Consider a thermostat controlling room temperature:
 
 **Non-Markov representation:** State = current temperature (e.g., 70°F)
+
 - Problem: Is the room heating up or cooling down? The same temperature can lead to different futures depending on recent history.
 
 **Markov representation:** State = (current temperature, rate of change, HVAC status)
+
 - Now the state contains enough information to predict what happens next.
 
 The key insight: **We can make any problem Markov by choosing a rich enough state representation.**
@@ -98,6 +118,7 @@ Consider a robot that observes only its position, not velocity:
 **Observation: Robot at position (2, 3)**
 
 Is this Markov? To predict the next position, we need to know:
+
 - Which direction is it moving?
 - How fast?
 
@@ -111,6 +132,14 @@ Now the state is Markov. This is why robotics and physics often use **position +
 
 </Example>
 
+<Question title="Quick TRUE / FALSE">
+
+Any problem can be made Markov if you include enough relevant variables in your state to fully capture the information needed for predicting the future.
+
+The answer is: TRUE!
+
+</Question>
+
 ## State vs Observation
 
 A crucial distinction:
@@ -120,17 +149,20 @@ A crucial distinction:
 - **Observation**: What the agent actually sees (might be incomplete)
 
 When observations don't capture the full state, we have a **Partially Observable MDP** (POMDP).
+
 </Definition>
 
 <Example title="Poker as a POMDP">
 
 In poker:
+
 - **Full state**: All cards in the deck, who has what
 - **Observation**: Your own cards and visible community cards
 
 You can't see opponents' cards, so your observation is not Markov. Different hidden cards lead to different futures from the same observation.
 
 Solutions:
+
 1. Maintain a **belief state** (probability distribution over hidden states)
 2. Use **history** of observations as a proxy for state
 3. Learn to approximate the belief from observation sequences
@@ -143,6 +175,7 @@ Solutions:
 When designing an RL system, ask yourself: **"Does my state representation contain everything needed to predict future rewards?"**
 
 If not, you need to expand the state.
+
 </Tip>
 
 Common strategies:
@@ -212,5 +245,7 @@ The Markov property states that the current state contains all information neede
 This property is what makes RL tractable. It enables the recursive structure (Bellman equations) that underlies all RL algorithms.
 
 <Note>
-We'll see the Markov property at work in the next chapter when we derive the Bellman equations. Without it, those elegant recursive formulations wouldn't be possible.
+  We'll see the Markov property at work in the next chapter when we derive the
+  Bellman equations. Without it, those elegant recursive formulations wouldn't
+  be possible.
 </Note>
