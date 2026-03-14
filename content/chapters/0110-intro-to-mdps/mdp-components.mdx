@@ -5,8 +5,19 @@ section: "Markov Decision Processes"
 description: "States, actions, transitions, rewards, and discount factors"
 ---
 
-import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
-import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+import {
+  Intuition,
+  Mathematical,
+  Implementation,
+} from "@/components/ui/ContentLayers";
+import {
+  Note,
+  Warning,
+  Tip,
+  Example,
+  Question,
+  Definition,
+} from "@/components/ui/Callouts";
 
 # The MDP Components
 
@@ -19,7 +30,8 @@ Let's explore each one.
 ## 1. States ($\mathcal{S}$)
 
 <Definition title="State Space">
-The set of all possible situations the agent can be in. We denote it $\mathcal{S}$ and individual states as $s \in \mathcal{S}$.
+  The set of all possible situations the agent can be in. We denote it $\mathcal
+  {S}$ and individual states as $s \in \mathcal{S}$.
 </Definition>
 
 <Intuition>
@@ -51,7 +63,8 @@ Or equivalently as integers 0-15. The representation doesn't matter as long as i
 ## 2. Actions ($\mathcal{A}$)
 
 <Definition title="Action Space">
-The set of choices available to the agent. We denote it $\mathcal{A}$, and the action at time $t$ as $A_t$.
+  The set of choices available to the agent. We denote it $\mathcal{A}$, and the
+  action at time $t$ as $A_t$.
 </Definition>
 
 Actions answer: **"What can I do?"**
@@ -66,7 +79,9 @@ Actions answer: **"What can I do?"**
 </Intuition>
 
 <Note>
-In some MDPs, available actions depend on the current state. We write $\mathcal{A}(s)$ for the actions available in state $s$. In chess, legal moves depend on the board position.
+  In some MDPs, available actions depend on the current state. We write
+  $\mathcal{A}(s)$ for the actions available in state $s$. In chess, legal moves
+  depend on the board position.
 </Note>
 
 ## 3. Transition Dynamics ($P$)
@@ -75,6 +90,7 @@ In some MDPs, available actions depend on the current state. We write $\mathcal{
 The probability of reaching state $s'$ when taking action $a$ in state $s$:
 
 $$P(s' | s, a) = \Pr(S_{t+1} = s' | S_t = s, A_t = a)$$
+
 </Definition>
 
 <Intuition>
@@ -91,11 +107,13 @@ Transitions can be:
 <Example title="Slippery Ice">
 
 Imagine a robot on an icy floor. When it tries to move right:
+
 - 80% chance: it actually moves right
 - 10% chance: it slips and stays in place
 - 10% chance: it slips and moves down
 
 This is captured by the transition probabilities:
+
 - $P(\text{right cell} | s, \text{move-right}) = 0.8$
 - $P(s | s, \text{move-right}) = 0.1$
 - $P(\text{down cell} | s, \text{move-right}) = 0.1$
@@ -120,6 +138,7 @@ The feedback signal that tells the agent how good a transition was. Common formu
 - $R(s, a, s')$: Reward depends on state, action, and next state
 - $R(s, a)$: Reward depends on state and action
 - $R(s)$: Reward depends only on state
+
 </Definition>
 
 <Intuition>
@@ -127,6 +146,7 @@ The feedback signal that tells the agent how good a transition was. Common formu
 Rewards answer: **"How did that go?"**
 
 They encode the goal:
+
 - Reaching the goal: +10
 - Falling in a pit: -10
 - Each step: -1 (encourages efficiency)
@@ -138,6 +158,7 @@ They encode the goal:
 <Example title="GridWorld Rewards">
 
 A typical GridWorld might have:
+
 - $R(s) = -1$ for all non-terminal states (step penalty)
 - $R(\text{goal}) = +10$ (reward for reaching the goal)
 - $R(\text{pit}) = -10$ (penalty for falling in a pit)
@@ -147,7 +168,9 @@ The step penalty encourages finding the shortest path—otherwise, the agent mig
 </Example>
 
 <Warning>
-Reward design is crucial and tricky. The agent will maximize whatever reward you give it—which might not be what you intended. This is a core challenge in RL.
+  Reward design is crucial and tricky. The agent will maximize whatever reward
+  you give it—which might not be what you intended. This is a core challenge in
+  RL.
 </Warning>
 
 <Mathematical>
@@ -168,6 +191,7 @@ $$R(s, a) = \sum_{s'} P(s' | s, a) \cdot R(s, a, s')$$
 A number $\gamma \in [0, 1]$ that determines how much we value future rewards relative to immediate ones. The **discounted return** is:
 
 $$G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \ldots = \sum_{k=0}^{\infty} \gamma^k R_{t+k+1}$$
+
 </Definition>
 
 <Intuition>
@@ -222,7 +246,8 @@ If rewards are bounded by $R_{\max}$, then returns are bounded by $\frac{R_{\max
 For **episodic** tasks, we can use $\gamma = 1$ since returns are naturally finite. For **continuing** tasks, we need $\gamma < 1$ to ensure convergence.
 
 <Tip>
-A common choice is $\gamma = 0.99$. It's close enough to 1 that the agent cares about the future, but bounded enough for stable learning.
+  A common choice is $\gamma = 0.99$. It's close enough to 1 that the agent
+  cares about the future, but bounded enough for stable learning.
 </Tip>
 
 ## Putting It Together
@@ -278,6 +303,46 @@ mdp = MDP(
 
 </Implementation>
 
+<Mathematical>
+Let's take a look at some questions to analyse the code better:
+
+<Question title="Question:  What is the probability that the agent moves from middle to goal if it chooses right? What happens if it chooses left?">
+
+Answer: transitions = mdp.get_transitions('middle','right')
+
+[('goal', 0.8), ('start', 0.2)]
+
+</Question>
+
+<Question title="Question: If agent in `start` chooses `right` then, moves to `middle`. What is the expected total reward at the end? (don't forget to use gamma)">
+
+Answer: Starting in start, the agent immediately receives a reward of −1 (no discount). Choosing right moves the agent deterministically to middle, where it receives another reward of −1, discounted once by γ = 0.99, giving 0.99 × −1, which gives −0.99.
+
+Then, from middle, choosing right leads to two possible outcomes:
+
+1- ('goal', 0.8)
+
+2- ('start', 0.2)
+
+So the average reward here is:
+
+0.8 × 10 + 0.2 × (-1) = 7.8
+This reward happens two steps after start, so we discount twice:
+
+0.99 × 0.99 × 7.8 ≈ 7.64
+
+Then we add everything up together,
+
+start reward = -1, middle reward = -0.99, future reward = +7.64
+
+Which gives us total expected ≈ 5.65
+
+This is the correct expected total reward for choosing right in start.
+
+</Question>
+
+</Mathematical>
+
 ## Summary
 
 Every MDP is defined by these five components:
@@ -306,7 +371,9 @@ Every MDP is defined by these five components:
   <div className="bg-gradient-to-br from-rose-900/30 to-rose-800/10 rounded-xl p-4 border border-rose-700/50 text-center">
     <div className="text-rose-400 font-bold text-lg mb-1">Discount</div>
     <div className="text-slate-400 font-mono text-sm mb-2">$\gamma$</div>
-    <div className="text-slate-300 text-sm">How much do I care about the future?</div>
+    <div className="text-slate-300 text-sm">
+      How much do I care about the future?
+    </div>
   </div>
 </div>
 

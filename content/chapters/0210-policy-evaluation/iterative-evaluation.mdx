@@ -5,8 +5,18 @@ section: "Dynamic Programming"
 description: "Repeatedly applying Bellman until convergence"
 ---
 
-import { Intuition, Mathematical, Implementation } from '@/components/ui/ContentLayers';
-import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+import {
+  Intuition,
+  Mathematical,
+  Implementation,
+} from "@/components/ui/ContentLayers";
+import {
+  Note,
+  Warning,
+  Tip,
+  Example,
+  Definition,
+} from "@/components/ui/Callouts";
 
 # Iterative Policy Evaluation
 
@@ -15,7 +25,8 @@ The iterative policy evaluation algorithm is beautifully simple: initialize valu
 ## The Algorithm
 
 <Definition title="Iterative Policy Evaluation">
-An algorithm that computes $V^\pi$ by repeatedly applying Bellman expectation updates to all states until the values converge to the unique fixed point.
+  An algorithm that computes $V^\pi$ by repeatedly applying Bellman expectation
+  updates to all states until the values converge to the unique fixed point.
 </Definition>
 
 <Intuition>
@@ -74,16 +85,19 @@ Consider a simple MDP with three states: A, B, and C. State C is terminal. The a
 Let us evaluate this policy with $\gamma = 0.9$.
 
 **Iteration 0 (Initialization):**
+
 - $V_0(A) = 0$
 - $V_0(B) = 0$
 - $V_0(C) = 0$
 
 **Iteration 1:**
+
 - $V_1(C) = 0$ (terminal state, no future)
 - $V_1(B) = -1 + 0.9 \times V_0(C) = -1 + 0.9 \times 0 = -1$
 - $V_1(A) = -1 + 0.9 \times V_0(B) = -1 + 0.9 \times 0 = -1$
 
 **Iteration 2:**
+
 - $V_2(C) = 0$
 - $V_2(B) = -1 + 0.9 \times V_1(C) = -1 + 0 = -1$
 
@@ -93,10 +107,12 @@ Wait, we are computing this wrong! Let us reconsider. State B transitions to C w
 - $V_1(A) = -1 + 0.9 \times V_0(B) = -1 + 0 = -1$
 
 **Iteration 2:**
+
 - $V_2(B) = 10 + 0.9 \times V_1(C) = 10$
 - $V_2(A) = -1 + 0.9 \times V_1(B) = -1 + 0.9 \times 10 = 8$
 
 **Iteration 3:**
+
 - $V_3(B) = 10$
 - $V_3(A) = -1 + 0.9 \times V_2(B) = -1 + 9 = 8$
 
@@ -105,8 +121,67 @@ The values have converged! The true values are $V^\pi(A) = 8$, $V^\pi(B) = 10$, 
 </Example>
 
 <Tip>
-In this simple example, information about the reward at C reached state A in just two iterations. In general, information propagates one step per iteration, so convergence takes roughly as many iterations as the longest path to rewards.
+  In this simple example, information about the reward at C reached state A in
+  just two iterations. In general, information propagates one step per
+  iteration, so convergence takes roughly as many iterations as the longest path
+  to rewards.
 </Tip>
+
+## Another Example
+
+<Example title="Gambler's Ruin">
+A gambler has an integer amount of money i, where 0 ≤i≤ N.
+
+Each round of the game:
+
+- With probability p, the gambler **wins** $1 (capital increases by 1).
+- With probability q = 1−p, the gambler **loses** $1 (capital decreases by 1).
+
+The game ends when the gambler reaches either absorbing boundary:
+
+- **Ruin:** capital hits 0
+- **Goal:** capital hits N
+
+**Question:** What is the Probability of reaching N before 0, starting from i?
+
+**Answer:**
+We are going to solve the problem using Bellman equation.
+
+**States:** S=[0,1,2,…,N] where
+
+- 0 = ruined (terminal)
+- N = goal reached (terminal)
+
+**Dynamics (for 1≤ i≤ N):**
+
+- go to i + 1 with prob p
+- go to i − 1 with prob q = 1 − p
+
+**Step 1:**
+
+Let V(i) = P ⁡(ever hit N ∣ start at i)
+
+So V(i) is the **probability of success**.
+
+**Boundary (terminal) values:**
+
+V(0)=0,V(N)=1
+
+**Step 2:**
+
+From state i, in one step you either go up or down:
+
+V(i)=pV(i+1) + qV(i−1), V(0) = 0, V(N) = 1
+
+**Step 3:**
+Now we have two cases ahead of us, if the game is fair, p = q, solution is linear,
+the answer would be V(i) = i/N
+
+**Step 4 :**
+
+If the game is unbiased, solution has exponential form which is V(i) = A + B (q/p)^i
+
+</Example>
 
 ## Synchronous vs Asynchronous Updates
 
@@ -221,6 +296,7 @@ Both methods converge to the same answer. The choice depends on your priorities:
 - **Asynchronous**: Often faster in practice, uses less memory
 
 Most implementations use asynchronous updates for efficiency.
+
 </Note>
 
 ## GridWorld Example
@@ -388,6 +464,7 @@ if __name__ == "__main__":
 The Bellman operator is a contraction (we will prove this in the next section). This means no matter where you start, repeated applications bring you closer to the fixed point. The fixed point is $V^\pi$, so you always end up there.
 
 Starting with zeros is convenient but not required. You could start with random values, previous estimates, or domain-specific guesses. All roads lead to $V^\pi$.
+
 </Tip>
 
 <Warning>
@@ -396,6 +473,7 @@ Starting with zeros is convenient but not required. You could start with random 
 Terminal states should have value 0 (or the terminal reward, depending on convention). A common bug is to apply the Bellman update to terminal states, which gives wrong answers.
 
 Always check: `if s in terminal_states: V[s] = 0` or skip the update entirely.
+
 </Warning>
 
 ## What is Next
