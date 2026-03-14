@@ -3,8 +3,19 @@ title: "RL in the Wild"
 description: "Real-world examples of reinforcement learning all around us"
 ---
 
-import { Intuition, Mathematical, Implementation, DeepDive } from '@/components/ui/ContentLayers';
-import { Note, Warning, Tip, Example, Definition } from '@/components/ui/Callouts';
+import {
+  Intuition,
+  Mathematical,
+  Implementation,
+  DeepDive,
+} from "@/components/ui/ContentLayers";
+import {
+  Note,
+  Warning,
+  Tip,
+  Example,
+  Definition,
+} from "@/components/ui/Callouts";
 
 ## RL is Everywhere
 
@@ -13,6 +24,7 @@ Once you understand the RL framework, you start seeing it everywhere. Let's expl
 <Intuition>
 
 The RL pattern appears whenever there's:
+
 - An entity making **sequential decisions**
 - **Feedback** that indicates success or failure
 - A goal to **optimize over time**
@@ -38,39 +50,72 @@ The RL pattern appears whenever there's:
     </div>
   </div>
 
-  {/* Restaurant Choice */}
-  <div className="bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 border border-emerald-700/50 rounded-xl p-5">
-    <div className="flex items-center gap-3 mb-3">
-      <div className="text-2xl">🍽️</div>
-      <div className="text-emerald-400 font-bold">Choosing Where to Eat</div>
+{/* Restaurant Choice */}
+
+{" "}
+
+<div className="bg-gradient-to-br from-emerald-900/30 to-emerald-800/10 border border-emerald-700/50 rounded-xl p-5">
+  <div className="flex items-center gap-3 mb-3">
+    <div className="text-2xl">🍽️</div>
+    <div className="text-emerald-400 font-bold">Choosing Where to Eat</div>
+  </div>
+  <div className="space-y-2 text-sm">
+    <div>
+      <span className="text-emerald-300 font-medium">State:</span>{" "}
+      <span className="text-slate-400">
+        Hunger level, mood, who you're with
+      </span>
     </div>
-    <div className="space-y-2 text-sm">
-      <div><span className="text-emerald-300 font-medium">State:</span> <span className="text-slate-400">Hunger level, mood, who you're with</span></div>
-      <div><span className="text-emerald-300 font-medium">Actions:</span> <span className="text-slate-400">Go to known spot vs. try somewhere new</span></div>
-      <div><span className="text-emerald-300 font-medium">Reward:</span> <span className="text-slate-400">Meal satisfaction</span></div>
+    <div>
+      <span className="text-emerald-300 font-medium">Actions:</span>{" "}
+      <span className="text-slate-400">
+        Go to known spot vs. try somewhere new
+      </span>
     </div>
-    <div className="text-slate-500 text-xs mt-3 bg-slate-800/50 rounded-lg p-2">
-      Classic exploration-exploitation: stick with favorites or discover new gems?
+    <div>
+      <span className="text-emerald-300 font-medium">Reward:</span>{" "}
+      <span className="text-slate-400">Meal satisfaction</span>
     </div>
   </div>
+  <div className="text-slate-500 text-xs mt-3 bg-slate-800/50 rounded-lg p-2">
+    Classic exploration-exploitation: stick with favorites or discover new gems?
+  </div>
+</div>
 
-  {/* Learning a Skill */}
-  <div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 border border-violet-700/50 rounded-xl p-5">
-    <div className="flex items-center gap-3 mb-3">
-      <div className="text-2xl">🎸</div>
-      <div className="text-violet-400 font-bold">Learning an Instrument</div>
+{/* Learning a Skill */}
+
+{" "}
+
+<div className="bg-gradient-to-br from-violet-900/30 to-violet-800/10 border border-violet-700/50 rounded-xl p-5">
+  <div className="flex items-center gap-3 mb-3">
+    <div className="text-2xl">🎸</div>
+    <div className="text-violet-400 font-bold">Learning an Instrument</div>
+  </div>
+  <div className="space-y-2 text-sm">
+    <div>
+      <span className="text-violet-300 font-medium">State:</span>{" "}
+      <span className="text-slate-400">Current skill level, muscle memory</span>
     </div>
-    <div className="space-y-2 text-sm">
-      <div><span className="text-violet-300 font-medium">State:</span> <span className="text-slate-400">Current skill level, muscle memory</span></div>
-      <div><span className="text-violet-300 font-medium">Actions:</span> <span className="text-slate-400">Finger positions, strumming patterns</span></div>
-      <div><span className="text-violet-300 font-medium">Reward:</span> <span className="text-slate-400">Sound quality, hitting the right notes</span></div>
+    <div>
+      <span className="text-violet-300 font-medium">Actions:</span>{" "}
+      <span className="text-slate-400">
+        Finger positions, strumming patterns
+      </span>
     </div>
-    <div className="text-slate-500 text-xs mt-3 bg-slate-800/50 rounded-lg p-2">
-      Delayed rewards: hours of practice before you sound good
+    <div>
+      <span className="text-violet-300 font-medium">Reward:</span>{" "}
+      <span className="text-slate-400">
+        Sound quality, hitting the right notes
+      </span>
     </div>
   </div>
+  <div className="text-slate-500 text-xs mt-3 bg-slate-800/50 rounded-lg p-2">
+    Delayed rewards: hours of practice before you sound good
+  </div>
+</div>
 
-  {/* Social Conversation */}
+{/* Social Conversation */}
+
   <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/10 border border-amber-700/50 rounded-xl p-5">
     <div className="flex items-center gap-3 mb-3">
       <div className="text-2xl">💬</div>
@@ -91,29 +136,47 @@ The RL pattern appears whenever there's:
 
 <Example title="Large Language Models are RL Agents">
 
-When you chat with an AI assistant like ChatGPT or Claude, you're interacting with a system trained using reinforcement learning. This is one of the most impactful applications of RL today.
+When you chat with an AI assistant like ChatGPT or Claude, you’re interacting with a system trained using supervised learning, self-supervised learning, and reinforcement learning. This is one of the most impactful applications of RL today.
 
 </Example>
 
 <div className="my-8 flex justify-center">
   <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 max-w-2xl">
-    <div className="text-center text-slate-400 text-sm mb-4">The LLM as an RL Agent</div>
+    <div className="text-center text-slate-400 text-sm mb-4">
+      The LLM as an RL Agent
+    </div>
     <div className="space-y-4">
       <div className="flex items-start gap-4">
-        <div className="bg-blue-600/20 border border-blue-500 rounded-lg px-3 py-2 text-blue-400 font-medium text-sm min-w-[80px] text-center">State</div>
-        <div className="text-slate-300 text-sm">The conversation so far (your messages + AI responses)</div>
+        <div className="bg-blue-600/20 border border-blue-500 rounded-lg px-3 py-2 text-blue-400 font-medium text-sm min-w-[80px] text-center">
+          State
+        </div>
+        <div className="text-slate-300 text-sm">
+          The conversation so far (your messages + AI responses)
+        </div>
       </div>
       <div className="flex items-start gap-4">
-        <div className="bg-emerald-600/20 border border-emerald-500 rounded-lg px-3 py-2 text-emerald-400 font-medium text-sm min-w-[80px] text-center">Action</div>
-        <div className="text-slate-300 text-sm">The next token (word/piece) to generate</div>
+        <div className="bg-emerald-600/20 border border-emerald-500 rounded-lg px-3 py-2 text-emerald-400 font-medium text-sm min-w-[80px] text-center">
+          Action
+        </div>
+        <div className="text-slate-300 text-sm">
+          The next token (word/piece) to generate
+        </div>
       </div>
       <div className="flex items-start gap-4">
-        <div className="bg-amber-600/20 border border-amber-500 rounded-lg px-3 py-2 text-amber-400 font-medium text-sm min-w-[80px] text-center">Reward</div>
-        <div className="text-slate-300 text-sm">Human preference signals: thumbs up/down, chosen responses</div>
+        <div className="bg-amber-600/20 border border-amber-500 rounded-lg px-3 py-2 text-amber-400 font-medium text-sm min-w-[80px] text-center">
+          Reward
+        </div>
+        <div className="text-slate-300 text-sm">
+          Human preference signals: thumbs up/down, chosen responses
+        </div>
       </div>
       <div className="flex items-start gap-4">
-        <div className="bg-purple-600/20 border border-purple-500 rounded-lg px-3 py-2 text-purple-400 font-medium text-sm min-w-[80px] text-center">Policy</div>
-        <div className="text-slate-300 text-sm">The neural network that decides what to say next</div>
+        <div className="bg-purple-600/20 border border-purple-500 rounded-lg px-3 py-2 text-purple-400 font-medium text-sm min-w-[80px] text-center">
+          Policy
+        </div>
+        <div className="text-slate-300 text-sm">
+          The neural network that decides what to say next
+        </div>
       </div>
     </div>
   </div>
@@ -123,11 +186,23 @@ When you chat with an AI assistant like ChatGPT or Claude, you're interacting wi
 
 **RLHF (Reinforcement Learning from Human Feedback)** is how modern LLMs learn to be helpful:
 
-1. **Pre-training**: Learn language patterns from massive text datasets
-2. **Reward modeling**: Humans rank AI responses; a reward model learns these preferences
-3. **RL fine-tuning**: The LLM is optimized to generate responses the reward model scores highly
+**RLHF Definition:** RLHF is a specific technique that is used in training AI systems to act more human, along with other techniques such as supervised and unsupervised learning. There is a fact that RLHF makes the ML model more accurate. Models can be trained on pre-generated human data, but having additional human feedback loops significantly enhances model performance compared to its initial state.
 
-This is why AI assistants got dramatically better at following instructions and being helpful—RL made the difference.
+**How does RLHF work?**
+
+RLHF is performed in 4 stages before a model is ready:
+
+**1. Data Collection:** Gather a large set of human-generated prompts and responses to help the model learn language patterns.
+
+**2. Supervised Fine-Tuning:** Start with a pretrained model and fine-tune it on your company’s knowledge, for example using retrieval-augmented generation (RAG). Compare the model’s answers to human responses and score them (e.g., 0–1) based on how well they match. The model learns to prefer higher-scoring responses, guiding future answers.
+
+**3. Build a Reward Model:** Train a separate reward model from human feedback. Humans rank multiple responses to the same prompt, and the reward model learns to predict which responses humans would prefer.
+
+**4. Optimize the Model with RL:** The language model uses the reward model to refine its policy, evaluating multiple responses and choosing the one most likely to satisfy human preferences.
+
+**Example:** In autonomous vehicles, engineers rank driving behaviors (smooth braking vs. aggressive lane changes). The reward model predicts human preferences, and RL fine-tuning trains the car to choose actions humans trust, ensuring safer and more comfortable driving
+
+**In short**, RLHF ensures that autonomous vehicles don’t just drive by simply following the rules, they aim to drive in a way humans actually like and trust.
 
 </Intuition>
 
@@ -156,23 +231,27 @@ Supervised learning alone can't optimize for "helpfulness" or "honesty"—these 
     </ul>
   </div>
 
-  {/* Robotics */}
-  <div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 border border-cyan-700/50 rounded-xl p-5">
-    <div className="flex items-center gap-3 mb-3">
-      <div className="text-2xl">🤖</div>
-      <div className="text-cyan-400 font-bold">Robotics</div>
-    </div>
-    <div className="text-slate-300 text-sm mb-3">
-      Learning physical skills from scratch
-    </div>
-    <ul className="text-slate-400 text-xs space-y-1">
-      <li>• Dexterous manipulation</li>
-      <li>• Locomotion and walking</li>
-      <li>• Autonomous drones</li>
-    </ul>
-  </div>
+{/* Robotics */}
 
-  {/* Recommendations */}
+{" "}
+
+<div className="bg-gradient-to-br from-cyan-900/30 to-cyan-800/10 border border-cyan-700/50 rounded-xl p-5">
+  <div className="flex items-center gap-3 mb-3">
+    <div className="text-2xl">🤖</div>
+    <div className="text-cyan-400 font-bold">Robotics</div>
+  </div>
+  <div className="text-slate-300 text-sm mb-3">
+    Learning physical skills from scratch
+  </div>
+  <ul className="text-slate-400 text-xs space-y-1">
+    <li>• Dexterous manipulation</li>
+    <li>• Locomotion and walking</li>
+    <li>• Autonomous drones</li>
+  </ul>
+</div>
+
+{/* Recommendations */}
+
   <div className="bg-gradient-to-br from-pink-900/30 to-pink-800/10 border border-pink-700/50 rounded-xl p-5">
     <div className="flex items-center gap-3 mb-3">
       <div className="text-2xl">📱</div>
@@ -203,7 +282,8 @@ Supervised learning alone can't optimize for "helpfulness" or "honesty"—these 
     </ul>
   </div>
 
-  {/* Science */}
+{/* Science */}
+
   <div className="bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-600/50 rounded-xl p-5">
     <div className="flex items-center gap-3 mb-3">
       <div className="text-2xl">🔬</div>
